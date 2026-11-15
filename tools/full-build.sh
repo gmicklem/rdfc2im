@@ -537,6 +537,13 @@ phase_build_humanmine_items() {
     run sed -i.bak "s/^\(.*bio-source-humanmine-static.*\)$/\/\/ \1  # disabled by full-build.sh: dead JCenter plugin/" \
         "$bio/settings.gradle"
   fi
+  # With --intermine-src the subproject is a copy under TRIAL_HOME, because the move to the
+  # checkout's Gradle edits its build.gradle and this repository's own copy must stay as it is.
+  local items_dir="$HERE/humanmine-items"
+  if [ -n "$INTERMINE_SRC" ]; then
+    items_dir="$TRIAL_HOME/humanmine-items"
+    run python3 tools/copy_tree.py "$HERE/humanmine-items" "$items_dir" --exclude build
+  fi
   if ! grep -q "bio-source-humanmine-items" "$bio/settings.gradle" 2>/dev/null; then
     # An absolute path, not a relative guess up from $bio: the original '../../../humanmine-items'
     # assumed TRIAL_HOME sits a fixed depth alongside the rdfc2im checkout as a sibling directory.
@@ -547,13 +554,29 @@ phase_build_humanmine_items() {
     run bash -c "cat >> '$bio/settings.gradle' <<GRADLE
 
 include ':bio-source-humanmine-items'
-project(':bio-source-humanmine-items').projectDir = new File('$HERE/humanmine-items')
+project(':bio-source-humanmine-items').projectDir = new File('$items_dir')
 GRADLE"
   fi
-  run_in "$bio" "${GRADLE_ENV[@]}" ./gradlew "${IM_GRADLE_ARGS[@]}" :bio-source-humanmine-items:install
+  local install_task=install
+  if [ -n "$INTERMINE_SRC" ]; then
+    # A checkout whose TRIAL_HOME was first built without --intermine-src points at $HERE's copy.
+    if [ "$DRY_RUN" -eq 1 ] || ! grep -qF "projectDir = new File('$items_dir')" "$bio/settings.gradle"; then
+      log "edit: humanmine-bio-sources/settings.gradle: humanmine-items projectDir -> $items_dir"
+      run sed -i "s|^\(project(':bio-source-humanmine-items').projectDir = \).*|\1new File('$items_dir')|" "$bio/settings.gradle"
+    fi
+    # The checkout's version, resolved from the private repo (IM_GRADLE_ARGS), and the checkout's
+    # Gradle: this build applies the InterMine plugin too, and a plugin compiled by a newer Gradle
+    # does not load in 4.9 (confirmed live with the 5.1.1 plugin built by Gradle 7.6.6: mergeModels
+    # failed with NoClassDefFoundError groovy/ant/AntBuilder - Groovy 3 moved AntBuilder from
+    # groovy.util to groovy.ant, and Gradle 4.9 ships Groovy 2.4).
+    _upgrade_bio_sources_build "$bio" "$items_dir"
+    install_task=publishToMavenLocal
+  fi
+  run_in "$bio" "${GRADLE_ENV[@]}" ./gradlew "${IM_GRADLE_ARGS[@]}" ":bio-source-humanmine-items:$install_task"
 }
 
-# Builds and installs org.intermine:bio-source-reactome:5.0.8 into the local Maven repo, in one
+# Builds and installs org.intermine:bio-source-reactome:5.0.8 (with --intermine-src: the checkout's
+# version, into its private repo) into the local Maven repo, in one
 # of two modes - the same project, built twice, because of a genuine chicken-and-egg:
 #
 #   converter-only  ReactomeConverter alone. Needed BEFORE :dbmodel:builddb, because
@@ -570,9 +593,11 @@ GRADLE"
 # group/version match exactly what IntegratePlugin.groovy resolves for a project.xml
 # <source type="reactome"> entry with no explicit version="..." attribute: "bio-source-" + type,
 # at bioVersion (5.0.8, confirmed live - the same version already resolved and cached for
-# bio-model/intermine-integrate elsewhere in this build).
+# bio-model/intermine-integrate elsewhere in this build). With --intermine-src the mine's bioVersion
+# is exactly IM_VERSION, so the jar, bio-core, bio-model and intermine-integrate all are too.
 _install_reactome_jar() {
   local mode=$1
+  local jar_version=${IM_VERSION:-5.0.8} bio_version=${IM_VERSION:-5.0.8} im_version=${IM_VERSION:-5.0.+}
   local build="$TRIAL_HOME/reactome-source"
   local dbmodel_jar="$TRIAL_HOME/humanmine/dbmodel/build/libs/dbmodel.jar"
   local src_java="java { srcDirs = ['src/main/java']; exclude '**/postprocess/**' }"
@@ -586,7 +611,7 @@ apply plugin: 'java'
 apply plugin: 'maven'
 
 group = 'org.intermine'
-version = '5.0.8'
+version = '$jar_version'
 sourceCompatibility = 1.8
 targetCompatibility = 1.8
 
@@ -612,9 +637,9 @@ dependencies {
     // org.intermine.bio.util does not exist") because intermine/bio's real root build.gradle
     // applies it to every bio/sources/* subproject via its own subprojects{} block; this
     // standalone build has no such parent, so it's declared explicitly here instead.
-    compile group: 'org.intermine', name: 'bio-core', version: '5.0.8', transitive: false
-    compile group: 'org.intermine', name: 'bio-model', version: '5.0.8', transitive: false
-    compile group: 'org.intermine', name: 'intermine-integrate', version: '5.0.+'
+    compile group: 'org.intermine', name: 'bio-core', version: '$bio_version', transitive: false
+    compile group: 'org.intermine', name: 'bio-model', version: '$bio_version', transitive: false
+    compile group: 'org.intermine', name: 'intermine-integrate', version: '$im_version'
     runtime fileTree(dir: 'libs', include: '*.jar')
 $extra_dep
 }
@@ -747,20 +772,13 @@ deployer_edit() {
   run sed -i "$@" "$file"
 }
 
-# --intermine-src only: moves a copied Gradle-4.9 mine checkout (humanmine as of 2022) onto the
-# checkout's version and Gradle. Every change is a deployer_edit or a logged wrapper copy.
-_upgrade_mine_build() {
-  local mine=$1
-  local major=${IM_GRADLE_VERSION%%.*}
-  deployer_edit "$mine/gradle.properties" "imVersion -> $IM_VERSION" \
-    -e "s/^systemProp\.imVersion=.*/systemProp.imVersion=$IM_VERSION/"
-  deployer_edit "$mine/gradle.properties" "bioVersion -> $IM_VERSION" \
-    -e "s/^systemProp\.bioVersion=.*/systemProp.bioVersion=$IM_VERSION/"
-  # The wrapper: what `./gradlew wrapper --gradle-version $IM_GRADLE_VERSION` does, without needing
-  # the old Gradle to configure the build first - the checkout's own wrapper jar and launcher
-  # script, and a properties file naming the checkout's Gradle (and its checksum, when the
-  # checkout's install_intermine.py knows it).
-  local wrapper_props="$mine/gradle/wrapper/gradle-wrapper.properties"
+# --intermine-src only: what `./gradlew wrapper --gradle-version $IM_GRADLE_VERSION` does to the
+# Gradle checkout $1, without needing its old Gradle to configure the build first - the InterMine
+# checkout's own wrapper jar and launcher script, and a properties file naming the checkout's Gradle
+# (and its checksum, when the checkout's install_intermine.py knows it).
+_switch_gradle_wrapper() {
+  local dir=$1
+  local wrapper_props="$dir/gradle/wrapper/gradle-wrapper.properties"
   local url="https://services.gradle.org/distributions/gradle-$IM_GRADLE_VERSION-bin.zip"
   deployer_edit "$wrapper_props" "Gradle wrapper -> $IM_GRADLE_VERSION" \
     -e "s|^distributionUrl=.*|distributionUrl=$url|"
@@ -774,13 +792,39 @@ _upgrade_mine_build() {
   fi
   local f
   for f in gradle/wrapper/gradle-wrapper.jar gradlew; do
-    if [ "$DRY_RUN" -eq 1 ] || ! cmp -s "$INTERMINE_SRC/intermine/$f" "$mine/$f"; then
-      log "deployer edit: humanmine/$f: the checkout's ($IM_GRADLE_VERSION) wrapper file"
+    if [ "$DRY_RUN" -eq 1 ] || ! cmp -s "$INTERMINE_SRC/intermine/$f" "$dir/$f"; then
+      log "deployer edit: ${dir#"$TRIAL_HOME"/}/$f: the checkout's ($IM_GRADLE_VERSION) wrapper file"
       # cat, not cp, and compared afterwards: plain cp has silently zeroed files on virtiofs mounts
       # (see make-inputs.sh / the Makefile's fork-sync)
-      run bash -c "cat '$INTERMINE_SRC/intermine/$f' > '$mine/$f' && cmp -s '$INTERMINE_SRC/intermine/$f' '$mine/$f'"
+      run bash -c "cat '$INTERMINE_SRC/intermine/$f' > '$dir/$f' && cmp -s '$INTERMINE_SRC/intermine/$f' '$dir/$f'"
     fi
   done
+}
+
+# The imVersion/bioVersion pins of a copied mine or bio-sources checkout -> IM_VERSION.
+_pin_intermine_version() {
+  local props=$1/gradle.properties
+  deployer_edit "$props" "imVersion -> $IM_VERSION" -e "s/^systemProp\.imVersion=.*/systemProp.imVersion=$IM_VERSION/"
+  deployer_edit "$props" "bioVersion -> $IM_VERSION" -e "s/^systemProp\.bioVersion=.*/systemProp.bioVersion=$IM_VERSION/"
+}
+
+# Gradle 7 removed the compile/testCompile configurations (UPGRADING-build.md, 5.1.1 to 6.0.0).
+_gradle7_configurations() {
+  local f
+  for f in "$@"; do
+    deployer_edit "$f" "compile -> implementation, testCompile -> testImplementation (removed in Gradle 7)" \
+      -e 's/^\([[:space:]]*\)compile\b/\1implementation/' \
+      -e 's/^\([[:space:]]*\)testCompile\b/\1testImplementation/'
+  done
+}
+
+# --intermine-src only: moves a copied Gradle-4.9 mine checkout (humanmine as of 2022) onto the
+# checkout's version and Gradle. Every change is a deployer_edit or a logged wrapper copy.
+_upgrade_mine_build() {
+  local mine=$1
+  local major=${IM_GRADLE_VERSION%%.*}
+  _pin_intermine_version "$mine"
+  _switch_gradle_wrapper "$mine"
   # Gradle 5 removed TaskInputs.sourceFiles.stopExecutionIfEmpty(): without this the mine does not
   # configure at all (UPGRADING-build.md, 5.0.x to 5.1.1 step 3).
   if [ "$major" -ge 5 ]; then
@@ -788,20 +832,37 @@ _upgrade_mine_build() {
       -e '/inputs\.sourceFiles\.stopExecutionIfEmpty()/d'
   fi
   if [ "$major" -ge 7 ]; then
-    # Gradle 7 removed the `maven` plugin and the compile/testCompile configurations; jcenter() is
-    # deprecated in 7, removed in 8, and has been dead since 2021 anyway.
+    # Gradle 7 removed the `maven` plugin; jcenter() is deprecated in 7, removed in 8, and has been
+    # dead since 2021 anyway.
     deployer_edit "$mine/build.gradle" "delete apply plugin: 'maven' (removed in Gradle 7)" \
       -e "/^[[:space:]]*apply plugin: 'maven'[[:space:]]*\$/d"
     deployer_edit "$mine/build.gradle" "delete jcenter() (dead; removed in Gradle 8)" \
       -e '/^[[:space:]]*jcenter()[[:space:]]*$/d'
-    for f in build.gradle dbmodel/build.gradle webapp/build.gradle; do
-      deployer_edit "$mine/$f" "compile -> implementation, testCompile -> testImplementation (removed in Gradle 7)" \
-        -e 's/^\([[:space:]]*\)compile\b/\1implementation/' \
-        -e 's/^\([[:space:]]*\)testCompile\b/\1testImplementation/'
-    done
+    _gradle7_configurations "$mine/build.gradle" "$mine/dbmodel/build.gradle" "$mine/webapp/build.gradle"
     # JavaExec.main is deprecated in 7.1 and removed in 8 (blueGenesStart, never run here).
     deployer_edit "$mine/webapp/build.gradle" "JavaExec main = -> mainClass = (removed in Gradle 8)" \
       -e 's/^\([[:space:]]*\)main = /\1mainClass = /'
+  fi
+}
+
+# --intermine-src only: the same move for the copied humanmine-bio-sources checkout ($1) and the
+# humanmine-items subproject copy ($2). Its root build.gradle publishes with the `maven` plugin
+# (`install`), so on Gradle >= 7 that becomes maven-publish with one publication per subproject
+# (`publishToMavenLocal`), and the sources/javadoc jars' `classifier` becomes `archiveClassifier`
+# (deprecated in 7, removed in 8).
+_upgrade_bio_sources_build() {
+  local bio=$1 items=$2
+  local major=${IM_GRADLE_VERSION%%.*}
+  _pin_intermine_version "$bio"
+  _switch_gradle_wrapper "$bio"
+  if [ "$major" -ge 7 ]; then
+    deployer_edit "$bio/build.gradle" "apply plugin: 'maven' -> 'maven-publish' plus a publication (maven removed in Gradle 7)" \
+      -e "s/^\([[:space:]]*\)apply plugin: 'maven'[[:space:]]*\$/\1apply plugin: 'maven-publish'\n\1publishing { publications { maven(MavenPublication) { from components.java } } }/"
+    deployer_edit "$bio/build.gradle" "classifier = -> archiveClassifier = (removed in Gradle 8)" \
+      -e 's/^\([[:space:]]*\)classifier = /\1archiveClassifier = /'
+    local f files=("$bio/build.gradle" "$items/build.gradle")
+    for f in "$bio"/*/build.gradle; do files+=("$f"); done
+    _gradle7_configurations "${files[@]}"
   fi
 }
 
