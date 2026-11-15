@@ -144,7 +144,7 @@ Useful options:
 | Option | Effect |
 |---|---|
 | `--dry-run` | Print every command instead of running it |
-| `--list-phases` | Print the 18 phase names, in order, and exit |
+| `--list-phases` | Print the 18 phase names (19 with `--intermine-src`), in order, and exit |
 | `--from PHASE` | Resume: start at `PHASE` instead of the beginning |
 | `--only PHASE` | Run exactly one phase and stop |
 | `--sources "a b c"` | Override the nine-source demo panel |
@@ -154,6 +154,8 @@ Useful options:
 | `--use-cached-data` | Restore the fetched raw data from `cached_raw_data/` instead of fetching it again (see below) |
 | `--cache-dir DIR` | Use `DIR` instead of `cached_raw_data/` |
 | `--reactome-levels default\|all` | Which of Reactome's own two files to load (see below); default `default` |
+| `--intermine-src DIR` | Build against the InterMine checkout `DIR` instead of the published 5.0.x artefacts (see "Building against a local InterMine checkout") |
+| `--stack-name NAME` | Run a second stack beside the default one: own container/volume names, Compose project and ports (see "A second stack") |
 
 `--from` and `--only` always run `check_prereqs` first regardless, because that phase is what
 sets the `JAVA_HOME` override the Gradle calls need.
@@ -161,7 +163,8 @@ sets the `JAVA_HOME` override the Gradle calls need.
 Key environment variables (see the script header for the rest): `TRIAL_HOME` (scratch tree for
 the upstream checkouts and Gradle output, default `~/intermine-build/trial_home`),
 `UPSTREAM_CACHE` (default `in/.upstream`), `JAVA8_HOME`, `GRADLE49`, `COMPOSE`, `PG_PORT`,
-`BG_PORT`, `SOLR_PORT`, `MINE_TITLE`.
+`BG_PORT`, `SOLR_PORT`, `MINE_PORT`, `RDFC2IM_PREFIX`, `COMPOSE_PROJECT_NAME`, `MINE_TITLE`,
+`INTERMINE_JAVA_HOME`.
 
 ### Reactome pathway levels
 
@@ -184,6 +187,90 @@ stock converter processes every file it finds there, so both together would doub
 `--reactome-levels` between runs removes the other one first. The cache
 (`cached_raw_data/reactome-uniprot-map/`) records which level was fetched and refuses to restore it
 for a build that asked for the other one.
+
+### Building against a local InterMine checkout
+
+`--intermine-src DIR` makes the build use the InterMine checkout `DIR` (for example a worktree of
+the 2026 maintenance branch) instead of the published `org.intermine` 5.0.x artefacts: the Gradle
+plugin, the `intermine-*` and `bio-*` jars, the bio sources and the webapp wars. RDF Portal data,
+the humanmine project files and BlueGenes are the same as without it. This is the whole-system
+acceptance test for back-end changes: "the modernised InterMine builds the demo mine".
+
+```sh
+tools/full-build.sh --use-cached-data --intermine-src ~/git/intermine --stack-name ut
+MINE_BASE=http://localhost:18090/humanmine SOLR_BASE=http://localhost:18983 make test-live
+```
+
+What changes:
+
+- **A new phase, `publish_intermine`**, right after `fetch_inputs` (it appears in `--list-phases`
+  only with the option). `DIR` is only read: it is copied, without `.git` and build output, to
+  `$TRIAL_HOME/intermine-src`, where the checkout's own `config/lib/install_intermine.py` writes
+  the `gradle.properties` files and `publishToMavenLocal` runs in each module of its install list
+  (plugin, intermine, bio, bio/sources, bio/postprocess) into the private Maven repo
+  `$TRIAL_HOME/m2-intermine`. About 4-6 minutes with a warm Gradle cache.
+- **Every later Gradle call gets `-Dmaven.repo.local=$TRIAL_HOME/m2-intermine`.** `mavenLocal()`
+  is first in the humanmine repositories, so `org.intermine:*` resolves from that repo and never
+  from a shared `~/.m2`; the mine's repository list is not edited.
+- **Versions come from `DIR`**: the InterMine version from `gradle/libs.versions.toml`, the Gradle
+  version (and its checksum) from `config/lib/install_intermine.py`.
+- **The copied humanmine and humanmine-bio-sources checkouts move to that version and Gradle**,
+  through the deployer edits of `DIR`'s `docs/UPGRADING-build.md`. Each edit is applied only when
+  it changes the file and is logged as `deployer edit: <file>: <what>`, so
+  `grep 'deployer edit' .build-logs/build-<run>.log` lists what a mine's maintainer has to do by
+  hand. With a Gradle 7.6.6 checkout they are:
+  - both: `imVersion`/`bioVersion` set to the checkout's version; the checkout's wrapper
+    (`gradlew`, `gradle-wrapper.jar`, `distributionUrl`, `distributionSha256Sum`);
+    `compile`/`testCompile` to `implementation`/`testImplementation`;
+  - humanmine `build.gradle`: delete `inputs.sourceFiles.stopExecutionIfEmpty()`,
+    `apply plugin: 'maven'` and `jcenter()`;
+  - humanmine `webapp/build.gradle`: `JavaExec` `main =` to `mainClass =`; `duplicatesStrategy =
+    DuplicatesStrategy.EXCLUDE` in `warWebApp` (Gradle 7 fails on the duplicate jars that 4.9
+    silently packed twice);
+  - humanmine-bio-sources `build.gradle`: `apply plugin: 'maven'` to `maven-publish` with one
+    publication per subproject (so `install` becomes `publishToMavenLocal`), `classifier =` to
+    `archiveClassifier =`. The humanmine-items subproject is built from a copy under
+    `TRIAL_HOME` so that this repository's `humanmine-items/build.gradle` is not edited.
+- **The bio-sources build must move to the new Gradle too.** A plugin built by Gradle 7.6.6 does
+  not load in Gradle 4.9 (`NoClassDefFoundError: groovy/ant/AntBuilder`: Groovy 3 moved the
+  class), whatever `UPGRADING-build.md` says about 5.1.1 still running on 4.9.
+- The standalone reactome source build and its dependencies use the checkout's version, and
+  `default.intermine.production.properties` and `bio/sources/reactome` are read from the copy.
+- `INTERMINE_JAVA_HOME` selects the JDK for building the checkout (default `JAVA8_HOME`).
+
+First run (2026-11-15, maint-2026 at 58d3b6cb44, InterMine 5.1.1, Gradle 7.6.6 in the mine, warm
+Gradle cache, `--use-cached-data`): 638 s end to end, the same row counts as the 5.0.8 build
+(113 genes, 13,546 proteins, 2,883 pathways, 50,283 pathway-protein rows, 450 gene-pathway rows,
+6,781 publications, 331,497 objects), web service version 35 (34 with 5.0.8), and `make
+test-live` 17/17. The war holds only 5.1.1 `intermine-*`/`bio-*` jars.
+
+### A second stack
+
+`--stack-name NAME` runs a second Compose stack beside the default one, for example the
+`--intermine-src` build next to a published-artefact build. Its containers and volumes are
+`rdfc2im-NAME-*` (`RDFC2IM_PREFIX`), its Compose project is `rdfc2im-NAME`
+(`COMPOSE_PROJECT_NAME`; without a project of its own, a second `up` in the default project
+`trial` would recreate the first stack's containers) and its ports default to
+
+| Service | Default stack | `--stack-name` |
+|---|---|---|
+| Postgres | 15432 | 25432 |
+| Solr | 8983 | 18983 |
+| webapp | 8090 | 18090 |
+| BlueGenes | 5000 | 15000 |
+
+Each port can still be set with `PG_PORT`, `SOLR_PORT`, `MINE_PORT` and `BG_PORT`, which
+`trial/docker-compose.yml` reads directly. Tomcat listens on `MINE_PORT` inside its container too,
+and `webapp.baseurl` uses it, because the webapp fetches its own `query.xsd` from
+`webapp.baseurl`. A Solr port other than 8983 is written into the mine's two Solr URLs, so
+postprocess indexes this stack's Solr. `check_prereqs` refuses to start when one of the ports is
+already published by a container that is not this stack's, since the host-side `builddb` would
+otherwise drop the other stack's database.
+
+Give the second stack its own `TRIAL_HOME` and `HOME` (the mine's
+`~/.intermine/humanmine.properties` carries the ports). `/micklem/data` (the staged items files and
+the Reactome mapping) is still shared between stacks; both point at identical data when they are
+built from the same cache.
 
 ## Caching the fetched data
 
