@@ -8,11 +8,20 @@
 #
 # `down` stops and removes the containers but KEEPS the pgdata volume; use
 # `make trial-destroy` to throw the database away.
+#
+# Names and host ports come from the environment, with this stack's own values as defaults, so a
+# second stack can run beside the first (tools/full-build.sh --stack-name sets all of these):
+#   RDFC2IM_PREFIX        container and volume name prefix (default rdfc2im: rdfc2im-postgres, ...)
+#   COMPOSE_PROJECT_NAME  Compose's own project name (default: this directory's name, `trial`).
+#                         A second stack MUST set it too: Compose identifies containers by project
+#                         and service, so a second `up` in the same project recreates the first
+#                         stack's containers instead of starting new ones.
+#   PG_PORT, SOLR_PORT, MINE_PORT, BG_PORT   host ports (defaults 15432, 8983, 8090, 5000)
 services:
 
   postgres:
     image: docker.io/library/postgres:14
-    container_name: rdfc2im-postgres
+    container_name: ${RDFC2IM_PREFIX:-rdfc2im}-postgres
     # Default max_connections (100) isn't enough for InterMine's have.file.xml.tgt loader
     # (XmlDataLoaderTask), which opens far more concurrent connections than the have.large
     # loader at real data volumes - confirmed hitting "sorry, too many clients already" loading
@@ -42,7 +51,7 @@ services:
 
   solr:
     image: docker.io/library/solr:8.6.2
-    container_name: rdfc2im-solr
+    container_name: ${RDFC2IM_PREFIX:-rdfc2im}-solr
     # Backs create-search-index/create-autocomplete-index (dbmodel:postProcess) and the
     # webapp's own /service/search + autocomplete lookups. The two cores it needs
     # (humanmine-search, humanmine-autocomplete - names come from this mine's own
@@ -61,19 +70,20 @@ services:
     volumes:
       - solrdata:/var/solr
     ports:
-      - "127.0.0.1:8983:8983"
+      - "127.0.0.1:${SOLR_PORT:-8983}:8983"
     restart: unless-stopped
 
   mine:
     image: docker.io/library/tomcat:8.5-jdk8-temurin
-    container_name: rdfc2im-mine
+    container_name: ${RDFC2IM_PREFIX:-rdfc2im}-mine
     depends_on:
       postgres:
         condition: service_healthy
       solr:
         condition: service_started
     environment:
-      CATALINA_OPTS: "-Xmx3g -Djava.awt.headless=true"
+      # rdfc2im.mine.port: the HTTP connector port in tomcat/server.xml (see the ports comment below)
+      CATALINA_OPTS: "-Xmx3g -Djava.awt.headless=true -Drdfc2im.mine.port=${MINE_PORT:-8090}"
     # Tomcat's own log directory, size-capped. Tomcat's juli FileHandler rotates daily but has
     # no size limit, so a per-request error (one bad webconfig-model.xml makes EVERY classic-UI
     # page log a full Struts/Tiles stack trace, and every failing DWR call logs another) grows
@@ -91,25 +101,25 @@ services:
       # exploded webapp; its two properties files are patched at stage time to point
       # at the `postgres` service rather than the host's published port
       - ./artifacts/humanmine:/usr/local/tomcat/webapps/humanmine:ro
-      # listens on 8090, not 8080: InterMine fetches its own query.xsd from webapp.baseurl
-      # (http://localhost:8090), so the port INSIDE the container must equal the published
-      # one or every query-service call fails with "Connection refused"
+      # listens on MINE_PORT (8090), not 8080: InterMine fetches its own query.xsd from
+      # webapp.baseurl (http://localhost:<MINE_PORT>), so the port INSIDE the container must
+      # equal the published one or every query-service call fails with "Connection refused"
       - ./tomcat/server.xml:/usr/local/tomcat/conf/server.xml:ro
     ports:
-      - "127.0.0.1:8090:8090"
+      - "127.0.0.1:${MINE_PORT:-8090}:${MINE_PORT:-8090}"
     restart: unless-stopped
 
   bluegenes:
     image: docker.io/library/eclipse-temurin:17-jre
-    container_name: rdfc2im-bluegenes
+    container_name: ${RDFC2IM_PREFIX:-rdfc2im}-bluegenes
     depends_on:
       - mine
     environment:
       SERVER_PORT: "5000"
       # what the BROWSER calls - it resolves on your machine, through `ssh -L`
-      BLUEGENES_DEFAULT_SERVICE_ROOT: "http://localhost:8090/humanmine"
+      BLUEGENES_DEFAULT_SERVICE_ROOT: "http://localhost:${MINE_PORT:-8090}/humanmine"
       # what the BlueGenes server calls - container to container on the compose network
-      BLUEGENES_BACKEND_SERVICE_ROOT: "http://mine:8090/humanmine"
+      BLUEGENES_BACKEND_SERVICE_ROOT: "http://mine:${MINE_PORT:-8090}/humanmine"
       BLUEGENES_DEFAULT_MINE_NAME: "rdfc2im trial (GO only)"
       BLUEGENES_DEFAULT_NAMESPACE: "humanmine"
       HIDE_REGISTRY_MINES: "true"
@@ -126,6 +136,6 @@ services:
 
 volumes:
   pgdata:
-    name: rdfc2im-pgdata
+    name: ${RDFC2IM_PREFIX:-rdfc2im}-pgdata
   solrdata:
-    name: rdfc2im-solrdata
+    name: ${RDFC2IM_PREFIX:-rdfc2im}-solrdata

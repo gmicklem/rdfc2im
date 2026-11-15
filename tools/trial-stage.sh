@@ -3,6 +3,8 @@
 # the war or changing the mapping.
 #
 #   TRIAL_HOME  where the mine was built (contains humanmine/ and bgdeps/)
+#   PG_PORT     host port the war's DB address uses (default 15432)
+#   SOLR_PORT   host port the mine's Solr URLs use (default 8983)
 #
 # Produces, all gitignored:
 #   trial/artifacts/humanmine/       the webapp, exploded, with its DB host patched
@@ -14,6 +16,8 @@ ART=$HERE/trial/artifacts
 TRIAL_HOME=${TRIAL_HOME:-}
 [ -n "$TRIAL_HOME" ] || { [ -f "$HERE/.trial-home" ] && TRIAL_HOME=$(cat "$HERE/.trial-home"); }
 [ -n "$TRIAL_HOME" ] || { echo "trial-stage: set TRIAL_HOME (or write it to .trial-home)" >&2; exit 1; }
+PG_PORT=${PG_PORT:-15432}
+SOLR_PORT=${SOLR_PORT:-8983}
 
 WAR=$TRIAL_HOME/humanmine/webapp/build/libs/webapp.war
 CP=$TRIAL_HOME/bgdeps/classpath.txt
@@ -31,12 +35,12 @@ mkdir -p "$ART/humanmine"
 # service on its own port, so patch the two files that carry it.
 for f in WEB-INF/classes/intermine.properties WEB-INF/web.properties; do
     if [ -f "$ART/humanmine/$f" ]; then
-        sed -i 's|serverName=localhost:15432|serverName=postgres:5432|g; s|localhost:15432|postgres:5432|g' \
+        sed -i "s|serverName=localhost:$PG_PORT|serverName=postgres:5432|g; s|localhost:$PG_PORT|postgres:5432|g" \
             "$ART/humanmine/$f"
         echo "  patched $f -> postgres:5432"
     fi
 done
-if grep -rq "localhost:15432" "$ART/humanmine/WEB-INF/classes/intermine.properties" 2>/dev/null; then
+if grep -rq "localhost:$PG_PORT" "$ART/humanmine/WEB-INF/classes/intermine.properties" 2>/dev/null; then
     echo "trial-stage: WARNING host DB address still present in intermine.properties" >&2
 fi
 
@@ -60,17 +64,18 @@ done
 # needs the compose network's own hostname for that same Solr container instead.
 DBMODEL_JAR="$ART/humanmine/WEB-INF/lib/dbmodel.jar"
 if [ -f "$DBMODEL_JAR" ]; then
-    python3 - "$DBMODEL_JAR" <<'PYEOF'
+    python3 - "$DBMODEL_JAR" "localhost:$SOLR_PORT" <<'PYEOF'
 import sys, zipfile, os
 jar = sys.argv[1]
+host_solr = sys.argv[2].encode()
 targets = ("keyword_search.properties", "objectstoresummary.config.properties")
 tmp = jar + ".tmp"
 patched = []
 with zipfile.ZipFile(jar, "r") as zin, zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as zout:
     for item in zin.infolist():
         data = zin.read(item.filename)
-        if item.filename in targets and b"localhost:8983" in data:
-            data = data.replace(b"localhost:8983", b"solr:8983")
+        if item.filename in targets and host_solr in data:
+            data = data.replace(host_solr, b"solr:8983")
             patched.append(item.filename)
         zout.writestr(item, data)
 os.replace(tmp, jar)

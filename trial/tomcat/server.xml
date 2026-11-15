@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!-- tomcat:8.5-jdk8-temurin conf/server.xml with ONE change that matters: the HTTP connector is
-     on 8090, not 8080.  InterMine fetches its own query.xsd from webapp.baseurl
+     on ${rdfc2im.mine.port} (8090 by default, set from MINE_PORT in ../docker-compose.yml's
+     CATALINA_OPTS), not 8080.  InterMine fetches its own query.xsd from webapp.baseurl
      (http://localhost:8090) to validate queries, so the port inside the container must match
      the published one or every query service call fails with "Connection refused".
      The shutdown port is disabled; podman stops the container. -->
@@ -72,7 +73,7 @@
          APR (HTTP/AJP) Connector: /docs/apr.html
          Define a non-SSL/TLS HTTP/1.1 Connector on port 8080
     -->
-    <Connector port="8090" protocol="HTTP/1.1"
+    <Connector port="${rdfc2im.mine.port}" protocol="HTTP/1.1"
                connectionTimeout="20000"
                redirectPort="8443"
                maxParameterCount="1000"

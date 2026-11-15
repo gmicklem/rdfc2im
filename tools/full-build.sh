@@ -28,6 +28,14 @@
 #                       leaf pathways only) or "all" (UniProt2Reactome_All_Levels.txt: every
 #                       ancestor pathway also gets its descendants' proteins/genes, matching how
 #                       reactome.org itself presents a pathway). Default: default.
+#   --stack-name NAME   Run a second, independent Compose stack beside the default one: containers
+#                       and volumes are named rdfc2im-NAME-* (RDFC2IM_PREFIX), the Compose project
+#                       is rdfc2im-NAME (COMPOSE_PROJECT_NAME), and the host ports default to
+#                       25432/18983/18090/15000 (PG/Solr/mine/BlueGenes) instead of
+#                       15432/8983/8090/5000 - each still overridable by its own variable. Use
+#                       its own TRIAL_HOME and HOME too (the mine's ~/.intermine/humanmine.properties
+#                       carries the ports). check_prereqs refuses to start if a port is already
+#                       published by a container that is not this stack's.
 #   -h, --help          This text.
 #
 # Every side-effecting external command (gradle, docker, psql, curl) is emitted through `run`,
@@ -53,12 +61,17 @@
 #   COMPOSE           Docker Compose invocation. Default: "docker compose" (this project's own
 #                     trial stack was built and proven against Docker specifically, not podman -
 #                     see STATUS/handoff notes on this sandbox's environment).
-#   PG_PORT, BG_PORT, SOLR_PORT   Host ports for the three published services. Defaults match
-#                     trial/docker-compose.yml: 15432, 5000, 8983. NOTE: unlike PG_PORT and
-#                     BG_PORT, the tracked compose file hardcodes Solr's port rather than reading
-#                     ${SOLR_PORT} - changing SOLR_PORT here only takes effect via the BIND_ADDR
-#                     override path below (which does parameterize it); at the default BIND_ADDR
-#                     it's cosmetic and Solr stays on 8983 regardless.
+#   PG_PORT, BG_PORT, SOLR_PORT, MINE_PORT   Host ports for the four published services.
+#                     Defaults match trial/docker-compose.yml: 15432, 5000, 8983, 8090 (with
+#                     --stack-name: 25432, 15000, 18983, 18090). MINE_PORT is also the port Tomcat
+#                     listens on inside its container and the one in webapp.baseurl, because the
+#                     webapp fetches its own query.xsd from webapp.baseurl. A SOLR_PORT other than
+#                     8983 is written into the mine's two Solr URLs (keyword_search.properties,
+#                     objectstoresummary.config.properties), so postprocess indexes into this
+#                     stack's Solr and not another stack's.
+#   RDFC2IM_PREFIX    Container and volume name prefix (default rdfc2im; see --stack-name).
+#   COMPOSE_PROJECT_NAME  Passed through to Compose when set (default: unset, so the project is
+#                     `trial`, the compose file's directory).
 #   BIND_ADDR         Host address the compose stack's ports are published on. Default 127.0.0.1
 #                     (matches the tracked trial/docker-compose.yml - reach it via `ssh -L`, see
 #                     LOAD-TRIAL.md "Connecting"). Set to 0.0.0.0 only if you know your sandbox's
@@ -86,9 +99,7 @@ UPSTREAM_CACHE=${UPSTREAM_CACHE:-"$HERE/in/.upstream"}
 JAVA8_HOME=${JAVA8_HOME:-}
 GRADLE49=${GRADLE49:-gradle}
 COMPOSE=${COMPOSE:-"docker compose"}
-PG_PORT=${PG_PORT:-15432}
-BG_PORT=${BG_PORT:-5000}
-SOLR_PORT=${SOLR_PORT:-8983}
+STACK_NAME=${STACK_NAME:-}
 BIND_ADDR=${BIND_ADDR:-127.0.0.1}
 MINE_TITLE=${MINE_TITLE:-"rdfc2im: 113 gene food/drug-metabolism panel"}
 
@@ -179,7 +190,8 @@ phase_end() {
 }
 
 # ============================================================== arg parsing
-usage() { sed -n '2,50p' "$0" | sed 's/^# \{0,1\}//'; }
+# The header comment, from Usage to the end of the Environment list.
+usage() { awk 'NR > 1 && /^# phase_resolve_bluegenes_deps/ { exit } NR > 1' "$0" | sed 's/^# \{0,1\}//'; }
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -194,6 +206,7 @@ while [ $# -gt 0 ]; do
     --use-cached-data) USE_CACHED_DATA=1 ;;
     --cache-dir) RAW_CACHE_DIR=$2; shift ;;
     --reactome-levels) REACTOME_LEVELS=$2; shift ;;
+    --stack-name) STACK_NAME=$2; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "unknown option: $1" >&2; usage; exit 2 ;;
   esac
@@ -205,12 +218,37 @@ case "$REACTOME_LEVELS" in
   *) echo "unknown --reactome-levels '$REACTOME_LEVELS' - must be 'default' or 'all'" >&2; exit 2 ;;
 esac
 
+# Stack identity and host ports. Set after argument parsing because --stack-name changes the
+# defaults: a named stack gets its own container/volume names, its own Compose project and its own
+# ports, so it can run beside the default stack without touching it.
+if [ -n "$STACK_NAME" ]; then
+  case "$STACK_NAME" in *[!a-z0-9-]*|'') echo "--stack-name must be lower-case letters, digits and '-'" >&2; exit 2 ;; esac
+  RDFC2IM_PREFIX=${RDFC2IM_PREFIX:-"rdfc2im-$STACK_NAME"}
+  COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME:-"rdfc2im-$STACK_NAME"}
+  PG_PORT=${PG_PORT:-25432}; BG_PORT=${BG_PORT:-15000}; SOLR_PORT=${SOLR_PORT:-18983}; MINE_PORT=${MINE_PORT:-18090}
+fi
+RDFC2IM_PREFIX=${RDFC2IM_PREFIX:-rdfc2im}
+COMPOSE_PROJECT_NAME=${COMPOSE_PROJECT_NAME:-}
+PG_PORT=${PG_PORT:-15432}
+BG_PORT=${BG_PORT:-5000}
+SOLR_PORT=${SOLR_PORT:-8983}
+MINE_PORT=${MINE_PORT:-8090}
+PG_CONTAINER="$RDFC2IM_PREFIX-postgres"
+SOLR_CONTAINER="$RDFC2IM_PREFIX-solr"
+MINE_CONTAINER="$RDFC2IM_PREFIX-mine"
+# Every compose call gets the stack's names and ports explicitly (trial/docker-compose.yml reads
+# them, with the default stack's values as its own defaults).
+COMPOSE_ENV=(env PG_PORT="$PG_PORT" SOLR_PORT="$SOLR_PORT" MINE_PORT="$MINE_PORT" BG_PORT="$BG_PORT"
+             RDFC2IM_PREFIX="$RDFC2IM_PREFIX")
+[ -n "$COMPOSE_PROJECT_NAME" ] && COMPOSE_ENV+=(COMPOSE_PROJECT_NAME="$COMPOSE_PROJECT_NAME")
+
 mkdir -p "$LOG_DIR"
 : > "$TIMING_TSV" 2>/dev/null || true
 log "full-build.sh starting - run id $RUN_ID, log $LOGFILE, dry_run=$DRY_RUN"
 log "sources: $SOURCES"
 log "trial home: $TRIAL_HOME"
 log "raw-data cache: $RAW_CACHE_DIR (use_cached_data=$USE_CACHED_DATA)"
+log "stack: containers $RDFC2IM_PREFIX-*, compose project ${COMPOSE_PROJECT_NAME:-trial (default)}, ports pg=$PG_PORT solr=$SOLR_PORT mine=$MINE_PORT bluegenes=$BG_PORT"
 
 GRADLE_ENV=()   # populated by phase_check_prereqs; every ./gradlew call below is prefixed with it
 
@@ -239,6 +277,18 @@ phase_check_prereqs() {
   for src in $SOURCES; do
     [ -v "SCOPE_MODE[$src]" ] || die "unknown source '$src' - not in SCOPE_MODE (tools/full-build.sh); " \
       "known sources: ${!SCOPE_MODE[*]}"
+  done
+  # The host-side Gradle tasks reach Postgres and Solr through localhost:$PG_PORT/$SOLR_PORT. If a
+  # port is already published by ANOTHER stack's container, builddb would drop and recreate that
+  # stack's database (and postprocess re-index its Solr) - so a port held by anything but this
+  # stack's own container is fatal, before any work starts. Read-only (docker ps), so it runs under
+  # --dry-run too; a docker daemon that cannot answer is treated as "no conflict".
+  local port_svc port svc holder
+  for port_svc in "$PG_PORT:postgres" "$SOLR_PORT:solr" "$MINE_PORT:mine" "$BG_PORT:bluegenes"; do
+    port=${port_svc%%:*}; svc=${port_svc#*:}
+    holder=$(docker ps --filter "publish=$port" --format '{{.Names}}' 2>/dev/null | grep -vx "$RDFC2IM_PREFIX-$svc" | head -1 || true)
+    [ -z "$holder" ] || die "host port $port (for $svc) is already published by container '$holder', which is not" \
+      "this stack's ($RDFC2IM_PREFIX-$svc) - use --stack-name or set the *_PORT variables"
   done
   mkdir -p "$TRIAL_HOME"
   # rdfc2im.yaml's src_data_dir (/micklem/data/rdfc2im - a real Micklem-lab deployment path,
@@ -562,7 +612,7 @@ if [ "$BIND_ADDR" != "127.0.0.1" ]; then
 services:
   postgres: {ports: !override ["$BIND_ADDR:$PG_PORT:5432"]}
   solr:     {ports: !override ["$BIND_ADDR:$SOLR_PORT:8983"]}
-  mine:     {ports: !override ["$BIND_ADDR:8090:8090"]}
+  mine:     {ports: !override ["$BIND_ADDR:$MINE_PORT:$MINE_PORT"]}
   bluegenes: {ports: !override ["$BIND_ADDR:$BG_PORT:5000"]}
 YML
 )"
@@ -619,6 +669,17 @@ phase_prepare_mine_checkout() {
       -e 's|exclude "WEB-INF/web.properties"|exclude "WEB-INF/web.properties", "WEB-INF/web.xml"\n    webXml = file("${explodedWebAppDir}/WEB-INF/web.xml")|' \
       "$mine/webapp/build.gradle"
   fi
+  # The mine's two Solr URLs (search, autocomplete) are baked in as localhost:8983. postprocess runs
+  # on this host and indexes into whatever answers there, so a stack on another SOLR_PORT must
+  # point them at its own port - otherwise it silently re-indexes the default stack's Solr.
+  # trial-stage.sh later rewrites localhost:$SOLR_PORT to solr:8983 for the container. A no-op
+  # when the files already name $SOLR_PORT (always so at the default 8983).
+  for f in "$mine/dbmodel/resources/keyword_search.properties" \
+           "$mine/dbmodel/resources/objectstoresummary.config.properties"; do
+    if [ -f "$f" ] && ! grep -q "localhost:$SOLR_PORT/solr/" "$f"; then
+      run sed -i "s|localhost:[0-9]*/solr/|localhost:$SOLR_PORT/solr/|" "$f"
+    fi
+  done
   write_file "$mine/project.xml" "$(cat out/_mine/project.xml)"
   # rdfc2im's own project.xml keeps HumanMine's full ~40-source list, our sources inserted as
   # replacements (USAGE.md) - correct for a full mine, wrong for this reduced demo build.
@@ -672,7 +733,7 @@ db.userprofile-production.datasource.user=intermine
 db.userprofile-production.datasource.password=intermine
 
 default.intermine.properties.file=$prod_props
-webapp.baseurl=http://localhost:8090
+webapp.baseurl=http://localhost:$MINE_PORT
 webapp.path=humanmine
 # webapp/build.gradle's cargo {} block (Gradle-Cargo remote-Tomcat deploy plugin) eagerly reads
 # this during Gradle's CONFIGURE phase, not lazily when a cargo task actually runs - confirmed
@@ -688,7 +749,7 @@ webapp.path=humanmine
 # Properties.getProperty(key) API. This build never runs a cargo task at all (deployment goes
 # through the Tomcat container in trial/docker-compose.yml instead), so the value only needs to
 # be a syntactically valid URL - reusing webapp.baseurl's is the natural choice.
-webapp.deploy.url=http://localhost:8090
+webapp.deploy.url=http://localhost:$MINE_PORT
 project.title=$MINE_TITLE
 # Neither default.intermine.production.properties nor anywhere else sets these - every real
 # InterMine deployment must supply its own (confirmed: grep for superuser.account across every
@@ -727,11 +788,11 @@ phase_start_databases() {
   # COMPOSE_FILES (and its docker-compose.local.yml, if BIND_ADDR needs one) is computed
   # globally, above - see that block's comment for why (resume-safety: this phase can be
   # skipped by --from without start_mine_stack losing access to it).
-  run env PG_PORT="$PG_PORT" $COMPOSE "${COMPOSE_FILES[@]}" up -d postgres solr
+  run "${COMPOSE_ENV[@]}" $COMPOSE "${COMPOSE_FILES[@]}" up -d postgres solr
   log "waiting for postgres to report healthy..."
   if [ "$DRY_RUN" -eq 0 ]; then
     for _ in $(seq 1 60); do
-      docker inspect --format '{{.State.Health.Status}}' rdfc2im-postgres 2>/dev/null | grep -q healthy && break
+      docker inspect --format '{{.State.Health.Status}}' "$PG_CONTAINER" 2>/dev/null | grep -q healthy && break
       sleep 2
     done
   fi
@@ -741,7 +802,7 @@ phase_start_databases() {
     # text and fails with "syntax error at or near \"\\\""), while the identical text piped
     # through stdin (`docker exec -i ... <<SQL`) works. `-i` + a heredoc, matching the same
     # pattern phase_apply_templates already uses below for demo_public_templates.sql.
-    run bash -c "docker exec -i rdfc2im-postgres psql -U intermine -d postgres <<SQL
+    run bash -c "docker exec -i $PG_CONTAINER psql -U intermine -d postgres <<SQL
 SELECT 'CREATE DATABASE \"$db\"' WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '$db')
 \\gexec
 SQL"
@@ -751,7 +812,7 @@ SQL"
   # that phase's own comment for why: it needs a field type Solr's schemaless configset only
   # creates once real documents exist, which they don't yet on a freshly created, empty core.
   for core in humanmine-search humanmine-autocomplete; do
-    run bash -c "docker exec rdfc2im-solr solr create_core -c $core 2>&1 | grep -qv 'already exists' || true"
+    run bash -c "docker exec $SOLR_CONTAINER solr create_core -c $core 2>&1 | grep -qv 'already exists' || true"
   done
 }
 
@@ -959,31 +1020,32 @@ GRADLE
 }
 
 phase_stage_artifacts() {
-  run env TRIAL_HOME="$TRIAL_HOME" sh tools/trial-stage.sh
+  run env TRIAL_HOME="$TRIAL_HOME" PG_PORT="$PG_PORT" SOLR_PORT="$SOLR_PORT" sh tools/trial-stage.sh
 }
 
 phase_start_mine_stack() {
-  run $COMPOSE "${COMPOSE_FILES[@]}" up -d mine bluegenes
+  run "${COMPOSE_ENV[@]}" $COMPOSE "${COMPOSE_FILES[@]}" up -d mine bluegenes
   # The webapp reads the database once, at startup - postprocessing and the war it's serving
   # must both be in place before this, and it must run again after either changes.
-  run docker restart rdfc2im-mine
+  run docker restart "$MINE_CONTAINER"
 }
 
 phase_apply_templates() {
   [ "$SKIP_TEMPLATES" -eq 1 ] && { log "skipped (--skip-templates)"; return 0; }
   [ -f curation/demo_public_templates.sql ] || { log "no curation/demo_public_templates.sql - skipping"; return 0; }
-  run bash -c "docker exec -i rdfc2im-postgres psql -U intermine -d humanmine-userprofile < curation/demo_public_templates.sql"
-  run docker restart rdfc2im-mine
+  run bash -c "docker exec -i $PG_CONTAINER psql -U intermine -d humanmine-userprofile < curation/demo_public_templates.sql"
+  run docker restart "$MINE_CONTAINER"
 }
 
 phase_verify() {
   if [ "$DRY_RUN" -eq 1 ]; then log "skipping live checks under --dry-run"; return 0; fi
   sleep 5
-  run curl -sf "http://localhost:8090/humanmine/service/version"
-  run curl -sf "http://localhost:8090/humanmine/service/model" -o /dev/null
+  run curl -sf "http://localhost:$MINE_PORT/humanmine/service/version"
+  run curl -sf "http://localhost:$MINE_PORT/humanmine/service/model" -o /dev/null
   run curl -sf "http://localhost:$BG_PORT/" -o /dev/null
-  log "mine webapp: http://localhost:8090/humanmine  BlueGenes: http://localhost:$BG_PORT"
-  log "if BIND_ADDR is still 127.0.0.1 (the default), reach these via: ssh -L 8090:localhost:8090 -L $BG_PORT:localhost:$BG_PORT ..."
+  log "mine webapp: http://localhost:$MINE_PORT/humanmine  BlueGenes: http://localhost:$BG_PORT"
+  log "if BIND_ADDR is still 127.0.0.1 (the default), reach these via: ssh -L $MINE_PORT:localhost:$MINE_PORT -L $BG_PORT:localhost:$BG_PORT ..."
+  log "live checks: MINE_BASE=http://localhost:$MINE_PORT/humanmine SOLR_BASE=http://localhost:$SOLR_PORT make test-live"
 }
 
 # ============================================================== main
