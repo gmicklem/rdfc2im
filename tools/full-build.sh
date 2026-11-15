@@ -570,7 +570,8 @@ GRADLE"
     # failed with NoClassDefFoundError groovy/ant/AntBuilder - Groovy 3 moved AntBuilder from
     # groovy.util to groovy.ant, and Gradle 4.9 ships Groovy 2.4).
     _upgrade_bio_sources_build "$bio" "$items_dir"
-    install_task=publishToMavenLocal
+    # Gradle < 7 keeps the `maven` plugin (see _upgrade_bio_sources_build), whose task is `install`
+    [ "${IM_GRADLE_VERSION%%.*}" -ge 7 ] && install_task=publishToMavenLocal
   fi
   run_in "$bio" "${GRADLE_ENV[@]}" ./gradlew "${IM_GRADLE_ARGS[@]}" ":bio-source-humanmine-items:$install_task"
 }
