@@ -89,6 +89,7 @@
 #                     LOAD-TRIAL.md "Connecting"). Set to 0.0.0.0 only if you know your sandbox's
 #                     access model needs it (e.g. `sbx ports` rather than SSH) - this writes a
 #                     LOCAL, untracked compose override, never the shared tracked file.
+#   INTERMINE_JAVA_HOME  JDK for building the --intermine-src checkout (default: JAVA8_HOME).
 #   MINE_TITLE        Display name baked into the webapp and BlueGenes. Default matches the demo
 #                     panel; override for a differently-scoped build.
 #
@@ -127,6 +128,7 @@ USE_CACHED_DATA=0
 RAW_CACHE_DIR=${RAW_CACHE_DIR:-"$HERE/cached_raw_data"}
 REACTOME_LEVELS=${REACTOME_LEVELS:-default}
 DRY_RUN=0
+LIST_PHASES=0
 FROM_PHASE=""
 ONLY_PHASE=""
 
@@ -211,7 +213,7 @@ while [ $# -gt 0 ]; do
     --dry-run) DRY_RUN=1 ;;
     --from) FROM_PHASE=$2; shift ;;
     --only) ONLY_PHASE=$2; shift ;;
-    --list-phases) printf '%s\n' "${PHASES[@]}"; exit 0 ;;
+    --list-phases) LIST_PHASES=1 ;;
     --sources) SOURCES=$2; shift ;;
     --genes) GENE_PANEL=$2; shift ;;
     --taxon) TAXON=$2; shift ;;
@@ -282,6 +284,25 @@ if [ -n "$INTERMINE_SRC" ]; then
   IM_GRADLE_SHA256=$(grep -A1 "\"gradle-$IM_GRADLE_VERSION-bin.zip\":" "$INTERMINE_SRC/config/lib/install_intermine.py" |
                      sed -n 's/.*"\([0-9a-f]\{64\}\)".*/\1/p' | head -1)
 fi
+
+# Where the --intermine-src artefacts go, and the Gradle arguments that make every build below
+# resolve (and install) org.intermine:* there: mavenLocal() honours -Dmaven.repo.local, so the
+# humanmine build files keep their repositories unchanged, and nothing can come from (or go to)
+# a shared ~/.m2 by accident. INTERMINE_TREE is the InterMine source tree this script reads files
+# from (default.intermine.production.properties, bio/sources/reactome): the upstream clone, or
+# with --intermine-src the copy publish_intermine built from.
+IM_M2="$TRIAL_HOME/m2-intermine"
+IM_GRADLE_ARGS=()
+INTERMINE_TREE="$UPSTREAM_CACHE/intermine"
+INTERMINE_JAVA_HOME=${INTERMINE_JAVA_HOME:-}
+if [ -n "$INTERMINE_SRC" ]; then
+  IM_GRADLE_ARGS=(-Dmaven.repo.local="$IM_M2")
+  INTERMINE_TREE="$TRIAL_HOME/intermine-src"
+  # The build of the checkout's own artefacts runs before the mine's first Gradle call.
+  PHASES=("${PHASES[@]/#fetch_inputs/fetch_inputs publish_intermine}")
+  read -r -a PHASES <<< "${PHASES[*]}"
+fi
+if [ "$LIST_PHASES" -eq 1 ]; then printf '%s\n' "${PHASES[@]}"; exit 0; fi
 
 mkdir -p "$LOG_DIR"
 : > "$TIMING_TSV" 2>/dev/null || true
@@ -372,6 +393,51 @@ phase_fetch_inputs() {
   # rdf-config, intermine, humanmine, humanmine-bio-sources, the live HumanMine model, and
   # HumanMine's own genomic_priorities.properties - see tools/make-inputs.sh's own header.
   run env CACHE="$UPSTREAM_CACHE" sh tools/make-inputs.sh
+}
+
+# --intermine-src only. Builds the checkout's artefacts and publishes them into the private Maven
+# repo $IM_M2, which every later Gradle call resolves mavenLocal() from (IM_GRADLE_ARGS). DIR itself
+# is never built in or written to: it is copied (sources only, no build output, verified file by
+# file - see tools/copy_tree.py for why not cp/tar) to $TRIAL_HOME/intermine-src, afresh each run.
+# The steps are those of the checkout's own config/lib/install_intermine.py (and of the planning
+# repo's scripts/gate-intermine.sh): its property generation writes gradle.properties and
+# gradle-wrapper.properties from the *.in templates (and ~/.intermine test properties, which the
+# builds expect; HOME is the build's, not a shared one), then `publishToMavenLocal` runs in each
+# module of its install list, with the gate's Gradle flags.
+phase_publish_intermine() {
+  local src="$TRIAL_HOME/intermine-src"
+  local jdk=${INTERMINE_JAVA_HOME:-$JAVA8_HOME}
+  run python3 tools/copy_tree.py "$INTERMINE_SRC" "$src" \
+    --exclude .git --exclude build --exclude .gradle --exclude .gate-logs --exclude __pycache__
+  log "intermine-src: $(git -C "$INTERMINE_SRC" log -1 --format='%h %s' 2>/dev/null || echo 'not a git checkout')$(
+    git -C "$INTERMINE_SRC" diff --quiet HEAD 2>/dev/null || echo ' (with uncommitted changes)')"
+  run mkdir -p "$IM_M2"
+  # PSQL_*: install_intermine.py requires them; they only go into the test properties.
+  run_in "$src" env PSQL_HOST="${PSQL_HOST:-localhost}" PSQL_USER="${PSQL_USER:-test}" PSQL_PWD="${PSQL_PWD:-test}" \
+    python3 -c 'import sys; sys.path.insert(0, "config/lib"); import install_intermine as m
+m.IntermineBuilder.gradle_install_modules = lambda self, clean=False: None  # publishing is done below
+sys.argv = ["install_intermine.py"]; m.main()'
+  local modules
+  modules=$(sed -n '/def gradle_install_modules/,/^ *]/p' "$INTERMINE_SRC/config/lib/install_intermine.py" | grep -o '"[^"]*"' | tr -d '"')
+  [ -n "$modules" ] || die "no module list in $INTERMINE_SRC/config/lib/install_intermine.py (gradle_install_modules)"
+  log "publishing $(echo $modules) at $IM_VERSION into $IM_M2"
+  local m
+  for m in $modules; do
+    run_in "$src/$m" env JAVA_HOME="$jdk" LANG=C.UTF-8 LC_ALL=C.UTF-8 ./gradlew -Dorg.gradle.jvmargs=-Xmx4g \
+      --max-workers=4 --no-daemon --stacktrace "${IM_GRADLE_ARGS[@]}" publishToMavenLocal
+  done
+  if [ "$DRY_RUN" -eq 0 ]; then
+    # What the mine needs from the repo, checked here rather than as a resolution failure later.
+    local need
+    for need in "plugin/$IM_VERSION/plugin-$IM_VERSION.jar" \
+                "intermine-webapp/$IM_VERSION/intermine-webapp-$IM_VERSION-classes.jar" \
+                "bio-webapp/$IM_VERSION/bio-webapp-$IM_VERSION.war" \
+                "bio-model/$IM_VERSION/bio-model-$IM_VERSION.jar" \
+                "bio-source-reactome/$IM_VERSION/bio-source-reactome-$IM_VERSION.jar"; do
+      [ -f "$IM_M2/org/intermine/$need" ] || die "publish_intermine: $IM_M2/org/intermine/$need was not published"
+    done
+    log "published $(find "$IM_M2/org/intermine" -mindepth 1 -maxdepth 1 -type d | wc -l) org.intermine artefacts at $IM_VERSION into $IM_M2"
+  fi
 }
 
 # Emits the rdfc2im scope flags for one source, per SCOPE_MODE. Kept as one function so the
@@ -484,7 +550,7 @@ include ':bio-source-humanmine-items'
 project(':bio-source-humanmine-items').projectDir = new File('$HERE/humanmine-items')
 GRADLE"
   fi
-  run_in "$bio" "${GRADLE_ENV[@]}" ./gradlew :bio-source-humanmine-items:install
+  run_in "$bio" "${GRADLE_ENV[@]}" ./gradlew "${IM_GRADLE_ARGS[@]}" :bio-source-humanmine-items:install
 }
 
 # Builds and installs org.intermine:bio-source-reactome:5.0.8 into the local Maven repo, in one
@@ -555,7 +621,7 @@ $extra_dep
 GRADLE
 )"
   write_file "$build/settings.gradle" "rootProject.name = 'bio-source-reactome'"
-  run_in "$build" "${GRADLE_ENV[@]}" "$GRADLE49" install
+  run_in "$build" "${GRADLE_ENV[@]}" "$GRADLE49" "${IM_GRADLE_ARGS[@]}" install
 }
 
 phase_build_reactome_source() {
@@ -567,7 +633,9 @@ phase_build_reactome_source() {
   # this one is worth building from the local source make-inputs.sh already cloned
   # (in/.upstream/intermine/bio/sources/reactome) - same "isolated standalone build, not the
   # whole dead-JCenter-riddled intermine/bio umbrella" trick as bio-source-humanmine-items.
-  local src="$UPSTREAM_CACHE/intermine/bio/sources/reactome"
+  local src="$INTERMINE_TREE/bio/sources/reactome"
+  # A dry run never made the --intermine-src copy; show the plan against the checkout itself.
+  if [ "$DRY_RUN" -eq 1 ] && [ -n "$INTERMINE_SRC" ] && [ ! -d "$src" ]; then src="$INTERMINE_SRC/bio/sources/reactome"; fi
   local build="$TRIAL_HOME/reactome-source"
   [ -d "$build" ] || run mkdir -p "$build"
   run cp -r "$src/src" "$build/src"
@@ -827,8 +895,10 @@ phase_prepare_mine_checkout() {
   # (confirmed live, LOAD-TRIAL.md's hgnc section, finding 3).
   write_file "$mine/dbmodel/resources/genomic_priorities.properties" "$(cat out/_mine/genomic_priorities.properties)"
   local prod_props
-  prod_props=$(find "$UPSTREAM_CACHE/intermine" -path "*resources/src/main/resources/default.intermine.production.properties" | head -1)
-  [ -n "$prod_props" ] || die "default.intermine.production.properties not found under $UPSTREAM_CACHE/intermine - did make-inputs.sh run?"
+  local tree="$INTERMINE_TREE"
+  if [ "$DRY_RUN" -eq 1 ] && [ -n "$INTERMINE_SRC" ] && [ ! -d "$tree" ]; then tree="$INTERMINE_SRC"; fi  # as in build_reactome_source
+  prod_props=$(find "$tree" -path "*resources/src/main/resources/default.intermine.production.properties" -not -path "*/build/*" | head -1)
+  [ -n "$prod_props" ] || die "default.intermine.production.properties not found under $tree - did make-inputs.sh (or publish_intermine) run?"
   # Must be the one defining integration.production, NOT bio/model's copy (integration.bio-test)
   # - confirmed live, LOAD-TRIAL.md: the wrong one fails with "Failed to instantiate
   # IntegrationWriter class".
@@ -945,7 +1015,7 @@ phase_build_dbmodel() {
   # "Collection not found in class: Protein.keywords". A fresh checkout has no dbmodel/build, so
   # only a resume (--from) or a re-run hits this - and it looks exactly like success.
   run rm -rf "$mine/dbmodel/build"
-  run_in "$mine" "${GRADLE_ENV[@]}" ./gradlew :dbmodel:builddb
+  run_in "$mine" "${GRADLE_ENV[@]}" ./gradlew "${IM_GRADLE_ARGS[@]}" :dbmodel:builddb
   # builddb drops and recreates the production schema, renumbering every intermineobject.id, so
   # the humanmine-search core is instantly stale and stays that way until phase_postprocess
   # re-runs create-search-index. In that window /service/search does not degrade gracefully, it
@@ -971,7 +1041,7 @@ phase_build_dbmodel() {
   # its cause looks like. buildUserDB (not just createUserDB) also loads the superuser account
   # and default templates (:webapp:loadDefaultTemplates), which curation/demo_public_templates.sql
   # depends on via foreign key (phase_apply_templates' own inserts reference the superuser row).
-  run_in "$mine" "${GRADLE_ENV[@]}" ./gradlew :dbmodel:buildUserDB
+  run_in "$mine" "${GRADLE_ENV[@]}" ./gradlew "${IM_GRADLE_ARGS[@]}" :dbmodel:buildUserDB
   # genomic_priorities.properties (as written by phase_prepare_mine_checkout) still has entries
   # for classes only some OTHER, unrun stock source would have contributed (ProteinDomain, from
   # protein-atlas) - the exact "Reducing a mine" failure LOAD-TRIAL.md documents: PriorityConfig
@@ -1033,7 +1103,7 @@ phase_integrate_sources() {
     log "note: $mine/project.xml does not exist yet in this dry run - showing SOURCES as a stand-in for the real (project.xml-derived) load order"
   fi
   for src in $order; do
-    run_in "$mine" "${GRADLE_ENV[@]}" ./gradlew :dbmodel:integrate -Psource="$src"
+    run_in "$mine" "${GRADLE_ENV[@]}" ./gradlew "${IM_GRADLE_ARGS[@]}" :dbmodel:integrate -Psource="$src"
   done
 }
 
@@ -1047,7 +1117,7 @@ phase_postprocess() {
   # file path this build does not have; also skipped.
   local mine="$TRIAL_HOME/humanmine"
   for task in create-references create-attribute-indexes; do
-    run_in "$mine" "${GRADLE_ENV[@]}" ./gradlew :dbmodel:postProcess -Pprocess="$task"
+    run_in "$mine" "${GRADLE_ENV[@]}" ./gradlew "${IM_GRADLE_ARGS[@]}" :dbmodel:postProcess -Pprocess="$task"
   done
   # Gene.pathways is populated ONLY by reactome's own source postprocessor - stock
   # reactome_additions.xml says so in as many words ("<!-- populated by postprocess -->" above
@@ -1068,7 +1138,7 @@ phase_postprocess() {
   # existing "do-sources is too broad to run blind" caution intact while still getting this one
   # source's postprocessor run - confirmed live: logs "Performing source postprocess on
   # reactome" and nothing else.
-  run_in "$mine" "${GRADLE_ENV[@]}" ./gradlew :dbmodel:postProcess -Pprocess=do-sources -Psource=reactome
+  run_in "$mine" "${GRADLE_ENV[@]}" ./gradlew "${IM_GRADLE_ARGS[@]}" :dbmodel:postProcess -Pprocess=do-sources -Psource=reactome
   # solr-search-schema-fix.sh must run AFTER a first create-search-index pass, not before:
   # confirmed live, calling it against a freshly created empty core 400s with "The field type
   # 'analyzed_string' is not present in this schema, and so cannot be replaced" - Solr's
@@ -1077,13 +1147,13 @@ phase_postprocess() {
   # core is created and before anything has been indexed into it - moved here instead. Its own
   # header comment already documents the fix-then-reindex sequence (the schema change is not
   # retroactive): index once, fix the type, clear the now-wrongly-analyzed docs, index again.
-  run_in "$mine" "${GRADLE_ENV[@]}" ./gradlew :dbmodel:postProcess -Pprocess=create-search-index
+  run_in "$mine" "${GRADLE_ENV[@]}" ./gradlew "${IM_GRADLE_ARGS[@]}" :dbmodel:postProcess -Pprocess=create-search-index
   run env SOLR_URL="http://localhost:$SOLR_PORT" sh tools/solr-search-schema-fix.sh
   run curl -sf "http://localhost:$SOLR_PORT/solr/humanmine-search/update?commit=true" \
     -H "Content-Type: application/json" -d '{"delete": {"query": "*:*"}}'
-  run_in "$mine" "${GRADLE_ENV[@]}" ./gradlew :dbmodel:postProcess -Pprocess=create-search-index
+  run_in "$mine" "${GRADLE_ENV[@]}" ./gradlew "${IM_GRADLE_ARGS[@]}" :dbmodel:postProcess -Pprocess=create-search-index
   for task in create-autocomplete-index summarise-objectstore; do
-    run_in "$mine" "${GRADLE_ENV[@]}" ./gradlew :dbmodel:postProcess -Pprocess="$task"
+    run_in "$mine" "${GRADLE_ENV[@]}" ./gradlew "${IM_GRADLE_ARGS[@]}" :dbmodel:postProcess -Pprocess="$task"
   done
 }
 
@@ -1099,8 +1169,8 @@ phase_build_webapp() {
   # run has a history and passes, which is exactly why hand-run sessions never saw it: they had
   # always run the task at least once already. With the history in place :webapp:war's own unwar ->
   # copy sequence then leaves both sets of files - the war's, overlaid by src/main/webapp's.
-  run_in "$mine" "${GRADLE_ENV[@]}" ./gradlew :webapp:copyWebappContent
-  run_in "$mine" "${GRADLE_ENV[@]}" ./gradlew :webapp:war
+  run_in "$mine" "${GRADLE_ENV[@]}" ./gradlew "${IM_GRADLE_ARGS[@]}" :webapp:copyWebappContent
+  run_in "$mine" "${GRADLE_ENV[@]}" ./gradlew "${IM_GRADLE_ARGS[@]}" :webapp:war
 }
 
 phase_resolve_bluegenes_deps() {
