@@ -271,10 +271,10 @@ if [ -n "$INTERMINE_SRC" ]; then
     IM_VERSION=$(sed -n 's/^intermine *= *"\([^"]*\)".*/\1/p' "$INTERMINE_SRC/gradle/libs.versions.toml" | head -1)
   fi
   if [ -z "$IM_VERSION" ]; then
-    IM_VERSION=$(sed -n "s/^ *version *= *['\"]\([0-9][^'\"]*\)['\"].*/\1/p" "$INTERMINE_SRC/intermine/build.gradle" | head -1)
+    IM_VERSION=$(sed -n "s/^ *version *=\{0,1\} *['\"]\([0-9][^'\"]*\)['\"].*/\1/p" "$INTERMINE_SRC/intermine/build.gradle" | head -1)
   fi
   [ -n "$IM_VERSION" ] || { echo "--intermine-src: cannot read the InterMine version from $INTERMINE_SRC" >&2; exit 2; }
-  im_plugin_version=$(sed -n "s/^version *= *['\"]\([^'\"]*\)['\"].*/\1/p" "$INTERMINE_SRC/plugin/build.gradle" | head -1)
+  im_plugin_version=$(sed -n "s/^version *=\{0,1\} *['\"]\([^'\"]*\)['\"].*/\1/p" "$INTERMINE_SRC/plugin/build.gradle" | head -1)
   if [ -n "$im_plugin_version" ] && [ "$im_plugin_version" != "$IM_VERSION" ]; then
     # The mine has one imVersion for both the plugin and the intermine-* jars.
     echo "--intermine-src: plugin version $im_plugin_version differs from the catalog's $IM_VERSION" >&2; exit 2
