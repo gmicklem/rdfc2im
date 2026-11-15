@@ -842,6 +842,13 @@ _upgrade_mine_build() {
     # JavaExec.main is deprecated in 7.1 and removed in 8 (blueGenesStart, never run here).
     deployer_edit "$mine/webapp/build.gradle" "JavaExec main = -> mainClass = (removed in Gradle 8)" \
       -e 's/^\([[:space:]]*\)main = /\1mainClass = /'
+    # Gradle 7 fails a copy/archive task on a duplicate entry unless a strategy is set. warWebApp
+    # packs the unwarred bio-webapp (whose WEB-INF/lib already holds the jars) plus the War task's
+    # own runtime classpath, so every shared jar is a duplicate - confirmed live: "Entry
+    # WEB-INF/lib/hk2-locator-2.5.0-b30.jar is a duplicate". Gradle 4.9 wrote both copies (hence
+    # trial-stage.sh's `unzip -o`); EXCLUDE keeps one (UPGRADING-build.md, 5.1.1 to 6.0.0 step 5).
+    deployer_edit "$mine/webapp/build.gradle" "warWebApp: duplicatesStrategy = DuplicatesStrategy.EXCLUDE (duplicates fail in Gradle 7)" \
+      -e '/^task warWebApp(type: War) {$/{n;/duplicatesStrategy/!i\    duplicatesStrategy = DuplicatesStrategy.EXCLUDE' -e '}'
   fi
 }
 
