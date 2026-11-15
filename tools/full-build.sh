@@ -28,6 +28,18 @@
 #                       leaf pathways only) or "all" (UniProt2Reactome_All_Levels.txt: every
 #                       ancestor pathway also gets its descendants' proteins/genes, matching how
 #                       reactome.org itself presents a pathway). Default: default.
+#   --intermine-src DIR  Build the mine from the InterMine checkout DIR instead of the published
+#                       5.0.x artefacts: the Gradle plugin, the org.intermine:* jars, the bio
+#                       sources and the bio-webapp/intermine-webapp wars all come from DIR, at its
+#                       version (gradle/libs.versions.toml). DIR is only read: phase
+#                       publish_intermine copies it to $TRIAL_HOME/intermine-src and publishes its
+#                       builds into the private Maven repo $TRIAL_HOME/m2-intermine, and every
+#                       Gradle call then resolves mavenLocal() there (-Dmaven.repo.local), never
+#                       from a shared ~/.m2. The humanmine checkout gets DIR's version, DIR's
+#                       Gradle wrapper (config/lib/install_intermine.py DEFAULT_GRADLE_VERSION) and
+#                       the deployer edits of DIR's docs/UPGRADING-build.md, each one logged as
+#                       "deployer edit". RDF Portal data, BlueGenes and everything else are as
+#                       without the option.
 #   --stack-name NAME   Run a second, independent Compose stack beside the default one: containers
 #                       and volumes are named rdfc2im-NAME-* (RDFC2IM_PREFIX), the Compose project
 #                       is rdfc2im-NAME (COMPOSE_PROJECT_NAME), and the host ports default to
@@ -100,6 +112,7 @@ JAVA8_HOME=${JAVA8_HOME:-}
 GRADLE49=${GRADLE49:-gradle}
 COMPOSE=${COMPOSE:-"docker compose"}
 STACK_NAME=${STACK_NAME:-}
+INTERMINE_SRC=${INTERMINE_SRC:-}
 BIND_ADDR=${BIND_ADDR:-127.0.0.1}
 MINE_TITLE=${MINE_TITLE:-"rdfc2im: 113 gene food/drug-metabolism panel"}
 
@@ -207,6 +220,7 @@ while [ $# -gt 0 ]; do
     --cache-dir) RAW_CACHE_DIR=$2; shift ;;
     --reactome-levels) REACTOME_LEVELS=$2; shift ;;
     --stack-name) STACK_NAME=$2; shift ;;
+    --intermine-src) INTERMINE_SRC=$2; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "unknown option: $1" >&2; usage; exit 2 ;;
   esac
@@ -242,12 +256,44 @@ COMPOSE_ENV=(env PG_PORT="$PG_PORT" SOLR_PORT="$SOLR_PORT" MINE_PORT="$MINE_PORT
              RDFC2IM_PREFIX="$RDFC2IM_PREFIX")
 [ -n "$COMPOSE_PROJECT_NAME" ] && COMPOSE_ENV+=(COMPOSE_PROJECT_NAME="$COMPOSE_PROJECT_NAME")
 
+# --intermine-src: versions read from the checkout, never guessed. IM_VERSION is what every
+# org.intermine module of that tree publishes (the version catalog; intermine/build.gradle on trees
+# from before the catalog), IM_GRADLE_VERSION the Gradle its own wrappers use. Without the option
+# the mine keeps its own pins (imVersion/bioVersion 5.0.+, Gradle 4.9) and IM_VERSION stays empty.
+IM_VERSION=""; IM_GRADLE_VERSION=""; IM_GRADLE_SHA256=""
+if [ -n "$INTERMINE_SRC" ]; then
+  INTERMINE_SRC=$(cd "$INTERMINE_SRC" 2>/dev/null && pwd) || { echo "--intermine-src: no such directory" >&2; exit 2; }
+  [ -f "$INTERMINE_SRC/config/lib/install_intermine.py" ] ||
+    { echo "--intermine-src $INTERMINE_SRC: not an InterMine checkout (no config/lib/install_intermine.py)" >&2; exit 2; }
+  if [ -f "$INTERMINE_SRC/gradle/libs.versions.toml" ]; then
+    IM_VERSION=$(sed -n 's/^intermine *= *"\([^"]*\)".*/\1/p' "$INTERMINE_SRC/gradle/libs.versions.toml" | head -1)
+  fi
+  if [ -z "$IM_VERSION" ]; then
+    IM_VERSION=$(sed -n "s/^ *version *= *['\"]\([0-9][^'\"]*\)['\"].*/\1/p" "$INTERMINE_SRC/intermine/build.gradle" | head -1)
+  fi
+  [ -n "$IM_VERSION" ] || { echo "--intermine-src: cannot read the InterMine version from $INTERMINE_SRC" >&2; exit 2; }
+  im_plugin_version=$(sed -n "s/^version *= *['\"]\([^'\"]*\)['\"].*/\1/p" "$INTERMINE_SRC/plugin/build.gradle" | head -1)
+  if [ -n "$im_plugin_version" ] && [ "$im_plugin_version" != "$IM_VERSION" ]; then
+    # The mine has one imVersion for both the plugin and the intermine-* jars.
+    echo "--intermine-src: plugin version $im_plugin_version differs from the catalog's $IM_VERSION" >&2; exit 2
+  fi
+  IM_GRADLE_VERSION=$(sed -n 's/^DEFAULT_GRADLE_VERSION *= *"\([^"]*\)".*/\1/p' "$INTERMINE_SRC/config/lib/install_intermine.py")
+  [ -n "$IM_GRADLE_VERSION" ] || { echo "--intermine-src: no DEFAULT_GRADLE_VERSION in config/lib/install_intermine.py" >&2; exit 2; }
+  IM_GRADLE_SHA256=$(grep -A1 "\"gradle-$IM_GRADLE_VERSION-bin.zip\":" "$INTERMINE_SRC/config/lib/install_intermine.py" |
+                     sed -n 's/.*"\([0-9a-f]\{64\}\)".*/\1/p' | head -1)
+fi
+
 mkdir -p "$LOG_DIR"
 : > "$TIMING_TSV" 2>/dev/null || true
 log "full-build.sh starting - run id $RUN_ID, log $LOGFILE, dry_run=$DRY_RUN"
 log "sources: $SOURCES"
 log "trial home: $TRIAL_HOME"
 log "raw-data cache: $RAW_CACHE_DIR (use_cached_data=$USE_CACHED_DATA)"
+if [ -n "$INTERMINE_SRC" ]; then
+  log "intermine-src: $INTERMINE_SRC (InterMine $IM_VERSION, mine Gradle $IM_GRADLE_VERSION${IM_GRADLE_SHA256:+, sha256 ${IM_GRADLE_SHA256:0:12}...})"
+else
+  log "intermine: published artefacts (the mine's own imVersion/bioVersion pins)"
+fi
 log "stack: containers $RDFC2IM_PREFIX-*, compose project ${COMPOSE_PROJECT_NAME:-trial (default)}, ports pg=$PG_PORT solr=$SOLR_PORT mine=$MINE_PORT bluegenes=$BG_PORT"
 
 GRADLE_ENV=()   # populated by phase_check_prereqs; every ./gradlew call below is prefixed with it
@@ -619,11 +665,84 @@ YML
   COMPOSE_FILES+=(-f "trial/docker-compose.local.yml")
 fi
 
+# One deployer edit to a copied mine build file: a sed edit that is applied (and logged as
+# "deployer edit", with the file and what it is for) only when it changes the file, so a re-run
+# is a no-op and the log of a fresh run lists exactly the edits a deployer has to make by hand.
+# These are the edits of the --intermine-src checkout's docs/UPGRADING-build.md.
+deployer_edit() {
+  local file=$1 what=$2; shift 2
+  if [ "$DRY_RUN" -eq 0 ]; then
+    [ -f "$file" ] || die "deployer edit: no $file"
+    sed "$@" "$file" | cmp -s - "$file" && return 0
+  fi
+  log "deployer edit: ${file#"$TRIAL_HOME"/}: $what"
+  run sed -i "$@" "$file"
+}
+
+# --intermine-src only: moves a copied Gradle-4.9 mine checkout (humanmine as of 2022) onto the
+# checkout's version and Gradle. Every change is a deployer_edit or a logged wrapper copy.
+_upgrade_mine_build() {
+  local mine=$1
+  local major=${IM_GRADLE_VERSION%%.*}
+  deployer_edit "$mine/gradle.properties" "imVersion -> $IM_VERSION" \
+    -e "s/^systemProp\.imVersion=.*/systemProp.imVersion=$IM_VERSION/"
+  deployer_edit "$mine/gradle.properties" "bioVersion -> $IM_VERSION" \
+    -e "s/^systemProp\.bioVersion=.*/systemProp.bioVersion=$IM_VERSION/"
+  # The wrapper: what `./gradlew wrapper --gradle-version $IM_GRADLE_VERSION` does, without needing
+  # the old Gradle to configure the build first - the checkout's own wrapper jar and launcher
+  # script, and a properties file naming the checkout's Gradle (and its checksum, when the
+  # checkout's install_intermine.py knows it).
+  local wrapper_props="$mine/gradle/wrapper/gradle-wrapper.properties"
+  local url="https://services.gradle.org/distributions/gradle-$IM_GRADLE_VERSION-bin.zip"
+  deployer_edit "$wrapper_props" "Gradle wrapper -> $IM_GRADLE_VERSION" \
+    -e "s|^distributionUrl=.*|distributionUrl=$url|"
+  if [ -n "$IM_GRADLE_SHA256" ]; then
+    if [ "$DRY_RUN" -eq 1 ] || ! grep -q "^distributionSha256Sum=" "$wrapper_props"; then
+      log "deployer edit: ${wrapper_props#"$TRIAL_HOME"/}: add distributionSha256Sum"
+      run bash -c "printf 'distributionSha256Sum=%s\n' '$IM_GRADLE_SHA256' >> '$wrapper_props'"
+    fi
+    deployer_edit "$wrapper_props" "distributionSha256Sum of gradle-$IM_GRADLE_VERSION-bin.zip" \
+      -e "s|^distributionSha256Sum=.*|distributionSha256Sum=$IM_GRADLE_SHA256|"
+  fi
+  local f
+  for f in gradle/wrapper/gradle-wrapper.jar gradlew; do
+    if [ "$DRY_RUN" -eq 1 ] || ! cmp -s "$INTERMINE_SRC/intermine/$f" "$mine/$f"; then
+      log "deployer edit: humanmine/$f: the checkout's ($IM_GRADLE_VERSION) wrapper file"
+      # cat, not cp, and compared afterwards: plain cp has silently zeroed files on virtiofs mounts
+      # (see make-inputs.sh / the Makefile's fork-sync)
+      run bash -c "cat '$INTERMINE_SRC/intermine/$f' > '$mine/$f' && cmp -s '$INTERMINE_SRC/intermine/$f' '$mine/$f'"
+    fi
+  done
+  # Gradle 5 removed TaskInputs.sourceFiles.stopExecutionIfEmpty(): without this the mine does not
+  # configure at all (UPGRADING-build.md, 5.0.x to 5.1.1 step 3).
+  if [ "$major" -ge 5 ]; then
+    deployer_edit "$mine/build.gradle" "delete inputs.sourceFiles.stopExecutionIfEmpty() (removed in Gradle 5)" \
+      -e '/inputs\.sourceFiles\.stopExecutionIfEmpty()/d'
+  fi
+  if [ "$major" -ge 7 ]; then
+    # Gradle 7 removed the `maven` plugin and the compile/testCompile configurations; jcenter() is
+    # deprecated in 7, removed in 8, and has been dead since 2021 anyway.
+    deployer_edit "$mine/build.gradle" "delete apply plugin: 'maven' (removed in Gradle 7)" \
+      -e "/^[[:space:]]*apply plugin: 'maven'[[:space:]]*\$/d"
+    deployer_edit "$mine/build.gradle" "delete jcenter() (dead; removed in Gradle 8)" \
+      -e '/^[[:space:]]*jcenter()[[:space:]]*$/d'
+    for f in build.gradle dbmodel/build.gradle webapp/build.gradle; do
+      deployer_edit "$mine/$f" "compile -> implementation, testCompile -> testImplementation (removed in Gradle 7)" \
+        -e 's/^\([[:space:]]*\)compile\b/\1implementation/' \
+        -e 's/^\([[:space:]]*\)testCompile\b/\1testImplementation/'
+    done
+    # JavaExec.main is deprecated in 7.1 and removed in 8 (blueGenesStart, never run here).
+    deployer_edit "$mine/webapp/build.gradle" "JavaExec main = -> mainClass = (removed in Gradle 8)" \
+      -e 's/^\([[:space:]]*\)main = /\1mainClass = /'
+  fi
+}
+
 phase_prepare_mine_checkout() {
   local mine="$TRIAL_HOME/humanmine"
   # shellcheck disable=SC1090
   source "$HERE/.venv/bin/activate"   # tools/reduce_mine.py below needs lxml
   [ -d "$mine" ] || run cp -r "$UPSTREAM_CACHE/humanmine" "$mine"
+  if [ -n "$INTERMINE_SRC" ]; then _upgrade_mine_build "$mine"; fi
   # webapp/build.gradle pulls the Gretty plugin from JCenter/Bintray (dead since 2021, same class
   # of problem already worked around for bio-source-humanmine-static) - confirmed live: 403
   # Forbidden from jcenter.bintray.com, which fails Gradle's CONFIGURE phase for the whole
