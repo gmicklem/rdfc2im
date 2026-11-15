@@ -17,6 +17,7 @@ All paths come from rdfc2im.yaml in the working directory (or --workspace); flag
 """
 from __future__ import annotations
 import argparse
+import hashlib
 import os
 import sys
 
@@ -220,6 +221,35 @@ def _resolve_genes(a) -> list:
     return _parse_list_arg(getattr(a, "genes", None))
 
 
+def _resolve_gene_ids(resolver, genes: list, taxon: str) -> list:
+    """Run a gene-symbol resolver, or read its answer from $RDFC2IM_RESOLVER_CACHE.
+
+    `translate --genes` resolves the panel's symbols to each source's own identifiers with a live
+    SPARQL query against RDF Portal (scope.py) - even under `full-build.sh --use-cached-data`,
+    whose cache covers only `fetch`. Confirmed live 2026-11-15 in a sandbox where rdfportal.org
+    was unreachable: phase 3 died in `translate --source ncbigene` with "resolve_ncbigene_symbols:
+    URLError: Tunnel connection failed: 502", before any cached data could be restored. Opt-in
+    and off by default: with RDFC2IM_RESOLVER_CACHE=DIR set, an answer is read from
+    DIR/<resolver>-<taxon>-<md5 of the sorted symbols>.txt (one id per line) when that file
+    exists, and otherwise resolved live and saved there for the next offline run.
+    """
+    cache_dir = os.environ.get("RDFC2IM_RESOLVER_CACHE")
+    if not cache_dir:
+        return resolver(genes, taxon=taxon)
+    key = hashlib.md5("\n".join(sorted(genes)).encode("utf-8")).hexdigest()
+    path = os.path.join(cache_dir, f"{resolver.__name__}-{taxon}-{key}.txt")
+    if os.path.exists(path):
+        with open(path, encoding="utf-8") as fh:
+            ids = [l.strip() for l in fh if l.strip()]
+        print(f"translate: {len(ids)} gene ids from {path} (RDFC2IM_RESOLVER_CACHE)")
+        return ids
+    ids = resolver(genes, taxon=taxon)
+    os.makedirs(cache_dir, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write("".join(i + "\n" for i in ids))
+    return ids
+
+
 def _resolve_pmids(a) -> list:
     """CLI --pmids: see _parse_list_arg. Independent of --genes: PubMed has no Gene field of its
     own to restrict a gene-panel build against, so a demo build instead scopes it to the PMIDs
@@ -288,7 +318,7 @@ def run(a, ws) -> int:
                         "gwascatalog": resolve_ensembl_symbols,
                     }.get(s)
                     if resolver:
-                        gene_ids = resolver(genes, taxon=taxa[0])
+                        gene_ids = _resolve_gene_ids(resolver, genes, taxa[0])
             results[s] = run_source(m, os.path.join(ws["config_root"], s), os.path.join(out, s), kn,
                                     scfg, include_guess=ws["include_guess"], limit=ws["limit"],
                                     types=ws["types"], use_from=ws["use_from"], taxa=taxa,
