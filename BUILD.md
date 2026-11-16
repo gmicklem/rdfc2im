@@ -238,11 +238,36 @@ What changes:
   `default.intermine.production.properties` and `bio/sources/reactome` are read from the copy.
 - `INTERMINE_JAVA_HOME` selects the JDK for building the checkout (default `JAVA8_HOME`).
 
+**Which line is built** is read from the checkout: the Gradle its own wrappers use
+(`DEFAULT_GRADLE_VERSION` in `config/lib/install_intermine.py`). 7.x and older (the 5.1.1 line,
+Gradle 6.9.4/7.6.6) get the deployer edits above. 8.x is the **6.0 line** (maint-2026), where:
+
+- the mine checkout is not upstream `intermine/humanmine` master patched with `sed` but the
+  `maint-2026` branch of `gmicklem/humanmine` (`HUMANMINE_60_URL`, `HUMANMINE_60_REF`; cloned once
+  into `in/.upstream/humanmine-6.0`, copied without `.git`). That branch is master plus exactly the
+  `docs/UPGRADING-build.md` "5.1.1 to 6.0.0" conversion of the root, `dbmodel` and `webapp`
+  `build.gradle`, `gradle.properties` and the Gradle 8.14.6 wrapper (the plugin composes the war:
+  no `copyWebappContent`/`warWebApp`/`explodedWebAppDir`, no Gretty; the plugin resolves the
+  relative SO term paths). Only the
+  version pins and the wrapper are then re-applied from the checkout. A pre-existing
+  `$TRIAL_HOME/humanmine` that still has the old war composition stops the phase with a message;
+- the `web.xml`/absolute-SO-path patches and the `copyWebappContent` pre-run of phase 13 are not
+  applied (the plugin's war task does not need them);
+- `build_reactome_source` takes the caching antlr jar from `bio/sources/reactome/libs` (5.x
+  trees) or `intermine/libs/antlr-2.7.6-caching.jar` (maint-2026, since im-jqz.6), and stops with
+  a message naming both paths if neither exists.
+
 First run (2026-11-15, maint-2026 at 58d3b6cb44, InterMine 5.1.1, Gradle 7.6.6 in the mine, warm
 Gradle cache, `--use-cached-data`): 638 s end to end, the same row counts as the 5.0.8 build
 (113 genes, 13,546 proteins, 2,883 pathways, 50,283 pathway-protein rows, 450 gene-pathway rows,
 6,781 publications, 331,497 objects), web service version 35 (34 with 5.0.8), and `make
 test-live` 17/17. The war holds only 5.1.1 `intermine-*`/`bio-*` jars.
+
+6.0-line run (2026-11-16, maint-2026 at 6dbc1417ff, mine = `gmicklem/humanmine` `maint-2026` at
+58fbf8f, Gradle 8.14.6, `--use-cached-data`, fresh `TRIAL_HOME`): all 18 phases passed in 599 s
+(`publish_intermine` 202 s, `integrate_sources` 150 s, `postprocess` 82 s, `build_dbmodel` 43 s,
+`build_webapp` 10 s), `make test-live` 17/17, `template.do` returns 200 with a full page and the
+mine's log has no `JasperException`.
 
 ### A second stack
 

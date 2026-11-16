@@ -114,6 +114,10 @@ GRADLE49=${GRADLE49:-gradle}
 COMPOSE=${COMPOSE:-"docker compose"}
 STACK_NAME=${STACK_NAME:-}
 INTERMINE_SRC=${INTERMINE_SRC:-}
+# With --intermine-src on the 6.0 line (Gradle 8) the mine's build files are the converted ones of
+# this branch of the HumanMine fork (see _upgrade_mine_build), not upstream master's.
+HUMANMINE_60_URL=${HUMANMINE_60_URL:-https://github.com/gmicklem/humanmine.git}
+HUMANMINE_60_REF=${HUMANMINE_60_REF:-maint-2026}
 BIND_ADDR=${BIND_ADDR:-127.0.0.1}
 MINE_TITLE=${MINE_TITLE:-"rdfc2im: 113 gene food/drug-metabolism panel"}
 
@@ -262,7 +266,7 @@ COMPOSE_ENV=(env PG_PORT="$PG_PORT" SOLR_PORT="$SOLR_PORT" MINE_PORT="$MINE_PORT
 # org.intermine module of that tree publishes (the version catalog; intermine/build.gradle on trees
 # from before the catalog), IM_GRADLE_VERSION the Gradle its own wrappers use. Without the option
 # the mine keeps its own pins (imVersion/bioVersion 5.0.+, Gradle 4.9) and IM_VERSION stays empty.
-IM_VERSION=""; IM_GRADLE_VERSION=""; IM_GRADLE_SHA256=""
+IM_VERSION=""; IM_GRADLE_VERSION=""; IM_GRADLE_SHA256=""; IM_LINE=""
 if [ -n "$INTERMINE_SRC" ]; then
   INTERMINE_SRC=$(cd "$INTERMINE_SRC" 2>/dev/null && pwd) || { echo "--intermine-src: no such directory" >&2; exit 2; }
   [ -f "$INTERMINE_SRC/config/lib/install_intermine.py" ] ||
@@ -283,6 +287,10 @@ if [ -n "$INTERMINE_SRC" ]; then
   [ -n "$IM_GRADLE_VERSION" ] || { echo "--intermine-src: no DEFAULT_GRADLE_VERSION in config/lib/install_intermine.py" >&2; exit 2; }
   IM_GRADLE_SHA256=$(grep -A1 "\"gradle-$IM_GRADLE_VERSION-bin.zip\":" "$INTERMINE_SRC/config/lib/install_intermine.py" |
                      sed -n 's/.*"\([0-9a-f]\{64\}\)".*/\1/p' | head -1)
+  # The InterMine line, from the Gradle the checkout's own wrappers use: 8.x is the 6.0 line
+  # (maint-2026: plugin composes the war, mines need converted build files), anything older keeps
+  # the 5.x behaviour (6.9.4 is the 5.1.1 line).
+  if [ "${IM_GRADLE_VERSION%%.*}" -ge 8 ]; then IM_LINE="6.0"; else IM_LINE="5.x"; fi
 fi
 
 # Where the --intermine-src artefacts go, and the Gradle arguments that make every build below
@@ -311,7 +319,7 @@ log "sources: $SOURCES"
 log "trial home: $TRIAL_HOME"
 log "raw-data cache: $RAW_CACHE_DIR (use_cached_data=$USE_CACHED_DATA)"
 if [ -n "$INTERMINE_SRC" ]; then
-  log "intermine-src: $INTERMINE_SRC (InterMine $IM_VERSION, mine Gradle $IM_GRADLE_VERSION${IM_GRADLE_SHA256:+, sha256 ${IM_GRADLE_SHA256:0:12}...})"
+  log "intermine-src: $INTERMINE_SRC (InterMine $IM_VERSION, $IM_LINE line, mine Gradle $IM_GRADLE_VERSION${IM_GRADLE_SHA256:+, sha256 ${IM_GRADLE_SHA256:0:12}...})"
 else
   log "intermine: published artefacts (the mine's own imVersion/bioVersion pins)"
 fi
@@ -665,7 +673,17 @@ phase_build_reactome_source() {
   local build="$TRIAL_HOME/reactome-source"
   [ -d "$build" ] || run mkdir -p "$build"
   run cp -r "$src/src" "$build/src"
-  run cp -r "$src/libs" "$build/libs"
+  # The caching antlr jar the converter needs: bio/sources/reactome/libs up to the 5.x trees, the
+  # InterMine core's intermine/libs since im-jqz.6 (maint-2026).
+  local antlr_jar="$(dirname "$(dirname "$(dirname "$src")")")/intermine/libs/antlr-2.7.6-caching.jar"
+  run mkdir -p "$build/libs"
+  if [ -d "$src/libs" ]; then
+    run bash -c "cp '$src'/libs/*.jar '$build/libs/'"
+  elif [ -f "$antlr_jar" ]; then
+    run cp "$antlr_jar" "$build/libs/"
+  else
+    die "reactome source: no caching antlr jar - neither $src/libs nor $antlr_jar exists"
+  fi
   run cp "$src/reactome.properties" "$build/reactome.properties"
   # group/version match exactly what IntegratePlugin.groovy resolves for a project.xml
   # <source type="reactome"> entry with no explicit version="..." attribute: "bio-source-" +
@@ -819,6 +837,25 @@ _gradle7_configurations() {
   done
 }
 
+# --intermine-src on the 6.0 line (Gradle 8): the mine checkout is the maint-2026 branch of the
+# gmicklem/humanmine fork (HUMANMINE_60_URL/HUMANMINE_60_REF), which is upstream master plus the
+# conversion of its build files per the checkout's docs/UPGRADING-build.md '5.1.1 to 6.0.0'
+# (commits f426ac8 and 58fbf8f: root, dbmodel and webapp build.gradle, gradle.properties, wrapper;
+# the plugin composes the war). Starting from that branch is cleaner than patching upstream
+# master with sed: the conversion is a dozen edits (java {} block, publishing/cargo plugin
+# versions, copyMineProperties, the whole war composition) that are reviewed, built and tested
+# as a unit there, and project.xml, the model and everything the rest of this script touches are
+# the same as master's. Cloned once into the upstream cache, copied (without .git) to $1.
+_copy_mine_60() {
+  local mine=$1 clone="$UPSTREAM_CACHE/humanmine-6.0"
+  if [ ! -d "$clone/.git" ]; then
+    log "6.0 line: cloning $HUMANMINE_60_URL ($HUMANMINE_60_REF) for the converted mine build files"
+    run git clone --depth 1 --quiet --branch "$HUMANMINE_60_REF" "$HUMANMINE_60_URL" "$clone"
+  fi
+  log "6.0 line: mine checkout = $HUMANMINE_60_REF of $HUMANMINE_60_URL at $(git -C "$clone" log -1 --format='%h %s' 2>/dev/null | cut -c1-100)"
+  run python3 tools/copy_tree.py "$clone" "$mine" --exclude .git
+}
+
 # --intermine-src only: moves a copied Gradle-4.9 mine checkout (humanmine as of 2022) onto the
 # checkout's version and Gradle. Every change is a deployer_edit or a logged wrapper copy.
 _upgrade_mine_build() {
@@ -826,6 +863,16 @@ _upgrade_mine_build() {
   local major=${IM_GRADLE_VERSION%%.*}
   _pin_intermine_version "$mine"
   _switch_gradle_wrapper "$mine"
+  if [ "$IM_LINE" = "6.0" ]; then
+    # The 6.0 line: $mine is already the converted HumanMine (_copy_mine_60), so only the version
+    # pins and the wrapper above are left. A checkout that still has the old war composition (a
+    # hand-supplied TRIAL_HOME copy of upstream master) would fail Gradle 8 validation later
+    # ("uses this output of task copyWebappContent without declaring a dependency"): say so now.
+    if [ "$DRY_RUN" -eq 0 ] && grep -qE "copyWebappContent|warWebApp" "$mine/webapp/build.gradle"; then
+      die "$mine/webapp/build.gradle still composes the war itself (copyWebappContent/warWebApp): not a 6.0-line mine. Remove $mine and re-run, or convert it by UPGRADING-build.md '5.1.1 to 6.0.0'"
+    fi
+    return 0
+  fi
   # Gradle 5 removed TaskInputs.sourceFiles.stopExecutionIfEmpty(): without this the mine does not
   # configure at all (UPGRADING-build.md, 5.0.x to 5.1.1 step 3).
   if [ "$major" -ge 5 ]; then
@@ -878,7 +925,9 @@ phase_prepare_mine_checkout() {
   local mine="$TRIAL_HOME/humanmine"
   # shellcheck disable=SC1090
   source "$HERE/.venv/bin/activate"   # tools/reduce_mine.py below needs lxml
-  [ -d "$mine" ] || run cp -r "$UPSTREAM_CACHE/humanmine" "$mine"
+  if [ ! -d "$mine" ]; then
+    if [ "$IM_LINE" = "6.0" ]; then _copy_mine_60 "$mine"; else run cp -r "$UPSTREAM_CACHE/humanmine" "$mine"; fi
+  fi
   if [ -n "$INTERMINE_SRC" ]; then _upgrade_mine_build "$mine"; fi
   # webapp/build.gradle pulls the Gretty plugin from JCenter/Bintray (dead since 2021, same class
   # of problem already worked around for bio-source-humanmine-static) - confirmed live: 403
@@ -904,7 +953,8 @@ phase_prepare_mine_checkout() {
   # freshly restarted daemon started from the right directory. A genuine bug in intermine's own
   # gradle plugin, not rdfc2im or full-build.sh; making both paths absolute here avoids it
   # without disabling the daemon for every other ./gradlew call this script makes.
-  if grep -q '^\s*soTermListFilePath = "dbmodel/resources/so_terms"' "$mine/dbmodel/build.gradle" 2>/dev/null; then
+  # (The 6.0 plugin resolves relative paths against the mine's root itself: left as they are.)
+  if [ "$IM_LINE" != "6.0" ] && grep -q '^\s*soTermListFilePath = "dbmodel/resources/so_terms"' "$mine/dbmodel/build.gradle" 2>/dev/null; then
     run sed -i.bak \
       -e "s|soTermListFilePath = \"dbmodel/resources/so_terms\"|soTermListFilePath = \"$mine/dbmodel/resources/so_terms\"|" \
       -e "s|soAdditionFilePath = \"dbmodel/build/so_additions.xml\"|soAdditionFilePath = \"$mine/dbmodel/build/so_additions.xml\"|" \
@@ -920,7 +970,8 @@ phase_prepare_mine_checkout() {
   # added it twice (once via the property, once because it's a real file under
   # explodedWebAppDir), producing a corrupted war with two overlapping web.xml entries that
   # `unzip` refused as "possible zip bomb".
-  if grep -q '^\s*exclude "WEB-INF/web.properties"$' "$mine/webapp/build.gradle" 2>/dev/null; then
+  # (Not on the 6.0 line: the plugin's war task composes the war and sets web.xml itself.)
+  if [ "$IM_LINE" != "6.0" ] && grep -q '^\s*exclude "WEB-INF/web.properties"$' "$mine/webapp/build.gradle" 2>/dev/null; then
     run sed -i.bak \
       -e 's|exclude "WEB-INF/web.properties"|exclude "WEB-INF/web.properties", "WEB-INF/web.xml"\n    webXml = file("${explodedWebAppDir}/WEB-INF/web.xml")|' \
       "$mine/webapp/build.gradle"
@@ -1238,7 +1289,11 @@ phase_build_webapp() {
   # run has a history and passes, which is exactly why hand-run sessions never saw it: they had
   # always run the task at least once already. With the history in place :webapp:war's own unwar ->
   # copy sequence then leaves both sets of files - the war's, overlaid by src/main/webapp's.
-  run_in "$mine" "${GRADLE_ENV[@]}" ./gradlew "${IM_GRADLE_ARGS[@]}" :webapp:copyWebappContent
+  # The 6.0 line has no copyWebappContent: the plugin's war task composes the war from the task
+  # outputs (unwarBioWebApp is a Sync), so a first run is no different from a later one.
+  if [ "$IM_LINE" != "6.0" ]; then
+    run_in "$mine" "${GRADLE_ENV[@]}" ./gradlew "${IM_GRADLE_ARGS[@]}" :webapp:copyWebappContent
+  fi
   run_in "$mine" "${GRADLE_ENV[@]}" ./gradlew "${IM_GRADLE_ARGS[@]}" :webapp:war
 }
 
