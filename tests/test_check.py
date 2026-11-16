@@ -636,3 +636,43 @@ def test_a_link_field_the_core_model_always_has_is_not_redeclared(tmp_path):
     add = etree.parse(os.path.join(mine, "humanmine-items_additions.xml")).getroot()
     assert ("Protein", "keywords") not in {(c.get("name"), f.get("name")) for c in add.iter("class") for f in c
                                           if isinstance(f.tag, str)}
+
+
+def test_organism_fields_the_items_step_fills_outrank_a_stock_source_loaded_alongside(tmp_path):
+    """im-ore.16: stock reactome writes an Organism with a taxon id and nothing else, and ranked
+    first for Organism.name (merge_priorities' "stock alongside ranks first") that null stood over
+    humanmine-reactome's name - the organism came out of the load unnamed.  Every source that
+    writes an Organism is a writer of the four name fields now, so the sources that are not
+    alongside anything rank ahead of the stock source."""
+    from rdfc2im.model import InterMineModel as IM
+    from rdfc2im.project import gen_project
+    (tmp_path / "core.xml").write_text(
+        '<model name="genomic" package="org.intermine.model.bio">'
+        '<class name="Organism" is-interface="true"><attribute name="taxonId" type="java.lang.String"/>'
+        '<attribute name="name" type="java.lang.String"/><attribute name="shortName" type="java.lang.String"/>'
+        '<attribute name="genus" type="java.lang.String"/><attribute name="species" type="java.lang.String"/></class>'
+        '<class name="Gene" is-interface="true"><attribute name="primaryIdentifier" type="java.lang.String"/>'
+        '<reference name="organism" referenced-type="Organism"/></class>'
+        '<class name="Pathway" is-interface="true"><attribute name="identifier" type="java.lang.String"/>'
+        '<reference name="organism" referenced-type="Organism"/></class></model>')
+    (tmp_path / "k_keys.properties").write_text("Pathway.key_identifier=identifier\nOrganism.key_taxonid=taxonId\n"
+                                                "Gene.key_pi=primaryIdentifier\n")
+    m = IM(); m.load_xml(str(tmp_path / "core.xml")); m.load_keys(str(tmp_path / "k_keys.properties")); m.finalize()
+    m.live = None
+    out_root = tmp_path / "out"
+    for src in ("reactome", "hgnc"):
+        (out_root / src).mkdir(parents=True)
+    write_tsv(str(out_root / "reactome" / "columns.tsv"), [
+        _col(0, "Pathway", "identifier", required="yes"),
+        _col(1, "Organism", "taxonId", via="Pathway.organism")], COL_COLUMNS)
+    write_tsv(str(out_root / "hgnc" / "columns.tsv"), [
+        _col(0, "Gene", "primaryIdentifier", required="yes"),
+        _col(1, "Organism", "taxonId", via="Gene.organism")], COL_COLUMNS)
+    (tmp_path / "project.xml").write_text(ALONGSIDE_PROJECT)
+    mine = str(tmp_path / "_mine")
+    cfg = {"reactome": {"replaces": [], "alongside": ["reactome"]}, "hgnc": {"replaces": []}}
+    gen_project(str(out_root), mine, m, "humanmine-items", "/data", str(tmp_path / "project.xml"), cfg, None,
+                log=lambda *a: None)
+    prio = open(os.path.join(mine, "genomic_priorities.properties")).read().splitlines()
+    for f in ("name", "shortName", "genus", "species"):
+        assert f"Organism.{f} = humanmine-hgnc, reactome, humanmine-reactome, *" in prio, (f, prio)

@@ -439,6 +439,21 @@ def test_pathway_descriptions_are_not_starved_by_source_priority():
         "check Pathway.description ordering in curation/priorities_override.properties")
 
 
+def test_the_organism_has_its_names():
+    """Organism 9606 carries name, shortName, genus and species (im-ore.16).
+
+    The RDF Portal data gives a taxon id and nothing else, and stock reactome (loaded alongside
+    ours) writes an Organism with a taxon id only; at the top rank of Organism.name its null
+    stood over our value, so every list-widget title and the organism filter were blank.
+    """
+    if not mine_up():
+        return _skip(f"live checks off or no mine at {MINE_BASE} (make test-live)")
+    rows = query_rows("Organism.taxonId Organism.name Organism.shortName Organism.genus Organism.species",
+                      "Organism.taxonId", "=", "9606")
+    assert len(rows) == 1, f"expected exactly one Organism 9606, got {rows}"
+    assert rows[0] == ["9606", "Homo sapiens", "H. sapiens", "Homo", "sapiens"], rows[0]
+
+
 # ----------------------------------------------------------------- classic webapp UI
 def test_classic_ui_webconfig_is_valid():
     """The classic webapp renders without the webconfig validation error.

@@ -69,6 +69,38 @@ def to_ascii(s: str) -> str:
     return "".join(out)
 
 
+# Organism items name themselves.  RDF Portal's own data carries a taxon id and, in most tables,
+# nothing else, so an Organism came out of the load with a null name, shortName, genus and
+# species: the organism filter, every list-widget title (they print organism.name / shortName) and
+# BlueGenes' organism facet were blank, and InterMine's widget service had to learn to take a null
+# filter.  Every source's Organism items get the four fields from this table (identical values from
+# every source, so no priority fight), or, for a taxon not in it, from a "Genus species" name the
+# source itself wrote.  im-ore.16.
+ORGANISM_FIELDS = ("name", "shortName", "genus", "species")
+KNOWN_ORGANISMS = {   # taxon id -> (genus, species)
+    "9606": ("Homo", "sapiens"),
+    "10090": ("Mus", "musculus"),
+    "10116": ("Rattus", "norvegicus"),
+    "7955": ("Danio", "rerio"),
+    "7227": ("Drosophila", "melanogaster"),
+    "6239": ("Caenorhabditis", "elegans"),
+    "559292": ("Saccharomyces", "cerevisiae"),
+}
+
+
+def organism_names(taxon_id: str, name: str = "") -> Optional[Dict[str, str]]:
+    """name/shortName/genus/species for a taxon, or None if neither the table nor `name` knows it."""
+    if taxon_id in KNOWN_ORGANISMS:
+        genus, species = KNOWN_ORGANISMS[taxon_id]
+    else:
+        bits = name.split()
+        if len(bits) != 2:
+            return None
+        genus, species = bits
+    return {"name": f"{genus} {species}", "shortName": f"{genus[0]}. {species}",
+            "genus": genus, "species": species}
+
+
 class Item:
     __slots__ = ("cls", "attrs", "refs", "colls")
 
@@ -163,6 +195,23 @@ class ItemStore:
                         lst.append(src_key)
                 else:
                     dst.refs[fd.reverse] = src_key
+
+    def complete_organisms(self) -> int:
+        """Give every Organism item its name, shortName, genus and species (see KNOWN_ORGANISMS).
+        A value the source wrote itself stands.  Returns the number of items completed."""
+        n = 0
+        for it in self.items.values():
+            if it.cls != "Organism" or not it.attrs.get("taxonId"):
+                continue
+            full = organism_names(it.attrs["taxonId"], it.attrs.get("name", ""))
+            if not full:
+                continue
+            before = len(it.attrs)
+            for f in ORGANISM_FIELDS:
+                if f in self.model.all_fields("Organism"):
+                    it.attrs.setdefault(f, full[f])
+            n += len(it.attrs) > before
+        return n
 
     def write(self, path: str) -> int:
         ids = {k: f"0_{i + 1}" for i, k in enumerate(self.items)}
@@ -326,6 +375,7 @@ def emit_items(model: InterMineModel, out_dir: str, src: str, source_cfg: dict, 
         if n:
             stats["notes"].append(f"{cls}.{kcfg['field']}: blanked on {n} items - ambiguous in this "
                                    f"source's own data, not an rdfc2im mapping error (STATUS.md D14)")
+    stats["organisms_completed"] = store.complete_organisms()
     # DataSet / DataSource
     ds_title = source_cfg.get("data_set_title") or f"{src} (rdf-config)"
     ds_name = source_cfg.get("data_source_name") or src

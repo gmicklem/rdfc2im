@@ -275,3 +275,56 @@ def test_key_ambiguity_keeps_only_the_disambiguated_holder(tmp_path):
     assert "secondaryIdentifier" not in gene("3") and "secondaryIdentifier" not in gene("4"), \
         "no principled winner between two ncRNAs - drop from both, not a coin flip"
     assert any("blanked on 3 items" in n for n in notes), notes
+
+
+def _organism_model(tmp_path):
+    (tmp_path / "core.xml").write_text("""<model name="genomic" package="org.intermine.model.bio">
+    <class name="BioEntity" is-interface="true">
+      <attribute name="primaryIdentifier" type="java.lang.String"/>
+      <reference name="organism" referenced-type="Organism"/>
+    </class>
+    <class name="Gene" extends="BioEntity" is-interface="true">
+      <reference name="chromosome" referenced-type="Chromosome"/>
+    </class>
+    <class name="Chromosome" extends="BioEntity" is-interface="true"/>
+    <class name="Organism" is-interface="true">
+      <attribute name="taxonId" type="java.lang.String"/>
+      <attribute name="name" type="java.lang.String"/>
+      <attribute name="shortName" type="java.lang.String"/>
+      <attribute name="genus" type="java.lang.String"/>
+      <attribute name="species" type="java.lang.String"/>
+    </class></model>""")
+    (tmp_path / "x_keys.properties").write_text(
+        "Gene.key_primaryidentifier=primaryIdentifier\nOrganism.key=taxonId\n"
+        "Chromosome.key_pi_org=primaryIdentifier, organism\n")
+    m = InterMineModel(); m.load_xml(str(tmp_path / "core.xml")); m.load_keys(str(tmp_path / "x_keys.properties"))
+    m.finalize(); m.live = None
+    return m
+
+
+def test_organism_items_carry_name_shortname_genus_and_species(tmp_path):
+    """im-ore.16: an Organism came out of the load with a null name (RDF Portal data gives a
+    taxon id and no name), so widget titles and the organism filter were blank."""
+    m = _organism_model(tmp_path)
+    out = tmp_path / "out"; (out / "tsv").mkdir(parents=True)
+    (out / "columns.tsv").write_text(textwrap.dedent("""\
+    table\tposition\tcolumn\tvariable\tim_class\tim_field\ttransform\tfilter\tvalue\tkind\tvia\tstatus\trequired\troot
+    main\t0\tid\tid\tGene\tprimaryIdentifier\t\t\t\tliteral\t\tsure\tyes\tGene
+    main\t1\ttax\ttax\tOrganism\ttaxonId\t\t\t\tliteral\tGene.organism\tsure\tyes\tGene
+    """))
+    (out / "tsv" / "main.tsv").write_text("Gene.primaryIdentifier\tOrganism.taxonId\n1\t9606\n2\t10090\n3\t99999\n")
+    st = emit_items(m, str(out), "t", {}, log=lambda *a: None)
+    xml = (out / "items" / "t.xml").read_text()
+    for f, v in (("name", "Homo sapiens"), ("shortName", "H. sapiens"), ("genus", "Homo"), ("species", "sapiens")):
+        assert f'<attribute name="{f}" value="{v}"/>' in xml, (f, v)
+    assert 'value="Mus musculus"' in xml and 'value="M. musculus"' in xml
+    assert st["organisms_completed"] == 2
+    unknown = xml[xml.index('value="99999"'):].split("</item>")[0]
+    assert 'name="name"' not in unknown            # an unknown taxon stays as the source wrote it
+
+
+def test_a_two_word_organism_name_the_source_wrote_fills_in_the_rest(tmp_path):
+    from rdfc2im.items import organism_names
+    assert organism_names("12345", "Foo bar") == {"name": "Foo bar", "shortName": "F. bar",
+                                                  "genus": "Foo", "species": "bar"}
+    assert organism_names("12345", "Foo") is None and organism_names("12345") is None
