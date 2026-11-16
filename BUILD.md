@@ -308,9 +308,25 @@ already exists, whatever kind it is. This replaces creating the bind volumes by 
 `docker volume create --opt type=none --opt o=bind --opt device=DIR`.
 
 Give the second stack its own `TRIAL_HOME` and `HOME` (the mine's
-`~/.intermine/humanmine.properties` carries the ports). `/micklem/data` (the staged items files and
-the Reactome mapping) is still shared between stacks; both point at identical data when they are
-built from the same cache.
+`~/.intermine/humanmine.properties` carries the ports).
+
+### Browser-facing URLs and the BlueGenes service root
+
+`webapp.baseurl` is `http://localhost:$MINE_PORT` and so is BlueGenes' only service root
+(`BLUEGENES_DEFAULT_SERVICE_ROOT`): both are URLs the browser follows, and the webapp fetches its
+own `query.xsd` from `webapp.baseurl`, so they must also resolve inside the mine container.
+BlueGenes uses the backend root (`BLUEGENES_BACKEND_SERVICE_ROOT`), when one is set, to build URLs it
+hands to the browser - the `/favicon.ico` redirect and the schema.org JSON-LD in the page - so a
+compose-internal `http://mine:$MINE_PORT` there leaked into what the browser follows [im-ore.8]
+(`curl -sI :$BG_PORT/favicon.ico` gave `Location: http://mine:18090/humanmine/model/images/favicon.ico`,
+and 21 `http://mine:18090` in the front page). The variable is no longer set. Instead the
+`bluegenes` service runs with `network_mode: "service:mine"`, so `localhost` inside BlueGenes is the
+mine and the one public root works for the server and the browser; the mine service publishes
+BlueGenes' port (`BG_PORT:5000`) for it. Consequence: restarting the mine container alone leaves
+BlueGenes on a dead network namespace - restart both (`docker restart $PREFIX-mine
+$PREFIX-bluegenes`, which `start_mine_stack` and `apply_templates` do) or `docker compose up -d`. If
+you serve the stack under another host name, `webapp.baseurl` and the service root need it too, and
+the mine container must be able to resolve it.
 
 ## Caching the fetched data
 
@@ -398,8 +414,8 @@ the option to fetch afresh and re-save.
 | 13 | `build_webapp` | `:webapp:war` |
 | 14 | `resolve_bluegenes_deps` | Resolves `org.intermine:bluegenes:1.4.5` to its 178 runtime jars |
 | 15 | `stage_artifacts` | `tools/trial-stage.sh`: explodes the war, patches its baked-in DB/Solr hosts to the compose network's |
-| 16 | `start_mine_stack` | `docker compose up -d mine bluegenes`, then restarts the webapp (it reads the DB once, at startup) |
-| 17 | `apply_templates` | Loads `curation/demo_public_templates.sql` into the userprofile DB; restarts the webapp |
+| 16 | `start_mine_stack` | `docker compose up -d mine bluegenes`, then restarts the webapp and BlueGenes (it reads the DB once, at startup) |
+| 17 | `apply_templates` | Loads `curation/demo_public_templates.sql` into the userprofile DB; restarts the webapp and BlueGenes |
 | 18 | `verify` | `/service/version`, `/service/model`, BlueGenes' root |
 
 Load order in phase 11 is read back out of `project.xml` rather than re-decided, because the

@@ -116,6 +116,9 @@ services:
       - ./tomcat/server.xml:/usr/local/tomcat/conf/server.xml:ro
     ports:
       - "127.0.0.1:${MINE_PORT:-8090}:${MINE_PORT:-8090}"
+      # BlueGenes shares this container's network namespace (see its network_mode below), so its
+      # published port is declared here
+      - "127.0.0.1:${BG_PORT:-5000}:5000"
     restart: unless-stopped
 
   bluegenes:
@@ -123,12 +126,21 @@ services:
     container_name: ${RDFC2IM_PREFIX:-rdfc2im}-bluegenes
     depends_on:
       - mine
+    # Share the mine's network namespace: `localhost` inside this container IS the mine, so the
+    # one service root http://localhost:<MINE_PORT>/humanmine works for the server and the browser.
+    # Consequences: BlueGenes' port is published by the mine service (above), and restarting the
+    # mine container alone leaves this one on the dead namespace - `docker compose up -d` or
+    # restart both (tools/full-build.sh does).
+    network_mode: "service:mine"
     environment:
       SERVER_PORT: "5000"
-      # what the BROWSER calls - it resolves on your machine, through `ssh -L`
+      # What the BROWSER calls, and - because there is no separate BLUEGENES_BACKEND_SERVICE_ROOT -
+      # what the BlueGenes server calls too. BlueGenes builds browser-facing URLs from the
+      # backend root when one is set (the /favicon.ico redirect, the schema.org JSON-LD in the
+      # page), so a compose-internal `http://mine:<port>` there reached the browser and was
+      # unresolvable on the user's machine [im-ore.8]. The server reaches the mine as
+      # localhost:<port> because it shares the mine's network namespace (network_mode below).
       BLUEGENES_DEFAULT_SERVICE_ROOT: "http://localhost:${MINE_PORT:-8090}/humanmine"
-      # what the BlueGenes server calls - container to container on the compose network
-      BLUEGENES_BACKEND_SERVICE_ROOT: "http://mine:${MINE_PORT:-8090}/humanmine"
       BLUEGENES_DEFAULT_MINE_NAME: "rdfc2im trial (GO only)"
       BLUEGENES_DEFAULT_NAMESPACE: "humanmine"
       HIDE_REGISTRY_MINES: "true"
@@ -139,8 +151,6 @@ services:
     # BlueGenes hardcodes its Jetty bind to 0.0.0.0 (no :host in run-jetty), which is fine
     # here: the container's netns confines it, and podman publishes only to loopback.
     command: ["java", "-cp", "/opt/bluegenes/lib/*", "bluegenes.core"]
-    ports:
-      - "127.0.0.1:${BG_PORT:-5000}:5000"
     restart: unless-stopped
 
 # driver_opts: with the RDFC2IM_*DATA variables unset all three are empty strings, which Docker's

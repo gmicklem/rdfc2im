@@ -100,9 +100,11 @@ Forward **8090 as 8090**: BlueGenes' frontend runs in your browser and calls
 - **BlueGenes always binds `0.0.0.0`** - `run-jetty` is called without `:host`. In a container
   that is confined to the container's network namespace, and podman publishes it to loopback
   only. On the bare host it would be LAN-visible, which is one reason it runs in a container.
-- **BlueGenes has two service roots.** `BLUEGENES_DEFAULT_SERVICE_ROOT` is what the browser
-  calls (`localhost:8090`, via the tunnel); `BLUEGENES_BACKEND_SERVICE_ROOT` is what the
-  BlueGenes server calls (`mine:8090`, container to container).
+- **BlueGenes has one service root** (`BLUEGENES_DEFAULT_SERVICE_ROOT`, `localhost:8090`), used by
+  the browser and the BlueGenes server alike. It once had two (a `BLUEGENES_BACKEND_SERVICE_ROOT` of
+  `mine:8090`), but BlueGenes builds some browser-facing URLs from the backend root (the favicon
+  redirect, the JSON-LD), so the service name leaked; now the `bluegenes` container shares the mine's
+  network namespace and reaches the mine as `localhost` too (BUILD.md, "Browser-facing URLs").
 
 ## Reducing a mine
 

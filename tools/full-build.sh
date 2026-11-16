@@ -286,6 +286,7 @@ COMPOSE_ENV=(env PG_PORT="$PG_PORT" SOLR_PORT="$SOLR_PORT" MINE_PORT="$MINE_PORT
 
 # --intermine-src: versions read from the checkout, never guessed. IM_VERSION is what every
 # org.intermine module of that tree publishes (the version catalog; intermine/build.gradle on trees
+BG_CONTAINER="$RDFC2IM_PREFIX-bluegenes"   # shares the mine container's network namespace: restart both together
 # from before the catalog), IM_GRADLE_VERSION the Gradle its own wrappers use. Without the option
 # the mine keeps its own pins (imVersion/bioVersion 5.0.+, Gradle 4.9) and IM_VERSION stays empty.
 IM_VERSION=""; IM_GRADLE_VERSION=""; IM_GRADLE_SHA256=""; IM_LINE=""
@@ -395,7 +396,7 @@ phase_check_prereqs() {
   # stack's own container is fatal, before any work starts. Read-only (docker ps), so it runs under
   # --dry-run too; a docker daemon that cannot answer is treated as "no conflict".
   local port_svc port svc holder
-  for port_svc in "$PG_PORT:postgres" "$SOLR_PORT:solr" "$MINE_PORT:mine" "$BG_PORT:bluegenes"; do
+  for port_svc in "$PG_PORT:postgres" "$SOLR_PORT:solr" "$MINE_PORT:mine" "$BG_PORT:mine"; do   # BlueGenes shares the mine container's network namespace, so the mine publishes its port
     port=${port_svc%%:*}; svc=${port_svc#*:}
     holder=$(docker ps --filter "publish=$port" --format '{{.Names}}' 2>/dev/null | grep -vx "$RDFC2IM_PREFIX-$svc" | head -1 || true)
     [ -z "$holder" ] || die "host port $port (for $svc) is already published by container '$holder', which is not" \
@@ -851,8 +852,8 @@ if [ "$BIND_ADDR" != "127.0.0.1" ]; then
 services:
   postgres: {ports: !override ["$BIND_ADDR:$PG_PORT:5432"]}
   solr:     {ports: !override ["$BIND_ADDR:$SOLR_PORT:8983"]}
-  mine:     {ports: !override ["$BIND_ADDR:$MINE_PORT:$MINE_PORT"]}
-  bluegenes: {ports: !override ["$BIND_ADDR:$BG_PORT:5000"]}
+  # BlueGenes shares the mine's network namespace (im-ore.8), so the mine publishes both ports
+  mine:     {ports: !override ["$BIND_ADDR:$MINE_PORT:$MINE_PORT", "$BIND_ADDR:$BG_PORT:5000"]}
 YML
 )"
   COMPOSE_FILES+=(-f "trial/docker-compose.local.yml")
@@ -1443,14 +1444,14 @@ phase_start_mine_stack() {
   run "${COMPOSE_ENV[@]}" $COMPOSE "${COMPOSE_FILES[@]}" up -d mine bluegenes
   # The webapp reads the database once, at startup - postprocessing and the war it's serving
   # must both be in place before this, and it must run again after either changes.
-  run docker restart "$MINE_CONTAINER"
+  run docker restart "$MINE_CONTAINER" "$BG_CONTAINER"
 }
 
 phase_apply_templates() {
   [ "$SKIP_TEMPLATES" -eq 1 ] && { log "skipped (--skip-templates)"; return 0; }
   [ -f curation/demo_public_templates.sql ] || { log "no curation/demo_public_templates.sql - skipping"; return 0; }
   run bash -c "docker exec -i $PG_CONTAINER psql -U intermine -d humanmine-userprofile < curation/demo_public_templates.sql"
-  run docker restart "$MINE_CONTAINER"
+  run docker restart "$MINE_CONTAINER" "$BG_CONTAINER"
 }
 
 phase_verify() {
