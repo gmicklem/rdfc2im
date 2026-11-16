@@ -550,6 +550,8 @@ dry run. The live tests are opt-in - `make test-live` sets `RDFC2IM_LIVE=1`, and
 mine is reachable - so plain `make test` stays green offline and ignores a stale mine left
 running from an earlier session. Point them elsewhere with
 `MINE_BASE=http://host:8090/humanmine SOLR_BASE=http://host:8983 make test-live`.
+The live tests need `lxml`: `make` uses `/home/agent/venvs/mine-tests/bin/python` when that venv
+exists (the sandbox's), else `python3`; `make test-live PY=/path/to/python` overrides it.
 
 Then look at it: `http://localhost:8090/humanmine` (classic UI, with the demo templates on the
 home page) and `http://localhost:5000` (BlueGenes).

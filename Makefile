@@ -1,5 +1,7 @@
 # rdfc2im workspace Makefile - every target is `python3 -m rdfc2im <cmd>` with the flags spelled out.
-PY      ?= python3
+# A python with lxml is needed by the live tests and tools/reduce_mine.py: the sandbox venv when it
+# exists, else whatever python3 is first on PATH. Override with PY=...
+PY      ?= $(if $(wildcard /home/agent/venvs/mine-tests/bin/python),/home/agent/venvs/mine-tests/bin/python,python3)
 LIMIT   ?= 20        # total rows per query; 0 = all
 ITERATE ?= 5000      # page size for fetch; 0 = single request per query
 SLEEP   ?= 1         # seconds between requests
