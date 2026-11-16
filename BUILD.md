@@ -86,10 +86,10 @@ able to run `docker` without `sudo`.
 
 ### Everything else
 
-`git`, `curl`, `unzip`, and `sudo` - the last only for a one-time, idempotent bootstrap of
-`/micklem`, where `rdfc2im.yaml`'s `src_data_dir` points (a real Micklem-lab deployment path,
-deliberately not rewritten to something machine-local). The script creates it and chowns it to
-you if it does not already exist or is not writable.
+`git`, `curl`, `unzip`, and `sudo` - the last only for a one-time, idempotent bootstrap of the
+data root, `/micklem/data` by default (where `rdfc2im.yaml`'s `src_data_dir` points: a real
+Micklem-lab deployment path). The script creates it and chowns it to you if it does not already
+exist or is not writable. `RDFC2IM_DATA_ROOT` moves it (see "Running two stacks").
 
 ### Network
 
@@ -190,7 +190,7 @@ published UniProt-to-pathway files:
   out a lot more (a top-level pathway can have thousands of participants), and Reactome
   postprocessing and search indexing take longer.
 
-Only one of the two files is ever present under `/micklem/data/reactome/current/` at a time - the
+Only one of the two files is ever present under `$RDFC2IM_DATA_ROOT/reactome/current/` (`/micklem/data/reactome/current/` by default) at a time - the
 stock converter processes every file it finds there, so both together would double-count. Switching
 `--reactome-levels` between runs removes the other one first. The cache
 (`cached_raw_data/reactome-uniprot-map/`) records which level was fetched and refuses to restore it
@@ -310,6 +310,16 @@ already exists, whatever kind it is. This replaces creating the bind volumes by 
 Give the second stack its own `TRIAL_HOME` and `HOME` (the mine's
 `~/.intermine/humanmine.properties` carries the ports).
 
+`RDFC2IM_DATA_ROOT` (default `/micklem/data`) is the directory the mine's source data lives under:
+`stage_src_data` symlinks each `out/<src>/items/<src>.xml` into `$RDFC2IM_DATA_ROOT/rdfc2im/<src>/`,
+the Reactome mapping goes to `$RDFC2IM_DATA_ROOT/reactome/current/`, and the mine checkout's copy of
+`project.xml` has every `"/micklem/data/` rewritten to the root, so `integrate_sources` reads what
+was staged. Set it per stack (for example under the stack's own `HOME`) and two stacks no longer
+share or overwrite one another's staged files; left unset, both stacks keep sharing `/micklem/data`,
+which is harmless only while they are built from the same cache. Set it before the stack's
+`prepare_mine_checkout`, since that is where `project.xml` is rewritten. `check_prereqs` creates the
+directory (with `sudo` if it has to).
+
 ### Browser-facing URLs and the BlueGenes service root
 
 `webapp.baseurl` is `http://localhost:$MINE_PORT` and so is BlueGenes' only service root
@@ -406,7 +416,7 @@ the option to fetch afresh and re-save.
 | 5 | `build_humanmine_items` | Builds and installs the `bio-source-humanmine-items` loader jar |
 | 6 | `build_reactome_source` | Builds stock `bio-source-reactome` (converter only, for now) and downloads `UniProt2Reactome.txt` |
 | 7 | `prepare_mine_checkout` | Copies and patches the humanmine checkout; writes `~/.intermine/humanmine.properties`; trims project.xml to the sources actually loaded |
-| 8 | `stage_src_data` | Symlinks each `out/<src>/items/<src>.xml` into `/micklem/data/rdfc2im/<src>/` |
+| 8 | `stage_src_data` | Symlinks each `out/<src>/items/<src>.xml` into `$RDFC2IM_DATA_ROOT/rdfc2im/<src>/` (default `/micklem/data`) |
 | 9 | `start_databases` | `docker compose up -d postgres solr`; creates the three databases and two Solr cores |
 | 10 | `build_dbmodel` | `:dbmodel:builddb` and `:dbmodel:buildUserDB`; the reduced-mine trims |
 | 11 | `integrate_sources` | `:dbmodel:integrate` per source, in project.xml's own order |

@@ -88,6 +88,14 @@
 #                     8983 is written into the mine's two Solr URLs (keyword_search.properties,
 #                     objectstoresummary.config.properties), so postprocess indexes into this
 #                     stack's Solr and not another stack's.
+#   RDFC2IM_DATA_ROOT Directory the mine's source data lives under (default /micklem/data, the
+#                     Micklem-lab layout rdfc2im.yaml's src_data_dir and HumanMine's project.xml
+#                     name). stage_src_data symlinks each source's items file into
+#                     $RDFC2IM_DATA_ROOT/rdfc2im/<src>/, the Reactome map goes to
+#                     $RDFC2IM_DATA_ROOT/reactome/current/, and the mine checkout's copy of
+#                     project.xml has every /micklem/data/ rewritten to the root. Set it per stack
+#                     (e.g. under that stack's own home) so two stacks do not share or overwrite
+#                     one another's staged files. Unset keeps the shared /micklem/data layout.
 #   RDFC2IM_PREFIX    Container and volume name prefix (default rdfc2im; see --stack-name).
 #   RDFC2IM_PGDATA, RDFC2IM_SOLRDATA   Host directories the PostgreSQL and Solr data live in, bind-
 #                     mounted by trial/docker-compose.yml's volumes (created by start_databases).
@@ -271,9 +279,14 @@ PG_PORT=${PG_PORT:-15432}
 BG_PORT=${BG_PORT:-5000}
 SOLR_PORT=${SOLR_PORT:-8983}
 MINE_PORT=${MINE_PORT:-8090}
+# The mine's data root (project.xml's src.data.* paths). /micklem/data is where rdfc2im.yaml's
+# src_data_dir and HumanMine's own project.xml point; RDFC2IM_DATA_ROOT moves everything this
+# script stages and rewrites project.xml to match [im-ore.7].
+DATA_ROOT=${RDFC2IM_DATA_ROOT:-/micklem/data}; DATA_ROOT=${DATA_ROOT%/}
 PG_CONTAINER="$RDFC2IM_PREFIX-postgres"
 SOLR_CONTAINER="$RDFC2IM_PREFIX-solr"
 MINE_CONTAINER="$RDFC2IM_PREFIX-mine"
+BG_CONTAINER="$RDFC2IM_PREFIX-bluegenes"   # shares the mine container's network namespace: restart both together
 # Every compose call gets the stack's names and ports explicitly (trial/docker-compose.yml reads
 # them, with the default stack's values as its own defaults).
 COMPOSE_ENV=(env PG_PORT="$PG_PORT" SOLR_PORT="$SOLR_PORT" MINE_PORT="$MINE_PORT" BG_PORT="$BG_PORT"
@@ -286,7 +299,6 @@ COMPOSE_ENV=(env PG_PORT="$PG_PORT" SOLR_PORT="$SOLR_PORT" MINE_PORT="$MINE_PORT
 
 # --intermine-src: versions read from the checkout, never guessed. IM_VERSION is what every
 # org.intermine module of that tree publishes (the version catalog; intermine/build.gradle on trees
-BG_CONTAINER="$RDFC2IM_PREFIX-bluegenes"   # shares the mine container's network namespace: restart both together
 # from before the catalog), IM_GRADLE_VERSION the Gradle its own wrappers use. Without the option
 # the mine keeps its own pins (imVersion/bioVersion 5.0.+, Gradle 4.9) and IM_VERSION stays empty.
 IM_VERSION=""; IM_GRADLE_VERSION=""; IM_GRADLE_SHA256=""; IM_LINE=""
@@ -403,13 +415,14 @@ phase_check_prereqs() {
       "this stack's ($RDFC2IM_PREFIX-$svc) - use --stack-name or set the *_PORT variables"
   done
   mkdir -p "$TRIAL_HOME"
-  # rdfc2im.yaml's src_data_dir (/micklem/data/rdfc2im - a real Micklem-lab deployment path,
-  # deliberately not rewritten to somewhere sandbox-local; see phase_stage_src_data) lives under
-  # a root-owned path on a fresh sandbox. One-time, idempotent: only touches it if not already
-  # ours.
-  if [ ! -w /micklem ] 2>/dev/null || [ ! -e /micklem ]; then
-    run sudo mkdir -p /micklem
-    run sudo chown "$(id -u):$(id -g)" /micklem
+  # The data root (default /micklem/data, rdfc2im.yaml's src_data_dir - a real Micklem-lab
+  # deployment path; see phase_stage_src_data) lives under a root-owned path on a fresh sandbox.
+  # One-time, idempotent: only touches it if not already ours. /micklem itself is handed over too,
+  # so the default layout keeps working as it always did.
+  if [ ! -w "$DATA_ROOT" ] 2>/dev/null || [ ! -e "$DATA_ROOT" ]; then
+    run sudo mkdir -p "$DATA_ROOT"
+    run sudo chown "$(id -u):$(id -g)" "$DATA_ROOT"
+    case "$DATA_ROOT" in /micklem/*) run sudo chown "$(id -u):$(id -g)" /micklem ;; esac
   fi
   # Gradle 4.9's daemon default heap (1024m) is not enough for InterMine's
   # ParallelBatchingFetcher, which spawns a worker thread per available CPU core, each doing its
@@ -792,7 +805,7 @@ phase_build_reactome_source() {
   [ "$REACTOME_LEVELS" = "all" ] && fname="UniProt2Reactome_All_Levels.txt"
   local other_fname="UniProt2Reactome_All_Levels.txt"
   [ "$REACTOME_LEVELS" = "all" ] && other_fname="UniProt2Reactome.txt"
-  local dest_dir="/micklem/data/reactome/current"
+  local dest_dir="$DATA_ROOT/reactome/current"
   run mkdir -p "$dest_dir"
   # Clear the OTHER level's file unconditionally (rm -f is a no-op if it never existed) - never
   # the one this run wants, which stays as a resume optimisation (see below). Deterministic on the
@@ -1070,6 +1083,9 @@ phase_prepare_mine_checkout() {
     fi
   done
   write_file "$mine/project.xml" "$(cat out/_mine/project.xml)"
+  # every src.data.* path of project.xml is under /micklem/data (rdfc2im.yaml's src_data_dir and
+  # HumanMine's own entries); a per-stack RDFC2IM_DATA_ROOT rewrites them all [im-ore.7]
+  [ "$DATA_ROOT" = /micklem/data ] || run sed -i "s|\"/micklem/data/|\"$DATA_ROOT/|g" "$mine/project.xml"
   # rdfc2im's own project.xml keeps HumanMine's full ~40-source list, our sources inserted as
   # replacements (USAGE.md) - correct for a full mine, wrong for this reduced demo build.
   # dbmodel:addSourceDependencies tries to resolve a Maven jar for every listed source, and the
@@ -1169,7 +1185,7 @@ phase_stage_src_data() {
   # symlink keeps out/ as the single source of truth, so a later `rdfc2im items` re-run is
   # picked up without re-staging.
   for src in $SOURCES; do
-    local dest_dir="/micklem/data/rdfc2im/$src"
+    local dest_dir="$DATA_ROOT/rdfc2im/$src"
     run mkdir -p "$dest_dir"
     run ln -sf "$HERE/out/$src/items/$src.xml" "$dest_dir/$src.xml"
   done
