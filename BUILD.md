@@ -573,8 +573,9 @@ make test-live
 `tests/test_live_mine.py` asks the running mine real questions - autocomplete populated for
 Gene and Protein, keyword search returning a real panel gene, a panel-sized Gene table (not
 ~193,000 genes, which is what the full-vs-panel scope bug looked like), cross-source identifier
-merge on one gene, `Pathway` → `Protein` participants and `Gene.pathways`, and the classic UI's
-webconfig validity. Each check is anchored to a specific bug found on 2026-09-21 and named in
+merge on one gene, `Pathway` → `Protein` participants and `Gene.pathways`, the organism's names
+(`Homo sapiens`, `H. sapiens`, `Homo`, `sapiens`), one data set per pathway, one `Chromosome` per
+chromosome number with its organism, and the classic UI's webconfig validity. Each check is anchored to a specific bug found on 2026-09-21 and named in
 its docstring.
 
 This suite exists because of the failure mode this project kept hitting: **a step that reports
@@ -693,6 +694,40 @@ To keep the loaded data independently of the containers:
 ```sh
 docker exec rdfc2im-postgres pg_dump -U intermine humanmine-production      > humanmine-production.sql
 docker exec rdfc2im-postgres pg_dump -U intermine humanmine-userprofile     > humanmine-userprofile.sql
+## What the demo mine does not have
+
+Checked on the maint-2026 (6.0 line) testbed stack, 16 Nov 2026.
+
+- **GO annotations, so no GO enrichment widget.** `go_enrichment_for_gene` is in HumanMine's
+  `webconfig-model.xml` but is dropped by `tools/reduce_mine.py webconfig` (build log:
+  `dropped ... go_enrichment_for_gene`): its paths (`goAnnotation.ontologyTerm.parents...`) go through
+  `GOAnnotation`, a class of the `go-annotation` source, which this mine does not load, and the
+  mine holds no annotation at all (`ontologyannotation` has 0 rows, 78,100 `GOTerm`s). The `go`
+  source loads the ontology only; the UniProt `core:classifiedWith` GO column is `todo`
+  (SPEC-DECISIONS.md D4) and is not even fetched. Adding the widget takes: a UniProt SPARQL table of
+  protein-to-GO links (a new fetch, so `cached_raw_data/uniprot` and the CI release asset must be
+  regenerated); `items.py` synthesising the intermediate `OntologyAnnotation` item (subject = the
+  gene or protein, `ontologyTerm` = the `GOTerm`, one item per pair, keyed on both - the one-hop
+  `via` cannot express it); the GO term closure in `GOTerm.parents` (the widget enriches on
+  `parents`, so the `go` table must carry the transitive closure or a postprocess must fill it);
+  and the widget's paths rewritten from `goAnnotation` to `ontologyAnnotations` (the 6.0 model has
+  `OntologyAnnotation`, not `GOAnnotation`) with the genes reached through their proteins.
+- **Location and Sequence objects.** Chromosomes exist, one per chromosome now (the sources name
+  them by number alone; `items.py` gives each the organism of its genes, which is what InterMine
+  keys one on), but they have no length, and no `Location` (`location` has 0 rows) or `Sequence`
+  exists. The 23 Cypress skips for region search and sequence export wait on this. Locations need
+  coordinates the pipeline never fetches: the Ensembl RDF carries FALDO positions
+  (`knowledge.yaml` has the `faldo:position` row, status `todo`), but the `ensembl` queries do not
+  ask for them (a new location table, so a new fetch and a regenerated cache), then a mapping to `Location.start/end/strand` with
+  `Location.feature` = the gene and `Location.locatedOn` = the chromosome, which needs an
+  intermediate object like the GO annotation above. Chromosome lengths are in the cache
+  already (`cached_raw_data/grch38-chromosome-lengths`, HumanMine's JBrowse `refSeqs.json`) but
+  nothing in the pipeline reads them. Sequences are not in RDF Portal at
+  all: `Gene.sequence` / `Chromosome.sequence` would come from a genome FASTA through the stock
+  `fasta` source, and the `transfer-sequences` / `create-chromosome-locations-and-lengths`
+  postprocesses need both. A contained change it is not: it is a new data source, a regenerated
+  cache and an `items.py` feature, so it is left as a follow-up.
+
 ```
 
 The userprofile dump is the one that carries the public demo templates; `humanmine-items` is

@@ -100,7 +100,11 @@ reactome:
   alongside: [reactome]
   data_source_name: Reactome
   data_source_url: https://rdfportal.org/dataset/reactome
-  data_set_title: Reactome pathways (RDF Portal)
+  # The stock reactome source's own data set title, so the Pathway items of both sources join ONE
+  # data set (DataSet merges on name).  Under a title of our own ("Reactome pathways (RDF Portal)")
+  # every pathway sat in two data sets: each enrichment row of pathway_enrichment appeared twice and
+  # a data set filter matched half of them.  im-ore.10.
+  data_set_title: Reactome pathways data set
   consts: {Organism.taxonId: "9606"}
   scope: good
 gwascatalog:

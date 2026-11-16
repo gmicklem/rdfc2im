@@ -1297,6 +1297,13 @@ phase_integrate_sources() {
 phase_postprocess() {
   # Order from HumanMine's own project.xml <post-processing> block (LOAD-TRIAL.md). The
   # genomic-location-specific tasks (create-chromosome-locations-and-lengths,
+  # pathway_enrichment filters on the NAMES of the pathway data sets: HumanMine's file lists
+  # "KEGG pathways data set" and "Reactome data set", but this mine has one pathway data set, the
+  # stock reactome source's "Reactome pathways data set" (humanmine-reactome joins it, see
+  # sources.yaml), so the Reactome filter matched nothing. im-ore.10.
+  deployer_edit "$mine/webapp/src/main/webapp/WEB-INF/webconfig-model.xml" \
+    "pathway_enrichment filters: this mine's one pathway data set" \
+    -e 's|filters="All,KEGG pathways data set,Reactome data set"|filters="All,Reactome pathways data set"|'
   # transfer-sequences, create-gene-flanking-features, create-location-overlap-index,
   # create-overlap-view, populate-child-features) are deliberately not run: this build loads no
   # coordinate/sequence data, so they would no-op or fail on a missing prerequisite rather than

@@ -328,3 +328,22 @@ def test_a_two_word_organism_name_the_source_wrote_fills_in_the_rest(tmp_path):
     assert organism_names("12345", "Foo bar") == {"name": "Foo bar", "shortName": "F. bar",
                                                   "genus": "Foo", "species": "bar"}
     assert organism_names("12345", "Foo") is None and organism_names("12345") is None
+
+
+def test_chromosomes_take_the_organism_of_their_genes(tmp_path):
+    """Two sources' chromosome 1 never merged (InterMine keys one on primaryIdentifier+organism and
+    ours had no organism): the mine held every chromosome twice, both without an organism."""
+    m = _organism_model(tmp_path)
+    out = tmp_path / "out"; (out / "tsv").mkdir(parents=True)
+    (out / "columns.tsv").write_text(textwrap.dedent("""\
+    table\tposition\tcolumn\tvariable\tim_class\tim_field\ttransform\tfilter\tvalue\tkind\tvia\tstatus\trequired\troot
+    main\t0\tid\tid\tGene\tprimaryIdentifier\t\t\t\tliteral\t\tsure\tyes\tGene
+    main\t1\ttax\ttax\tOrganism\ttaxonId\t\t\t\tliteral\tGene.organism\tsure\tyes\tGene
+    main\t2\tchr\tchr\tChromosome\tprimaryIdentifier\t\t\t\tliteral\tGene.chromosome\tguess\tno\tGene
+    """))
+    (out / "tsv" / "main.tsv").write_text("Gene.primaryIdentifier\tOrganism.taxonId\tChromosome.primaryIdentifier\n1\t9606\t1\n2\t9606\t1\n")
+    st = emit_items(m, str(out), "t", {}, log=lambda *a: None)
+    xml = (out / "items" / "t.xml").read_text()
+    chrom = xml[xml.index('class="Chromosome"'):].split("</item>")[0]
+    assert '<reference name="organism" ref_id=' in chrom
+    assert st["chromosomes_linked"] == 1

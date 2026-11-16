@@ -213,6 +213,26 @@ class ItemStore:
             n += len(it.attrs) > before
         return n
 
+    def organise_chromosomes(self) -> int:
+        """Give each Chromosome the organism of the genes on it.  The sources name a chromosome
+        by its number alone ("1"), but InterMine keys one on (primaryIdentifier, organism): with no
+        organism two sources' chromosome 1 never merged, so the mine held every chromosome twice,
+        both unlinked to any organism.  A chromosome whose genes disagree on the organism is left
+        alone.  Returns the number of chromosomes linked."""
+        orgs: Dict[tuple, set] = {}
+        for it in self.items.values():
+            ch, org = it.refs.get("chromosome"), it.refs.get("organism")
+            if ch is not None and org is not None and it.cls == "Gene":
+                orgs.setdefault(ch, set()).add(org)
+        n = 0
+        for ck, found in orgs.items():
+            ch = self.items.get(ck)
+            if ch is not None and ch.cls == "Chromosome" and "organism" not in ch.refs and len(found) == 1 \
+                    and "organism" in self.model.all_fields("Chromosome"):
+                ch.refs["organism"] = next(iter(found))
+                n += 1
+        return n
+
     def write(self, path: str) -> int:
         ids = {k: f"0_{i + 1}" for i, k in enumerate(self.items)}
         os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -376,6 +396,7 @@ def emit_items(model: InterMineModel, out_dir: str, src: str, source_cfg: dict, 
             stats["notes"].append(f"{cls}.{kcfg['field']}: blanked on {n} items - ambiguous in this "
                                    f"source's own data, not an rdfc2im mapping error (STATUS.md D14)")
     stats["organisms_completed"] = store.complete_organisms()
+    stats["chromosomes_linked"] = store.organise_chromosomes()
     # DataSet / DataSource
     ds_title = source_cfg.get("data_set_title") or f"{src} (rdf-config)"
     ds_name = source_cfg.get("data_source_name") or src

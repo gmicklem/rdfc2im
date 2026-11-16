@@ -454,6 +454,32 @@ def test_the_organism_has_its_names():
     assert rows[0] == ["9606", "Homo sapiens", "H. sapiens", "Homo", "sapiens"], rows[0]
 
 
+def test_each_pathway_is_in_one_data_set():
+    """A pathway belongs to one data set, not one per source that loads it (im-ore.10).
+
+    rdfc2im's reactome source used its own data set title while stock reactome used
+    "Reactome pathways data set", and DataSet merges on name, so every pathway sat in two: each
+    enrichment row appeared twice and a data set filter matched half of them.
+    """
+    if not mine_up():
+        return _skip(f"live checks off or no mine at {MINE_BASE} (make test-live)")
+    rows = query_rows("Pathway.identifier Pathway.dataSets.name", "Pathway.identifier", "=", EXAMPLE_PATHWAY)
+    assert [r[1] for r in rows] == ["Reactome pathways data set"], rows
+
+
+def test_each_chromosome_is_one_object_with_its_organism():
+    """Chromosome 1 exists once, with an organism (im-ore.10).
+
+    InterMine keys a chromosome on primaryIdentifier+organism and the sources gave none, so
+    ncbigene's and ensembl's chromosome 1 never merged: the mine held every chromosome twice.
+    """
+    if not mine_up():
+        return _skip(f"live checks off or no mine at {MINE_BASE} (make test-live)")
+    rows = query_rows("Chromosome.primaryIdentifier Chromosome.organism.taxonId",
+                      "Chromosome.primaryIdentifier", "=", "1")
+    assert rows == [["1", "9606"]], rows
+
+
 # ----------------------------------------------------------------- classic webapp UI
 def test_classic_ui_webconfig_is_valid():
     """The classic webapp renders without the webconfig validation error.

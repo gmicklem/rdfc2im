@@ -119,13 +119,14 @@ def gen_project(out_root: str, project_out: str, model: InterMineModel, type_nam
                 writers.setdefault(f, [])
                 if name not in writers[f]:
                     writers[f].append(name)
-        # What the items step fills in for every Organism it writes (see
-        # ItemStore.complete_organisms) is written by this source too, though
+        # What the items step fills in for every Organism and Chromosome it writes (see
+        # ItemStore.complete_organisms / organise_chromosomes) is written by this source too, though
         # no column says so.  Naming it a writer ranks it ahead of a stock source loaded alongside
         # (merge_priorities): stock reactome writes an Organism with a taxon id and nothing else, and
         # at the top rank that null stood over our name - the organism came out of the load unnamed.
         used = {c["im_class"] for cols in tables.values() for c in cols}
         extra = [f"Organism.{f}" for f in ORGANISM_FIELDS if model.field("Organism", f)] if "Organism" in used else []
+        extra += ["Chromosome.organism"] if "Chromosome" in used and model.field("Chromosome", "organism") else []
         for f in extra:
             writers.setdefault(f, [])
             if name not in writers[f]:
