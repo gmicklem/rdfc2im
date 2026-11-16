@@ -17,6 +17,15 @@
 #                         and service, so a second `up` in the same project recreates the first
 #                         stack's containers instead of starting new ones.
 #   PG_PORT, SOLR_PORT, MINE_PORT, BG_PORT   host ports (defaults 15432, 8983, 8090, 5000)
+#   RDFC2IM_PGDATA, RDFC2IM_SOLRDATA   absolute host directories to keep the PostgreSQL and Solr
+#                         data in (they must exist; the Compose volume binds them). Unset (the
+#                         default) the data lives in ordinary named Docker volumes, under
+#                         /var/lib/docker, exactly as before. Set them when /var/lib/docker is small
+#                         or the data should sit on another disk: the same bind-mounted volumes
+#                         drive-ut2.sh used to create by hand with `docker volume create
+#                         --opt type=none --opt o=bind --opt device=DIR`. A volume that already
+#                         exists keeps the way it was made - Compose does not change it - so set
+#                         these before the stack's first `up`, or remove the volume first.
 services:
 
   postgres:
@@ -134,8 +143,22 @@ services:
       - "127.0.0.1:${BG_PORT:-5000}:5000"
     restart: unless-stopped
 
+# driver_opts: with the RDFC2IM_*DATA variables unset all three are empty strings, which Docker's
+# local driver treats as a plain named volume (checked on Compose 5.6 / Docker 29: same mountpoint
+# under /var/lib/docker, an existing volume is reused untouched); set, type=none o=bind device=DIR
+# makes it a bind mount of that directory.
 volumes:
   pgdata:
     name: ${RDFC2IM_PREFIX:-rdfc2im}-pgdata
+    driver: local
+    driver_opts:
+      type: ${RDFC2IM_PGDATA:+none}
+      o: ${RDFC2IM_PGDATA:+bind}
+      device: ${RDFC2IM_PGDATA:-}
   solrdata:
     name: ${RDFC2IM_PREFIX:-rdfc2im}-solrdata
+    driver: local
+    driver_opts:
+      type: ${RDFC2IM_SOLRDATA:+none}
+      o: ${RDFC2IM_SOLRDATA:+bind}
+      device: ${RDFC2IM_SOLRDATA:-}

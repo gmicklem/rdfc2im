@@ -89,6 +89,14 @@
 #                     objectstoresummary.config.properties), so postprocess indexes into this
 #                     stack's Solr and not another stack's.
 #   RDFC2IM_PREFIX    Container and volume name prefix (default rdfc2im; see --stack-name).
+#   RDFC2IM_PGDATA, RDFC2IM_SOLRDATA   Host directories the PostgreSQL and Solr data live in, bind-
+#                     mounted by trial/docker-compose.yml's volumes (created by start_databases).
+#                     Default unset: ordinary named Docker volumes under /var/lib/docker. Set them
+#                     before the stack's first start_databases (an existing volume keeps its kind).
+#   GRADLE_USER_HOME  Gradle's user home: caches, daemons, gradle.properties (default $HOME/.gradle).
+#                     Passed, with -Duser.home=$HOME in JAVA_TOOL_OPTIONS, to every Gradle call -
+#                     JDK 8 takes user.home from the passwd entry and ignores $HOME, so a private HOME
+#                     was silently bypassed without them.
 #   COMPOSE_PROJECT_NAME  Passed through to Compose when set (default: unset, so the project is
 #                     `trial`, the compose file's directory).
 #   BIND_ADDR         Host address the compose stack's ports are published on. Default 127.0.0.1
@@ -271,6 +279,10 @@ MINE_CONTAINER="$RDFC2IM_PREFIX-mine"
 COMPOSE_ENV=(env PG_PORT="$PG_PORT" SOLR_PORT="$SOLR_PORT" MINE_PORT="$MINE_PORT" BG_PORT="$BG_PORT"
              RDFC2IM_PREFIX="$RDFC2IM_PREFIX")
 [ -n "$COMPOSE_PROJECT_NAME" ] && COMPOSE_ENV+=(COMPOSE_PROJECT_NAME="$COMPOSE_PROJECT_NAME")
+# Host directories for the PostgreSQL and Solr data (bind-mounted by the compose volumes; unset =
+# ordinary named volumes). phase_start_databases creates them.
+[ -n "${RDFC2IM_PGDATA:-}" ] && COMPOSE_ENV+=(RDFC2IM_PGDATA="$RDFC2IM_PGDATA")
+[ -n "${RDFC2IM_SOLRDATA:-}" ] && COMPOSE_ENV+=(RDFC2IM_SOLRDATA="$RDFC2IM_SOLRDATA")
 
 # --intermine-src: versions read from the checkout, never guessed. IM_VERSION is what every
 # org.intermine module of that tree publishes (the version catalog; intermine/build.gradle on trees
@@ -335,6 +347,20 @@ else
 fi
 log "stack: containers $RDFC2IM_PREFIX-*, compose project ${COMPOSE_PROJECT_NAME:-trial (default)}, ports pg=$PG_PORT solr=$SOLR_PORT mine=$MINE_PORT bluegenes=$BG_PORT"
 
+# JDK 8 takes user.home from the passwd entry, NOT from $HOME, and Gradle's own default for its user
+# home (~/.gradle: caches, daemons, gradle.properties) and InterMine's ~/.intermine/*.properties
+# both hang off user.home.  Without these two a build run with a private HOME silently used (and
+# wrote into) the real account's ~/.gradle and ~/.intermine - the fb-env*.sh scripts worked around it
+# with JAVA_TOOL_OPTIONS in the caller's environment, which a plain `HOME=... full-build.sh` lacked.
+# GRADLE_HOME_ENV goes into every Gradle invocation below, explicitly.  im-ore.4.
+GRADLE_USER_HOME=${GRADLE_USER_HOME:-"$HOME/.gradle"}
+export GRADLE_USER_HOME
+case " ${JAVA_TOOL_OPTIONS:-} " in
+  *" -Duser.home=$HOME "*) _java_tool_options=$JAVA_TOOL_OPTIONS ;;
+  *) _java_tool_options="${JAVA_TOOL_OPTIONS:+$JAVA_TOOL_OPTIONS }-Duser.home=$HOME" ;;
+esac
+GRADLE_HOME_ENV=("GRADLE_USER_HOME=$GRADLE_USER_HOME" "JAVA_TOOL_OPTIONS=$_java_tool_options")
+
 GRADLE_ENV=()   # populated by phase_check_prereqs; every ./gradlew call below is prefixed with it
 
 # ============================================================== phases
@@ -352,8 +378,8 @@ phase_check_prereqs() {
     "JAVA8_HOME not set and no JDK 8 found under /usr/lib/jvm - Gradle 4.9 cannot start a daemon
      under a newer JDK (confirmed live, LOAD-TRIAL.md's hgnc section). Install one and set
      JAVA8_HOME, e.g.: apt-get install -y openjdk-8-jdk && export JAVA8_HOME=/usr/lib/jvm/java-8-openjdk-\$(dpkg --print-architecture)"
-  GRADLE_ENV=(env "JAVA_HOME=$JAVA8_HOME")
-  log "JAVA8_HOME=$JAVA8_HOME"
+  GRADLE_ENV=(env "JAVA_HOME=$JAVA8_HOME" "${GRADLE_HOME_ENV[@]}")
+  log "JAVA8_HOME=$JAVA8_HOME, GRADLE_USER_HOME=$GRADLE_USER_HOME, user.home=$HOME"
   [ -f "$GENE_PANEL" ] || die "gene panel file not found: $GENE_PANEL"
   # A misspelled --sources entry falling through to SCOPE_MODE's ${...:-none} default would
   # silently fetch that source completely unscoped instead of erroring - exactly the kind of
@@ -390,7 +416,7 @@ phase_check_prereqs() {
   # exceeded" in a worker thread on the very first source's load. The exception is in a
   # background thread, not main, so the daemon doesn't fail cleanly - it spins in a GC
   # death-spiral, burning CPU with no forward progress, rather than exiting. GRADLE_USER_HOME's
-  # own gradle.properties (default ~/.gradle) applies to every daemon Gradle starts from here,
+  # own gradle.properties (default $HOME/.gradle) applies to every daemon Gradle starts from here,
   # across both the humanmine and humanmine-bio-sources checkouts.
   # file.encoding=UTF-8: the daemon's own default (US-ASCII) comes from this sandbox having no
   # LANG/LC_ALL set at all, which Java's platform-default-charset detection falls back to
@@ -400,7 +426,7 @@ phase_check_prereqs() {
   # Reader (no explicit UTF-8) - under US-ASCII those bytes get mis-decoded, and one specific
   # mis-decode produced a literal NUL byte, which Postgres's COPY then rejected outright:
   # "invalid byte sequence for encoding UTF8: 0x00".
-  local gradle_props="$HOME/.gradle/gradle.properties"
+  local gradle_props="$GRADLE_USER_HOME/gradle.properties"
   if ! grep -q "^org.gradle.jvmargs" "$gradle_props" 2>/dev/null; then
     write_file "$gradle_props" "org.gradle.jvmargs=-Xmx4096m -Dfile.encoding=UTF-8"
   fi
@@ -465,7 +491,7 @@ sys.argv = ["install_intermine.py"]; m.main()'
   log "publishing $(echo $modules) at $IM_VERSION into $IM_M2"
   local m
   for m in $modules; do
-    run_in "$src/$m" env JAVA_HOME="$jdk" LANG=C.UTF-8 LC_ALL=C.UTF-8 ./gradlew -Dorg.gradle.jvmargs=-Xmx4g \
+    run_in "$src/$m" env JAVA_HOME="$jdk" "${GRADLE_HOME_ENV[@]}" LANG=C.UTF-8 LC_ALL=C.UTF-8 ./gradlew -Dorg.gradle.jvmargs=-Xmx4g \
       --max-workers=4 --no-daemon --stacktrace "${IM_GRADLE_ARGS[@]}" publishToMavenLocal
   done
   if [ "$DRY_RUN" -eq 0 ]; then
@@ -1152,6 +1178,9 @@ phase_start_databases() {
   # COMPOSE_FILES (and its docker-compose.local.yml, if BIND_ADDR needs one) is computed
   # globally, above - see that block's comment for why (resume-safety: this phase can be
   # skipped by --from without start_mine_stack losing access to it).
+  # a bind-mounted volume needs its directory to exist (Docker will not create it)
+  [ -z "${RDFC2IM_PGDATA:-}" ] || run mkdir -p "$RDFC2IM_PGDATA"
+  [ -z "${RDFC2IM_SOLRDATA:-}" ] || run mkdir -p "$RDFC2IM_SOLRDATA"
   run "${COMPOSE_ENV[@]}" $COMPOSE "${COMPOSE_FILES[@]}" up -d postgres solr
   log "waiting for postgres to report healthy..."
   if [ "$DRY_RUN" -eq 0 ]; then
@@ -1178,6 +1207,18 @@ SQL"
   for core in humanmine-search humanmine-autocomplete; do
     run bash -c "docker exec $SOLR_CONTAINER solr create_core -c $core 2>&1 | grep -qv 'already exists' || true"
   done
+}
+
+# The merged mine model that reduce_mine.py reads. Plugins before the maint-2026 rework copied it to
+# dbmodel/build/resources/main/; the maint-2026 plugin leaves it where mergeModels writes it,
+# dbmodel/build/im/mergeModels/ (found 2026-11-16: with the old path every reduce step died
+# "failed to load .../build/resources/main/genomic_model.xml" right after builddb).
+merged_model_xml() {
+  local f
+  for f in "$1/dbmodel/build/im/mergeModels/genomic_model.xml" "$1/dbmodel/build/resources/main/genomic_model.xml"; do
+    [ -f "$f" ] && { echo "$f"; return 0; }
+  done
+  echo "$1/dbmodel/build/resources/main/genomic_model.xml"   # not built yet (--dry-run): the traditional place
 }
 
 phase_build_dbmodel() {
@@ -1209,18 +1250,6 @@ phase_build_dbmodel() {
   run bash -c "curl -sf 'http://localhost:$SOLR_PORT/solr/humanmine-search/update?commit=true' \
     -H 'Content-Type: application/json' -d '{\"delete\": {\"query\": \"*:*\"}}' >/dev/null || true"
   # os.production only - the userprofile database's own schema (savedtemplatequery, tag, ...)
-# The merged mine model that reduce_mine.py reads. Plugins before the maint-2026 rework copied it to
-# dbmodel/build/resources/main/; the maint-2026 plugin leaves it where mergeModels writes it,
-# dbmodel/build/im/mergeModels/ (found 2026-11-16: with the old path every reduce step died
-# "failed to load .../build/resources/main/genomic_model.xml" right after builddb).
-merged_model_xml() {
-  local f
-  for f in "$1/dbmodel/build/im/mergeModels/genomic_model.xml" "$1/dbmodel/build/resources/main/genomic_model.xml"; do
-    [ -f "$f" ] && { echo "$f"; return 0; }
-  done
-  echo "$1/dbmodel/build/resources/main/genomic_model.xml"   # not built yet (--dry-run): the traditional place
-}
-
   # is a SEPARATE task, never run anywhere else in this script. Without it the webapp's own
   # ActionServlet fails to initialise at startup ("userprofileOSW is null" - confirmed live),
   # InterMineContext never initialises, and every single request 500s with
@@ -1268,6 +1297,13 @@ merged_model_xml() {
   run python3 tools/reduce_mine.py webconfig \
     "$mine/webapp/src/main/webapp/WEB-INF/webconfig-model.xml" \
     "$(merged_model_xml "$mine")"
+  # pathway_enrichment filters on the NAMES of the pathway data sets: HumanMine's file lists
+  # "KEGG pathways data set" and "Reactome data set", but this mine has one pathway data set, the
+  # stock reactome source's "Reactome pathways data set" (humanmine-reactome joins it, see
+  # sources.yaml), so the Reactome filter matched nothing. im-ore.10.
+  deployer_edit "$mine/webapp/src/main/webapp/WEB-INF/webconfig-model.xml" \
+    "pathway_enrichment filters: this mine's one pathway data set" \
+    -e 's|filters="All,KEGG pathways data set,Reactome data set"|filters="All,Reactome pathways data set"|'
 }
 
 phase_integrate_sources() {
@@ -1297,13 +1333,6 @@ phase_integrate_sources() {
 phase_postprocess() {
   # Order from HumanMine's own project.xml <post-processing> block (LOAD-TRIAL.md). The
   # genomic-location-specific tasks (create-chromosome-locations-and-lengths,
-  # pathway_enrichment filters on the NAMES of the pathway data sets: HumanMine's file lists
-  # "KEGG pathways data set" and "Reactome data set", but this mine has one pathway data set, the
-  # stock reactome source's "Reactome pathways data set" (humanmine-reactome joins it, see
-  # sources.yaml), so the Reactome filter matched nothing. im-ore.10.
-  deployer_edit "$mine/webapp/src/main/webapp/WEB-INF/webconfig-model.xml" \
-    "pathway_enrichment filters: this mine's one pathway data set" \
-    -e 's|filters="All,KEGG pathways data set,Reactome data set"|filters="All,Reactome pathways data set"|'
   # transfer-sequences, create-gene-flanking-features, create-location-overlap-index,
   # create-overlap-view, populate-child-features) are deliberately not run: this build loads no
   # coordinate/sequence data, so they would no-op or fail on a missing prerequisite rather than

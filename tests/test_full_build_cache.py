@@ -329,3 +329,52 @@ def test_caller_exported_rdfc2im_offline_means_offline(tmp_path, monkeypatch):
         return
     assert "offline=1" in plan and "use_cached_data=1" in plan
     assert any("cache restore humanmine-model" in c for c in _cmds(plan))
+
+
+def test_every_gradle_call_carries_the_gradle_user_home_and_user_home(tmp_path):
+    """im-ore.4: JDK 8 ignores $HOME, so a private HOME was silently bypassed unless the caller had
+    put -Duser.home into JAVA_TOOL_OPTIONS itself.  The script passes both, explicitly, to each call."""
+    if not shutil.which("bash"):
+        return
+    home = str(tmp_path / "privhome")
+    env = dict(os.environ, HOME=home, TRIAL_HOME=str(tmp_path / "trial_home"), RUN_ID="test",
+               LOG_DIR=str(tmp_path / "logs"))
+    for k in ("JAVA_TOOL_OPTIONS", "GRADLE_USER_HOME"):
+        env.pop(k, None)
+    plans = []
+    for phase in ("build_humanmine_items", "build_dbmodel", "integrate_sources", "build_webapp"):
+        r = subprocess.run(["bash", "tools/full-build.sh", "--dry-run", "--only", phase], cwd=ROOT, env=env,
+                           capture_output=True, text=True)
+        out = r.stdout + r.stderr
+        if r.returncode != 0 and "[check_prereqs] FATAL" in out:
+            return
+        assert r.returncode == 0, out
+        plans += _cmds(out)
+    gradle = [c for c in plans if "./gradlew" in c or " gradle " in c]
+    assert gradle, plans
+    for c in gradle:
+        assert f"GRADLE_USER_HOME={home}/.gradle" in c and f"JAVA_TOOL_OPTIONS=-Duser.home={home}" in c, c
+
+
+def test_compose_data_dirs_come_from_the_environment(tmp_path):
+    """im-ore.4: RDFC2IM_PGDATA / RDFC2IM_SOLRDATA turn the data volumes into bind mounts; unset they
+    are ordinary named volumes, as before."""
+    if not shutil.which("docker"):
+        return
+    base = ["docker", "compose", "-f", os.path.join(ROOT, "trial", "docker-compose.yml"), "config", "--format", "json"]
+    def vols(**extra):
+        env = {k: v for k, v in os.environ.items() if not k.startswith("RDFC2IM_")}
+        r = subprocess.run(base, env=dict(env, **extra), capture_output=True, text=True)
+        if r.returncode != 0:
+            return None
+        import json
+        return json.loads(r.stdout)["volumes"]
+    plain = vols()
+    if plain is None:
+        return
+    assert plain["pgdata"]["name"] == "rdfc2im-pgdata"
+    assert not any(plain["pgdata"]["driver_opts"].values()) and not any(plain["solrdata"]["driver_opts"].values())
+    bound = vols(RDFC2IM_PGDATA="/d/pg", RDFC2IM_SOLRDATA="/d/solr", RDFC2IM_PREFIX="rdfc2im-x")
+    assert bound["pgdata"]["name"] == "rdfc2im-x-pgdata"
+    assert bound["pgdata"]["driver_opts"] == {"type": "none", "o": "bind", "device": "/d/pg"}
+    assert bound["solrdata"]["driver_opts"] == {"type": "none", "o": "bind", "device": "/d/solr"}

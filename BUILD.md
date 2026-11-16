@@ -102,9 +102,16 @@ The build reaches out to `rdfportal.org`, `grch38.togovar.org` (GWAS Catalog),
 You do not need to do any of this by hand:
 
 - JDK 8 discovery and the `JAVA_HOME` override on every Gradle call.
+- Gradle's user home, passed explicitly to every Gradle call: `GRADLE_USER_HOME` (default
+  `$HOME/.gradle`) and `JAVA_TOOL_OPTIONS=-Duser.home=$HOME`. JDK 8 takes `user.home` from the
+  passwd entry and ignores `$HOME`, so with a private `HOME` (a second stack, a task sandbox) Gradle
+  used and wrote the real account's `~/.gradle` and `~/.intermine`, silently bypassing the private
+  one; `fb-env*.sh`-style wrappers worked around it by exporting `JAVA_TOOL_OPTIONS` themselves.
+  The script no longer depends on that. (Your own `gradle --stop` is not covered: give it the same
+  two variables.)
 - The `/micklem` bootstrap, and symlinking each source's items file into
   `/micklem/data/rdfc2im/<source>/`.
-- `~/.gradle/gradle.properties`, written (if it has no `org.gradle.jvmargs` line) as:
+- `$GRADLE_USER_HOME/gradle.properties` (`~/.gradle/gradle.properties` by default), written (if it has no `org.gradle.jvmargs` line) as:
 
   ```
   org.gradle.jvmargs=-Xmx4096m -Dfile.encoding=UTF-8
@@ -292,6 +299,13 @@ and `webapp.baseurl` uses it, because the webapp fetches its own `query.xsd` fro
 postprocess indexes this stack's Solr. `check_prereqs` refuses to start when one of the ports is
 already published by a container that is not this stack's, since the host-side `builddb` would
 otherwise drop the other stack's database.
+
+`RDFC2IM_PGDATA` and `RDFC2IM_SOLRDATA` (absolute host directories) put the PostgreSQL and Solr data
+somewhere other than `/var/lib/docker`: `trial/docker-compose.yml` then makes `pgdata` and `solrdata`
+bind mounts of them (`start_databases` creates the directories). Unset, they are ordinary named
+volumes, as before. Set them before the stack's first `start_databases`; Compose reuses a volume that
+already exists, whatever kind it is. This replaces creating the bind volumes by hand with
+`docker volume create --opt type=none --opt o=bind --opt device=DIR`.
 
 Give the second stack its own `TRIAL_HOME` and `HOME` (the mine's
 `~/.intermine/humanmine.properties` carries the ports). `/micklem/data` (the staged items files and
@@ -680,20 +694,6 @@ assume it is not - it was the single most common failure of the first real build
 to be resumable: the reactome data download, the upstream checkouts and the mine checkout copy
 are all skipped when already present.
 
-## Persistence, and what does not survive
-
-**The loaded mine lives in Docker named volumes** - `rdfc2im-pgdata` and `rdfc2im-solrdata`.
-`docker compose -f trial/docker-compose.yml down` stops the containers and keeps the volumes;
-`down -v` throws them away, and so does destroying the machine. There is no other copy: the
-mine is not backed up anywhere, and rebuilding it means running this script again. (The
-Makefile's `up`/`down`/`status`/`logs`/`trial-destroy` targets do the same things but default to
-`podman compose`; pass `COMPOSE="docker compose -f trial/docker-compose.yml"` to use them here.)
-
-To keep the loaded data independently of the containers:
-
-```sh
-docker exec rdfc2im-postgres pg_dump -U intermine humanmine-production      > humanmine-production.sql
-docker exec rdfc2im-postgres pg_dump -U intermine humanmine-userprofile     > humanmine-userprofile.sql
 ## What the demo mine does not have
 
 Checked on the maint-2026 (6.0 line) testbed stack, 16 Nov 2026.
@@ -728,6 +728,21 @@ Checked on the maint-2026 (6.0 line) testbed stack, 16 Nov 2026.
   postprocesses need both. A contained change it is not: it is a new data source, a regenerated
   cache and an `items.py` feature, so it is left as a follow-up.
 
+## Persistence, and what does not survive
+
+**The loaded mine lives in Docker volumes** - `rdfc2im-pgdata` and `rdfc2im-solrdata` (named
+volumes, or bind mounts of `RDFC2IM_PGDATA` / `RDFC2IM_SOLRDATA` when those are set).
+`docker compose -f trial/docker-compose.yml down` stops the containers and keeps the volumes;
+`down -v` throws them away, and so does destroying the machine. There is no other copy: the
+mine is not backed up anywhere, and rebuilding it means running this script again. (The
+Makefile's `up`/`down`/`status`/`logs`/`trial-destroy` targets do the same things but default to
+`podman compose`; pass `COMPOSE="docker compose -f trial/docker-compose.yml"` to use them here.)
+
+To keep the loaded data independently of the containers:
+
+```sh
+docker exec rdfc2im-postgres pg_dump -U intermine humanmine-production      > humanmine-production.sql
+docker exec rdfc2im-postgres pg_dump -U intermine humanmine-userprofile     > humanmine-userprofile.sql
 ```
 
 The userprofile dump is the one that carries the public demo templates; `humanmine-items` is
