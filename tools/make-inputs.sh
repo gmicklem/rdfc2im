@@ -11,15 +11,24 @@
 #
 # Clones land in $CACHE (default in/.upstream) so a refresh is a `git pull`,
 # not a 150 MB re-download.  Set CACHE to share one checkout between workspaces.
+#
+# OFFLINE=1 (tools/full-build.sh --use-cached-data) makes no network request at all: the clones
+# must already be in $CACHE (no clone, no pull) and the live model is copied from the directory
+# MODEL_DIR (full-build.sh restores it there from cached_raw_data/humanmine-model). Anything
+# missing is an error that names it.
 set -e
 
 CACHE=${CACHE:-in/.upstream}
 MINE=${MINE:-https://www.humanmine.org/humanmine}
+OFFLINE=${OFFLINE:-0}
 
 mkdir -p "$CACHE" in
 
 clone() {                       # clone <url> <dir> [extra git flags]
-    if [ -d "$CACHE/$2/.git" ]; then
+    if [ "$OFFLINE" = 1 ]; then
+        [ -d "$CACHE/$2/.git" ] || { echo "ERROR: OFFLINE=1 and no clone $CACHE/$2 - run once without --use-cached-data" >&2; exit 1; }
+        echo "  $2: using the cached clone"
+    elif [ -d "$CACHE/$2/.git" ]; then
         echo "  $2: refreshing"
         git -C "$CACHE/$2" pull --quiet --ff-only || echo "  $2: pull failed, keeping the cached copy"
     else
@@ -62,6 +71,11 @@ copy_file "$CACHE/humanmine/dbmodel/resources/genomic_priorities.properties" in/
 
 # The live model is the merged, deployed model - it has no upstream file.
 for fmt in xml json; do
+    if [ "$OFFLINE" = 1 ]; then
+        [ -s "${MODEL_DIR:-}/humanmine_model.$fmt" ] || { echo "ERROR: OFFLINE=1 and no \$MODEL_DIR/humanmine_model.$fmt (MODEL_DIR=${MODEL_DIR:-unset})" >&2; exit 1; }
+        copy_file "$MODEL_DIR/humanmine_model.$fmt" "in/humanmine_model.$fmt"
+        continue
+    fi
     echo "  humanmine_model.$fmt: $MINE/service/model?format=$fmt"
     curl -fsS -o "in/humanmine_model.$fmt" "$MINE/service/model?format=$fmt" \
         || echo "  WARNING could not fetch the live model as $fmt; keeping any existing copy"

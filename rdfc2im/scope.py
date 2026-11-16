@@ -14,11 +14,12 @@ than a per-source oversight.
 """
 from __future__ import annotations
 
+import hashlib
 import os
 import re
 from typing import List, Optional, Set, Tuple
 
-from .fetch import _fetch_once, _normalise
+from .fetch import OfflineError, _fetch_once, _normalise, offline
 
 DEFAULT_TAXA = ["9606"]
 
@@ -277,4 +278,33 @@ def resolve_ensembl_symbols(symbols: List[str], taxon: str = "9606", timeout: in
             continue
         seen_labels.add(label)
         ids.append(ensg_id)
+    return ids
+
+
+def resolve_gene_ids(resolver, symbols: List[str], taxon: str, cache_dir: str) -> List[str]:
+    """Run a gene-symbol resolver through the lookup cache in `cache_dir`.
+
+    The answer is kept in cache_dir/<resolver>-<taxon>-<md5 of the sorted symbols>.txt, one id
+    per line: read from there when present, else resolved live and saved there (written to a temp
+    name, then renamed). RDFC2IM_RESOLVER_REFRESH=1 skips the read, so a fetch run (tools/
+    full-build.sh without --use-cached-data) always asks the network afresh and re-saves.
+    RDFC2IM_OFFLINE=1 (--use-cached-data) never asks the network: a missing file is an error
+    naming it. tools/full-build.sh keeps cache_dir in cached_raw_data/gene-id-lookup (checksummed).
+    """
+    key = hashlib.md5("\n".join(sorted(symbols)).encode("utf-8")).hexdigest()
+    path = os.path.join(cache_dir, f"{resolver.__name__}-{taxon}-{key}.txt")
+    if os.path.exists(path) and os.environ.get("RDFC2IM_RESOLVER_REFRESH") != "1":
+        with open(path, encoding="utf-8") as fh:
+            ids = [l.strip() for l in fh if l.strip()]
+        print(f"translate: {len(ids)} gene ids from {path} (lookup cache)")
+        return ids
+    if offline():
+        raise OfflineError(f"RDFC2IM_OFFLINE=1: no cached gene-symbol lookup {path} ({resolver.__name__}, "
+                           f"taxon {taxon}, {len(symbols)} symbols). Run once without --use-cached-data "
+                           f"to fetch and save it")
+    ids = resolver(symbols, taxon=taxon)
+    os.makedirs(cache_dir, exist_ok=True)
+    with open(path + ".part", "w", encoding="utf-8") as fh:
+        fh.write("".join(i + "\n" for i in ids))
+    os.replace(path + ".part", path)
     return ids

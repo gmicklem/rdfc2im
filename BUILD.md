@@ -151,7 +151,7 @@ Useful options:
 | `--genes FILE` | Gene panel for the panel-scoped sources (default `curation/demo_gene_panel.txt`) |
 | `--taxon LIST` | NCBI taxon ids (default `9606`) |
 | `--skip-templates` | Do not apply `curation/demo_public_templates.sql` |
-| `--use-cached-data` | Restore the fetched raw data from `cached_raw_data/` instead of fetching it again (see below) |
+| `--use-cached-data` | Restore the fetched raw data from `cached_raw_data/` instead of fetching it again; the data phases then run fully offline (see below) |
 | `--cache-dir DIR` | Use `DIR` instead of `cached_raw_data/` |
 | `--reactome-levels default\|all` | Which of Reactome's own two files to load (see below); default `default` |
 | `--intermine-src DIR` | Build against the InterMine checkout `DIR` instead of the published 5.0.x artefacts (see "Building against a local InterMine checkout") |
@@ -299,18 +299,42 @@ built from the same cache.
 
 ## Caching the fetched data
 
-The slow, remote part of a build is the SPARQL extraction (phase 3) plus one download (phase 6).
-Every normal run saves what it fetched to `cached_raw_data/` (gitignored, in the repository root -
-so on a sandbox it is on the host side of the workspace mount and outlives the sandbox), and
+The slow, remote part of a build is the SPARQL extraction (phase 3) plus a few downloads. Every
+normal run saves what it fetched to `cached_raw_data/` (gitignored, in the repository root - so on a
+sandbox it is on the host side of the workspace mount, and outlives the sandbox), and
 
 ```sh
 tools/full-build.sh --use-cached-data
 ```
 
-restores it instead of touching the network for that data. (Phase 2, the upstream git clones and
-the live HumanMine model, is not covered by the cache.)
+restores it instead of asking the network: the data phases (`fetch_inputs`, `rdfc2im_pipeline`,
+`rdfc2im_project`) then make **no network request at all**. The build phases that follow still need
+the network for their tooling (Gradle and Maven downloads, Docker images, the 6.0 line's HumanMine
+clone) - that is not data and is not cached here.
 
-Layout: one directory per source (`go/`, `ncbigene/`, ...) plus `reactome-uniprot-map/`, each
+Everything the data phases take from the network, and where `--use-cached-data` finds it:
+
+| Fetched from | Phase | Saved as (fetch run) / read from (`--use-cached-data`) |
+|---|---|---|
+| RDF Portal and TogoVar SPARQL endpoints (`rdfc2im fetch`; PubMed, MeSH, GWAS Catalog included) | `rdfc2im_pipeline` | `cached_raw_data/<source>/`, one entry per source (9 for the demo panel) |
+| RDF Portal SPARQL, gene symbol -> NCBI/Ensembl id (`translate --genes`, `scope.resolve_gene_ids`) | `rdfc2im_pipeline` | `cached_raw_data/gene-id-lookup/` (keyed to taxon and gene-panel md5) |
+| humanmine.org `/service/model?format=xml,json` | `fetch_inputs` | `cached_raw_data/humanmine-model/` |
+| reactome.org `UniProt2Reactome[_All_Levels].txt` | `build_reactome_source` | `cached_raw_data/reactome-uniprot-map/` (keyed to `--reactome-levels`) |
+| GitHub: rdf-config, intermine, humanmine, humanmine-bio-sources | `fetch_inputs` | not in `cached_raw_data/`: the clones in `$UPSTREAM_CACHE` (default `in/.upstream`); offline, no pull is attempted and a missing clone stops the build |
+
+Nothing else in those phases is networked (`rdfc2im project`, `check`, `tsv`, `items`,
+`make fork-sync` are local). To be sure, `--use-cached-data` also exports `RDFC2IM_OFFLINE=1` for the
+pipeline phase: any SPARQL request that is still attempted stops with `RDFC2IM_OFFLINE=1: refusing a
+SPARQL request to <endpoint>`, and a gene-symbol lookup missing from the cache stops with the name of
+the missing file. A fetch run sets `RDFC2IM_RESOLVER_REFRESH=1`, so its lookups are asked afresh (not
+read from an older run's file) and then saved.
+
+The lookup cache is on by default for `rdfc2im translate` too, outside `full-build.sh`: the answers
+live in `$RDFC2IM_RESOLVER_CACHE`, else `out/_resolver/`, one file per resolver, taxon and symbol list
+(`resolve_ncbigene_symbols-9606-<md5 of the sorted symbols>.txt`); delete the file to resolve again.
+`full-build.sh` keeps that directory in step with `cached_raw_data/gene-id-lookup/`.
+
+Layout: one directory per source (`go/`, `ncbigene/`, ...) plus `reactome-uniprot-map/`, `humanmine-model/` and `gene-id-lookup/`, each
 holding `data/` (the files), `MD5SUMS` (`cd cached_raw_data/go && md5sum -c MD5SUMS` works) and
 `META.json`. `python3 -m rdfc2im cache list|verify|save|restore` manages it directly.
 
@@ -621,6 +645,14 @@ there. Run once without the option to fetch afresh (which re-saves) - or, if the
 right and only its recorded `META.json` predates a newer `--meta` key rdfc2im/rawcache.py now checks
 (confirmed live for `levels`, see "A third run" above), edit `META.json`'s `meta` object by hand to add
 the missing key with its true value, then confirm with `cache verify` before trusting it.
+
+**`--use-cached-data` stops with `no cached data for gene-id-lookup` or `humanmine-model`.** The cache
+was filled before those two entries existed. Add them without re-fetching the sources: run
+`tools/full-build.sh --only fetch_inputs` (no `--use-cached-data`; it saves the model), and for the
+lookups
+`RDFC2IM_RESOLVER_CACHE=/tmp/lookup python3 -m rdfc2im translate --source ncbigene --source ensembl --taxon 9606 --genes @curation/demo_gene_panel.txt`
+followed by `python3 -m rdfc2im cache save gene-id-lookup /tmp/lookup --meta taxon=9606 --meta genes_md5=$(md5sum curation/demo_gene_panel.txt | cut -d' ' -f1)`
+(the `--meta` keys are the ones `lookup_meta` in `tools/full-build.sh` uses).
 
 **Something reported success but the data is not there.** Assume this is happening rather than
 assume it is not - it was the single most common failure of the first real build. Run

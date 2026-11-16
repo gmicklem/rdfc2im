@@ -357,6 +357,14 @@ def _fetch_paged(q, ep, out_path, timeout, sleep, limit, page, log, t0):
     return "fetched"
 
 
+class OfflineError(RuntimeError):
+    """A network request was attempted while RDFC2IM_OFFLINE=1 (tools/full-build.sh --use-cached-data)."""
+
+
+def offline() -> bool:
+    return os.environ.get("RDFC2IM_OFFLINE") == "1"
+
+
 def _fetch_once(q, ep, timeout):
     body, fmt, err = None, None, None
     # try POST then GET, and the three result formats, until one is accepted
@@ -379,6 +387,8 @@ def _fetch_once(q, ep, timeout):
                     # a GET-specific one (e.g. 414, once the query is long) and hide the real cause
                 if e.code not in (406, 415, 405, 400, 302, 303):
                     break
+            except OfflineError:
+                raise
             except Exception as e:  # network errors: report and give up on this query
                 err = f"{type(e).__name__}: {e}"
                 break
@@ -414,6 +424,10 @@ class _NoRedirectPost(urllib.request.HTTPRedirectHandler):
 
 
 def _request(ep: str, q: str, method: str, accept: str, timeout: int) -> bytes:
+    if offline():
+        raise OfflineError(f"RDFC2IM_OFFLINE=1: refusing a SPARQL request to {ep}. In offline mode "
+                           f"(--use-cached-data) the data must come from the cache, not the network: "
+                           f"restore it with `rdfc2im cache restore`, or run once without the option")
     headers = {"Accept": accept, "User-Agent": "rdfc2im/0.2"}
     if method == "POST":
         req = urllib.request.Request(ep, data=urllib.parse.urlencode({"query": q}).encode(),

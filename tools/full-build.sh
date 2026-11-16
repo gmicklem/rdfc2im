@@ -397,10 +397,28 @@ phase_check_prereqs() {
   log "prerequisites OK"
 }
 
+activate_venv() {
+  [ -f "$HERE/.venv/bin/activate" ] || die "no .venv at $HERE/.venv - create one with pyyaml+lxml first"
+  # shellcheck disable=SC1091
+  source "$HERE/.venv/bin/activate"
+}
+
 phase_fetch_inputs() {
   # rdf-config, intermine, humanmine, humanmine-bio-sources, the live HumanMine model, and
-  # HumanMine's own genomic_priorities.properties - see tools/make-inputs.sh's own header.
-  run env CACHE="$UPSTREAM_CACHE" sh tools/make-inputs.sh
+  # HumanMine's own genomic_priorities.properties - see tools/make-inputs.sh's own header. The
+  # four clones stay in $UPSTREAM_CACHE (git is their cache); the live model goes through the
+  # checksummed raw-data cache like everything else fetched.
+  activate_venv   # `rdfc2im cache` needs pyyaml/lxml
+  local mdir="$TRIAL_HOME/live-model"
+  if [ "$USE_CACHED_DATA" -eq 1 ]; then
+    run python3 -m rdfc2im cache restore humanmine-model "$mdir" --cache-dir "$RAW_CACHE_DIR"
+    run env OFFLINE=1 MODEL_DIR="$mdir" CACHE="$UPSTREAM_CACHE" sh tools/make-inputs.sh
+  else
+    run env CACHE="$UPSTREAM_CACHE" sh tools/make-inputs.sh
+    run mkdir -p "$mdir"
+    run cp in/humanmine_model.xml in/humanmine_model.json "$mdir/"
+    run python3 -m rdfc2im cache save humanmine-model "$mdir" --cache-dir "$RAW_CACHE_DIR"
+  fi
 }
 
 # --intermine-src only. Builds the checkout's artefacts and publishes them into the private Maven
@@ -476,11 +494,24 @@ cache_meta_for() {
   return 0
 }
 
+# The gene-symbol -> id lookups `translate --genes` makes (scope.resolve_gene_ids) are cached as the
+# raw-data group gene-id-lookup, restored into / saved from $LOOKUP_DIR (the dir translate uses:
+# $RDFC2IM_RESOLVER_CACHE, else out/_resolver). Only these sources resolve symbols.
+LOOKUP_DIR=${RDFC2IM_RESOLVER_CACHE:-"$HERE/out/_resolver"}
+uses_lookup() { local s; for s in $SOURCES; do case " ncbigene hgnc clinvar ensembl gwascatalog " in *" $s "*) return 0 ;; esac; done; return 1; }
+lookup_meta() { printf -- '--meta taxon=%s --meta genes_md5=%s' "$TAXON" "$(md5sum "$GENE_PANEL" | cut -d' ' -f1)"; }
+
 phase_rdfc2im_pipeline() {
-  local venv_activate="$HERE/.venv/bin/activate"
-  [ -f "$venv_activate" ] || die "no .venv at $venv_activate - create one with pyyaml+lxml first"
-  # shellcheck disable=SC1090
-  source "$venv_activate"
+  activate_venv
+  if [ "$USE_CACHED_DATA" -eq 1 ]; then
+    export RDFC2IM_OFFLINE=1   # any network request now fails, naming what the cache lacks
+    if uses_lookup; then
+      # shellcheck disable=SC2046
+      run python3 -m rdfc2im cache restore gene-id-lookup "$LOOKUP_DIR" --cache-dir "$RAW_CACHE_DIR" $(lookup_meta)
+    fi
+  else
+    export RDFC2IM_RESOLVER_REFRESH=1   # a fetch run asks the network afresh, then saves the answers
+  fi
   for src in $SOURCES; do
     local flags; flags=$(scope_flags_for "$src")
     log "-- $src (scope=${SCOPE_MODE[$src]:-none}) --"
@@ -517,6 +548,10 @@ phase_rdfc2im_pipeline() {
     run python3 -m rdfc2im tsv --source "$src"
     run python3 -m rdfc2im items --source "$src"
   done
+  if [ "$USE_CACHED_DATA" -eq 0 ] && uses_lookup; then
+    # shellcheck disable=SC2046
+    run python3 -m rdfc2im cache save gene-id-lookup "$LOOKUP_DIR" --cache-dir "$RAW_CACHE_DIR" $(lookup_meta)
+  fi
 }
 
 phase_rdfc2im_project() {
