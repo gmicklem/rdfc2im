@@ -18,6 +18,7 @@ inputs:     ; sh tools/make-inputs.sh
 # Everything is published to 127.0.0.1 only; reach it with `ssh -L` (see LOAD-TRIAL.md).
 # `down` keeps the database volume; only `trial-destroy` throws it away.
 COMPOSE  ?= podman compose -f trial/docker-compose.yml
+# RDFC2IM_ARTIFACTS (default trial/artifacts) is read by tools/trial-stage.sh and trial/docker-compose.yml alike
 trial-stage:   ; sh tools/trial-stage.sh
 up:            ; $(COMPOSE) up -d
 down:          ; $(COMPOSE) down

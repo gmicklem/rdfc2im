@@ -310,6 +310,21 @@ already exists, whatever kind it is. This replaces creating the bind volumes by 
 Give the second stack its own `TRIAL_HOME` and `HOME` (the mine's
 `~/.intermine/humanmine.properties` carries the ports).
 
+`RDFC2IM_ARTIFACTS` is the directory `stage_artifacts` (`tools/trial-stage.sh`, `make trial-stage`) writes
+the exploded war (`humanmine/`) and BlueGenes' jars (`bluegenes-lib/`) to, and that
+`trial/docker-compose.yml` bind-mounts into the mine and BlueGenes containers [im-ore.21]. Unset it is
+`trial/artifacts` in the checkout for the default stack (as before); with `--stack-name` it is
+`$TRIAL_HOME/artifacts`. Before this the two stacks shared `trial/artifacts`, so a rebuild of the
+default stack replaced the war the named stack was serving (every query on its port then failed: the
+webapp fetches its own `query.xsd` from the other stack's `webapp.baseurl`). A stack that is already
+running keeps its old mount until it is recreated (`docker compose up -d`/`start_mine_stack` with the
+variable set). Still shared between stacks by design: the repository checkout (`out/<src>/`,
+generated items and TSV, which only matter during a build's `stage_src_data`/`integrate_sources`),
+`cached_raw_data/` and `in/.upstream` (read-only caches), the Docker images, and, unless
+`RDFC2IM_DATA_ROOT`, `LOG_DIR`, `HOME` or `GRADLE_USER_HOME` are set per stack, `/micklem/data`,
+`.build-logs/` and `~/.gradle`. Per stack through `TRIAL_HOME`: the mine and bio-sources checkouts,
+`bgdeps` (the BlueGenes jar resolution), `m2-intermine` and now `artifacts`.
+
 `RDFC2IM_DATA_ROOT` (default `/micklem/data`) is the directory the mine's source data lives under:
 `stage_src_data` symlinks each `out/<src>/items/<src>.xml` into `$RDFC2IM_DATA_ROOT/rdfc2im/<src>/`,
 the Reactome mapping goes to `$RDFC2IM_DATA_ROOT/reactome/current/`, and the mine checkout's copy of
@@ -589,7 +604,7 @@ Measured after a complete build:
 |---|---|
 | `in/.upstream` (upstream checkouts) | 150 MB |
 | `out/` (generated items, TSV, queries) | 257 MB |
-| `trial/artifacts` (exploded war + BlueGenes jars) | 177 MB |
+| `trial/artifacts`, or `$TRIAL_HOME/artifacts` per named stack (exploded war + BlueGenes jars) | 177 MB |
 | `$TRIAL_HOME` (mine checkout, bgdeps, logs) | 264 MB |
 | `/micklem` (staged source data) | 42 MB |
 | Docker images (postgres 14, solr 8.6.2, tomcat 8.5, temurin 17) | ~2.5 GB |

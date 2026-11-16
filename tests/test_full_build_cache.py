@@ -378,3 +378,29 @@ def test_compose_data_dirs_come_from_the_environment(tmp_path):
     assert bound["pgdata"]["name"] == "rdfc2im-x-pgdata"
     assert bound["pgdata"]["driver_opts"] == {"type": "none", "o": "bind", "device": "/d/pg"}
     assert bound["solrdata"]["driver_opts"] == {"type": "none", "o": "bind", "device": "/d/solr"}
+
+
+def test_stage_artifacts_is_per_stack(tmp_path):
+    """im-ore.21: a named stack stages into its own $TRIAL_HOME/artifacts; the default stack keeps trial/artifacts
+    (RDFC2IM_ARTIFACTS not passed on); an explicit RDFC2IM_ARTIFACTS wins."""
+    if not shutil.which("bash"):
+        return
+    base = dict(os.environ, TRIAL_HOME=str(tmp_path / "trial_home"), RUN_ID="test", LOG_DIR=str(tmp_path / "logs"),
+                PG_PORT="39001", SOLR_PORT="39002", MINE_PORT="39003", BG_PORT="39004")  # nothing else may hold them
+    base.pop("RDFC2IM_ARTIFACTS", None)
+
+    def stage_cmd(extra_env, *args):
+        r = subprocess.run(["bash", "tools/full-build.sh", "--dry-run", "--only", "stage_artifacts", *args],
+                           cwd=ROOT, env=dict(base, **extra_env), capture_output=True, text=True)
+        out = r.stdout + r.stderr
+        if r.returncode != 0 and "[check_prereqs] FATAL" in out:
+            return None
+        assert r.returncode == 0, out
+        return next(c for c in _cmds(out) if "tools/trial-stage.sh" in c)
+
+    named = stage_cmd({}, "--stack-name", "zz")
+    if named is None:
+        return
+    assert f"RDFC2IM_ARTIFACTS={tmp_path}/trial_home/artifacts " in named, named
+    assert "RDFC2IM_ARTIFACTS" not in stage_cmd({}), "the default stack keeps the compose file's ./artifacts"
+    assert "RDFC2IM_ARTIFACTS=/x/art " in stage_cmd({"RDFC2IM_ARTIFACTS": "/x/art"}, "--stack-name", "zz")

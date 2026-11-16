@@ -101,6 +101,11 @@
 #                     mounted by trial/docker-compose.yml's volumes (created by start_databases).
 #                     Default unset: ordinary named Docker volumes under /var/lib/docker. Set them
 #                     before the stack's first start_databases (an existing volume keeps its kind).
+#   RDFC2IM_ARTIFACTS Directory stage_artifacts writes the exploded war (humanmine/) and BlueGenes' jars
+#                     (bluegenes-lib/) to, and the compose file bind-mounts into the mine and BlueGenes
+#                     containers [im-ore.21]. Default: trial/artifacts in the checkout for the default
+#                     stack, $TRIAL_HOME/artifacts with --stack-name - so a named stack's rebuild can
+#                     never replace the webapp another stack is serving.
 #   GRADLE_USER_HOME  Gradle's user home: caches, daemons, gradle.properties (default $HOME/.gradle).
 #                     Passed, with -Duser.home=$HOME in JAVA_TOOL_OPTIONS, to every Gradle call -
 #                     JDK 8 takes user.home from the passwd entry and ignores $HOME, so a private HOME
@@ -296,6 +301,12 @@ COMPOSE_ENV=(env PG_PORT="$PG_PORT" SOLR_PORT="$SOLR_PORT" MINE_PORT="$MINE_PORT
 # ordinary named volumes). phase_start_databases creates them.
 [ -n "${RDFC2IM_PGDATA:-}" ] && COMPOSE_ENV+=(RDFC2IM_PGDATA="$RDFC2IM_PGDATA")
 [ -n "${RDFC2IM_SOLRDATA:-}" ] && COMPOSE_ENV+=(RDFC2IM_SOLRDATA="$RDFC2IM_SOLRDATA")
+# Staged webapp and BlueGenes jars, bind-mounted by the compose file. Per stack: a named stack's
+# own TRIAL_HOME, so one stack's rebuild cannot replace what another serves [im-ore.21]. The default
+# stack leaves it unset for the compose file's own ./artifacts (= trial/artifacts) default.
+ARTIFACTS_DIR=${RDFC2IM_ARTIFACTS:-}
+[ -n "$ARTIFACTS_DIR" ] || { [ -z "$STACK_NAME" ] || ARTIFACTS_DIR="$TRIAL_HOME/artifacts"; }
+[ -z "$ARTIFACTS_DIR" ] || COMPOSE_ENV+=(RDFC2IM_ARTIFACTS="$ARTIFACTS_DIR")
 
 # --intermine-src: versions read from the checkout, never guessed. IM_VERSION is what every
 # org.intermine module of that tree publishes (the version catalog; intermine/build.gradle on trees
@@ -1453,7 +1464,8 @@ GRADLE
 }
 
 phase_stage_artifacts() {
-  run env TRIAL_HOME="$TRIAL_HOME" PG_PORT="$PG_PORT" SOLR_PORT="$SOLR_PORT" sh tools/trial-stage.sh
+  run env TRIAL_HOME="$TRIAL_HOME" PG_PORT="$PG_PORT" SOLR_PORT="$SOLR_PORT" \
+      ${ARTIFACTS_DIR:+RDFC2IM_ARTIFACTS="$ARTIFACTS_DIR"} sh tools/trial-stage.sh
 }
 
 phase_start_mine_stack() {

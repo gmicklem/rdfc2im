@@ -5,14 +5,16 @@
 #   TRIAL_HOME  where the mine was built (contains humanmine/ and bgdeps/)
 #   PG_PORT     host port the war's DB address uses (default 15432)
 #   SOLR_PORT   host port the mine's Solr URLs use (default 8983)
+#   RDFC2IM_ARTIFACTS  where to stage (default trial/artifacts); the compose file reads the same
+#               variable, so each stack (tools/full-build.sh --stack-name) stages its own copy
 #
 # Produces, all gitignored:
-#   trial/artifacts/humanmine/       the webapp, exploded, with its DB host patched
-#   trial/artifacts/bluegenes-lib/   BlueGenes and its 178 runtime jars
+#   $RDFC2IM_ARTIFACTS/humanmine/       the webapp, exploded, with its DB host patched
+#   $RDFC2IM_ARTIFACTS/bluegenes-lib/   BlueGenes and its 178 runtime jars
 set -eu
 
 HERE=$(cd "$(dirname "$0")/.." && pwd)
-ART=$HERE/trial/artifacts
+ART=${RDFC2IM_ARTIFACTS:-$HERE/trial/artifacts}
 TRIAL_HOME=${TRIAL_HOME:-}
 [ -n "$TRIAL_HOME" ] || { [ -f "$HERE/.trial-home" ] && TRIAL_HOME=$(cat "$HERE/.trial-home"); }
 [ -n "$TRIAL_HOME" ] || { echo "trial-stage: set TRIAL_HOME (or write it to .trial-home)" >&2; exit 1; }

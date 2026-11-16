@@ -17,6 +17,11 @@
 #                         and service, so a second `up` in the same project recreates the first
 #                         stack's containers instead of starting new ones.
 #   PG_PORT, SOLR_PORT, MINE_PORT, BG_PORT   host ports (defaults 15432, 8983, 8090, 5000)
+#   RDFC2IM_ARTIFACTS     directory holding the staged humanmine/ (exploded war) and bluegenes-lib/ that
+#                         the mine and BlueGenes containers mount (default ./artifacts, next to this
+#                         file). Per stack: tools/full-build.sh --stack-name points it at
+#                         $TRIAL_HOME/artifacts, so two stacks never share (and overwrite) a webapp
+#                         [im-ore.21]. `make trial-stage` writes to the same place when it is set.
 #   RDFC2IM_PGDATA, RDFC2IM_SOLRDATA   absolute host directories to keep the PostgreSQL and Solr
 #                         data in (they must exist; the Compose volume binds them). Unset (the
 #                         default) the data lives in ordinary named Docker volumes, under
@@ -109,7 +114,7 @@ services:
     volumes:
       # exploded webapp; its two properties files are patched at stage time to point
       # at the `postgres` service rather than the host's published port
-      - ./artifacts/humanmine:/usr/local/tomcat/webapps/humanmine:ro
+      - ${RDFC2IM_ARTIFACTS:-./artifacts}/humanmine:/usr/local/tomcat/webapps/humanmine:ro
       # listens on MINE_PORT (8090), not 8080: InterMine fetches its own query.xsd from
       # webapp.baseurl (http://localhost:<MINE_PORT>), so the port INSIDE the container must
       # equal the published one or every query-service call fails with "Connection refused"
@@ -146,7 +151,7 @@ services:
       HIDE_REGISTRY_MINES: "true"
       LOGGING_LEVEL: "info"
     volumes:
-      - ./artifacts/bluegenes-lib:/opt/bluegenes/lib:ro
+      - ${RDFC2IM_ARTIFACTS:-./artifacts}/bluegenes-lib:/opt/bluegenes/lib:ro
     working_dir: /opt/bluegenes
     # BlueGenes hardcodes its Jetty bind to 0.0.0.0 (no :host in run-jetty), which is fine
     # here: the container's netns confines it, and podman publishes only to loopback.
