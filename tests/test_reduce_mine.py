@@ -103,6 +103,42 @@ def test_constraint_expression_resolves_once_parsed(tmp_path):
     assert reduce_mine.resolve_path(classes, extends, "Gene", reduce_mine.constraint_path(expr))
 
 
+# ------------------------------------------------------------------ webconfig fieldconfigs
+
+WEBCONFIG = """<webconfig>
+  <class className="org.intermine.model.bio.Gene">
+    <fields>
+      <fieldconfig fieldExpr="symbol"/>
+      <fieldconfig fieldExpr="organism.name"/>
+      <fieldconfig fieldExpr="firstAuthor"/>
+      <fieldconfig fieldExpr="organism.nosuchfield"/>
+    </fields>
+  </class>
+  <class className="org.intermine.model.bio.ProteinDomain">
+    <fields><fieldconfig fieldExpr="name"/></fields>
+  </class>
+  <widgets/>
+</webconfig>
+"""
+
+
+def test_webconfig_drops_fieldconfigs_the_model_cannot_resolve(tmp_path, capsys):
+    """im-ore.22: the real webconfig-model.xml has <class> elements directly under <webconfig>.
+    The step looked for a <classes> wrapper, never found it and so kept GWAS.firstAuthor, which
+    the demo model lacks: 3,118 PathExceptions in a mine log.  Resolvable fields stay; classes
+    the model lacks are left untouched."""
+    model = tmp_path / "genomic_model.xml"
+    model.write_text(MODEL)
+    wc = tmp_path / "webconfig-model.xml"
+    wc.write_text(WEBCONFIG)
+    reduce_mine.cmd_webconfig([str(wc), str(model)])
+    out = wc.read_text()
+    assert 'fieldExpr="symbol"' in out and 'fieldExpr="organism.name"' in out
+    assert "firstAuthor" not in out and "nosuchfield" not in out
+    assert "ProteinDomain" in out
+    assert "2 fieldconfig(s) (Gene.firstAuthor, Gene.organism.nosuchfield)" in capsys.readouterr().out
+
+
 # ------------------------------------------------------------------ objectstoresummary
 
 def test_objectstoresummary_keeps_config_keys_and_drops_absent_classes(tmp_path):

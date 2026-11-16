@@ -233,23 +233,28 @@ def cmd_webconfig(args):
     root = t.getroot()
 
     dropped_classes = []
-    classes_el = root.find("classes")
+    dropped_fields = []
+    # HumanMine's webconfig-model.xml keeps its <class> elements directly under <webconfig>; the
+    # <classes> wrapper this function used to look up does not exist in it, so for months the
+    # class and fieldconfig checks never ran and e.g. GWAS.firstAuthor stayed in the web config
+    # (3,118 "Web config contains a bad path!" PathExceptions in a demo mine log, im-ore.22).
+    # Accept both shapes.  Class elements for classes the model lacks are left alone: the webapp
+    # has always loaded them without complaint, and dropping them is a change nobody has run.
     class_by_name = {}
-    if classes_el is not None:
-        for c in list(classes_el):
+    for parent in [root] + root.findall("classes"):
+        for c in parent.findall("class"):
             name = c.get("className", "").rsplit(".", 1)[-1]
             if name in classes:
                 class_by_name[name] = c
-                continue
-            dropped_classes.append(name)
-            classes_el.remove(c)
-        # A fieldExpr can reference a field of a class kept above but no longer resolvable if
-        # that field's own type was dropped - re-check now that dropped_classes is final.
-        for name, c in list(class_by_name.items()):
-            for fc in c.iter("fieldconfig"):
-                expr = fc.get("fieldExpr")
-                if expr and not resolve_path(classes, extends, name, expr):
-                    c.remove(fc)
+    # A fieldExpr can name a field the model does not have (the RDF-built demo model lacks
+    # GWAS.firstAuthor) or one of a class kept above whose own type was dropped: a path the
+    # webapp cannot resolve is logged as a PathException on every summary request.
+    for name, c in class_by_name.items():
+        for fc in list(c.iter("fieldconfig")):
+            expr = fc.get("fieldExpr")
+            if expr and not resolve_path(classes, extends, name, expr):
+                dropped_fields.append(f"{name}.{expr}")
+                fc.getparent().remove(fc)
 
     dropped_widgets = []
     widgets_el = root.find("widgets")
@@ -277,6 +282,8 @@ def cmd_webconfig(args):
     t.write(path, xml_declaration=True, encoding="UTF-8", pretty_print=True)
     print(f"reduce_mine webconfig: dropped {len(dropped_classes)} class(es)"
           + (" (" + ", ".join(dropped_classes) + ")" if dropped_classes else "")
+          + f", {len(dropped_fields)} fieldconfig(s)"
+          + (" (" + ", ".join(dropped_fields) + ")" if dropped_fields else "")
           + f", {len(dropped_widgets)} widget(s)"
           + (" (" + ", ".join(dropped_widgets) + ")" if dropped_widgets else ""))
 
