@@ -277,6 +277,56 @@ test-live` 17/17. The war holds only 5.1.1 `intermine-*`/`bio-*` jars.
 `build_webapp` 10 s), `make test-live` 17/17, `template.do` returns 200 with a full page and the
 mine's log has no `JasperException`.
 
+#### When the InterMine catalog moves to 6.0.0
+
+Everything that says "5.1.1" is a *value read from the checkout*, not a constant of the script.
+`IM_VERSION` is `intermine = "..."` in the checkout's `gradle/libs.versions.toml` (older trees:
+`intermine/build.gradle`), and `_pin_intermine_version` rewrites `systemProp.imVersion` and
+`systemProp.bioVersion` in the copied mine and bio-sources `gradle.properties` to it. That is why
+the log reads "InterMine 5.1.1, 6.0 line": the version is still 5.1.1, while the *line*, chosen by
+the checkout's Gradle being 8.x, is 6.0. When the maintenance branch's catalog says `6.0.0`:
+
+- **`tools/full-build.sh` needs no edit.** The artefacts are published and resolved at
+  `IM_VERSION` (`publish_intermine`, `-Dmaven.repo.local=$TRIAL_HOME/m2-intermine`), and the
+  version in `plugin/build.gradle` must equal the catalog's or the script exits 2 ("plugin version
+  ... differs from the catalog's"). The `5.0.8`/`5.0.+` fallbacks in `_install_reactome_jar` apply
+  only without `--intermine-src`.
+- **The `gmicklem/humanmine` fork's `gradle.properties` says 5.1.1** (`systemProp.imVersion` and
+  `systemProp.bioVersion`). The build overwrites both in its copy, so it works unchanged; bump
+  them in the fork to `6.0.0` anyway, so that a build of the fork outside this script, and a diff
+  against what the script writes, agree. The same goes for `humanmine-bio-sources`, pinned by the
+  same function. `systemProp.blueGenesVersion` is independent.
+- If the fork gets a release branch or tag for 6.0.0, point `HUMANMINE_60_REF` at it (default
+  `maint-2026`). An existing `in/.upstream/humanmine-6.0` is never pulled: delete it to pick up a
+  new ref.
+- `IM_LINE` stays `6.0` (decided by Gradle 8.x, not by the number). Redo and re-record the figures
+  above that name 5.1.1: web service version 35 and the "war holds only 5.1.1 jars" check (the war's
+  `WEB-INF/lib` and `$TRIAL_HOME/m2-intermine` carry the version in the file names).
+
+#### A first run without network: `HUMANMINE_60_URL`
+
+On the 6.0 line the mine's converted build files come from a clone of the fork in
+`$UPSTREAM_CACHE/humanmine-6.0` (default `in/.upstream/humanmine-6.0`). `_copy_mine_60` clones
+`$HUMANMINE_60_URL` at `$HUMANMINE_60_REF` only when that directory has no `.git`; an existing
+clone is used as it is, with no fetch or pull, and the log line `6.0 line: mine checkout = ...`
+names its commit. On a machine that cannot reach GitHub, either:
+
+```sh
+# 1. point the URL at a clone you already have (a plain path works; git warns that --depth is
+#    ignored for local clones). REF must be a local branch or tag of that clone: `git clone
+#    --branch` does not see origin/* remote-tracking branches
+HUMANMINE_60_URL=/path/to/humanmine HUMANMINE_60_REF=maint-2026 \
+  tools/full-build.sh --use-cached-data --intermine-src ~/git/intermine
+
+# 2. or put the clone where the script looks; nothing is cloned and nothing needs the network
+git clone --branch maint-2026 /path/to/humanmine in/.upstream/humanmine-6.0
+```
+
+`--offline` does not cover this step by itself: it stops `make-inputs.sh` cloning, but a missing
+`in/.upstream/humanmine-6.0` is still cloned from `HUMANMINE_60_URL`, so supply one of the above
+first. Checked 2026-11-16: `git clone --depth 1 --branch maint-2026 <path of an existing clone>`
+works and yields `58fbf8f`, the commit of the 6.0-line run above.
+
 ### A second stack
 
 `--stack-name NAME` runs a second Compose stack beside the default one, for example the
