@@ -146,6 +146,10 @@ INTERMINE_SRC=${INTERMINE_SRC:-}
 # this branch of the HumanMine fork (see _upgrade_mine_build), not upstream master's.
 HUMANMINE_60_URL=${HUMANMINE_60_URL:-https://github.com/gmicklem/humanmine.git}
 HUMANMINE_60_REF=${HUMANMINE_60_REF:-maint-2026}
+# Likewise the bio sources: the maint-2026 branch of the humanmine-bio-sources fork is converted to
+# Gradle 8 / maven-publish / the 6.0.+ line, so the 6.0 line builds humanmine-items inside it [im-ore.23]
+HUMANMINE_BIO_60_URL=${HUMANMINE_BIO_60_URL:-https://github.com/gmicklem/humanmine-bio-sources.git}
+HUMANMINE_BIO_60_REF=${HUMANMINE_BIO_60_REF:-maint-2026}
 BIND_ADDR=${BIND_ADDR:-127.0.0.1}
 MINE_TITLE=${MINE_TITLE:-"rdfc2im: 113 gene food/drug-metabolism panel"}
 
@@ -644,10 +648,14 @@ phase_rdfc2im_project() {
 
 phase_build_humanmine_items() {
   local bio="$TRIAL_HOME/humanmine-bio-sources"
-  [ -d "$bio" ] || run cp -r "$UPSTREAM_CACHE/humanmine-bio-sources" "$bio"
+  if [ ! -d "$bio" ]; then
+    if [ "$IM_LINE" = "6.0" ]; then _copy_bio_sources_60 "$bio"; else run cp -r "$UPSTREAM_CACHE/humanmine-bio-sources" "$bio"; fi
+  fi
   # The dead JCenter/Bintray plugin in bio-source-humanmine-static fails Gradle's config phase
   # for every sibling project (confirmed live, LOAD-TRIAL.md). Not needed for this source list.
-  if grep -q "^[^#]*bio-source-humanmine-static" "$bio/settings.gradle" 2>/dev/null; then
+  # (The 6.0 line's fork has no such plugin, and its settings.gradle lists the include on a comma
+  # continued line that commenting out would break.)
+  if [ "$IM_LINE" != "6.0" ] && grep -q "^[^#]*bio-source-humanmine-static" "$bio/settings.gradle" 2>/dev/null; then
     run sed -i.bak "s/^\(.*bio-source-humanmine-static.*\)$/\/\/ \1  # disabled by full-build.sh: dead JCenter plugin/" \
         "$bio/settings.gradle"
   fi
@@ -962,6 +970,18 @@ _copy_mine_60() {
   run python3 tools/copy_tree.py "$clone" "$mine" --exclude .git
 }
 
+# The 6.0 line's humanmine-bio-sources: the converted maint-2026 branch of the fork (pins 6.0.+, Gradle 8.14.6,
+# maven-publish, java-target.gradle), cloned once into the upstream cache and copied (without .git) to $1.
+_copy_bio_sources_60() {
+  local bio=$1 clone="$UPSTREAM_CACHE/humanmine-bio-sources-6.0"
+  if [ ! -d "$clone/.git" ]; then
+    log "6.0 line: cloning $HUMANMINE_BIO_60_URL ($HUMANMINE_BIO_60_REF) for the converted bio-sources build files"
+    run git clone --depth 1 --quiet --branch "$HUMANMINE_BIO_60_REF" "$HUMANMINE_BIO_60_URL" "$clone"
+  fi
+  log "6.0 line: bio-sources checkout = $HUMANMINE_BIO_60_REF of $HUMANMINE_BIO_60_URL at $(git -C "$clone" log -1 --format='%h %s' 2>/dev/null | cut -c1-100)"
+  run python3 tools/copy_tree.py "$clone" "$bio" --exclude .git
+}
+
 # --intermine-src only: moves a copied Gradle-4.9 mine checkout (humanmine as of 2022) onto the
 # checkout's version and Gradle. Every change is a deployer_edit or a logged wrapper copy.
 _upgrade_mine_build() {
@@ -1016,6 +1036,12 @@ _upgrade_bio_sources_build() {
   local major=${IM_GRADLE_VERSION%%.*}
   _pin_intermine_version "$bio"
   _switch_gradle_wrapper "$bio"
+  if [ "$IM_LINE" = "6.0" ]; then
+    # $bio is already the converted fork (_copy_bio_sources_60): only the humanmine-items subproject,
+    # this repository's own Gradle-4.9 build file, still needs compile -> implementation.
+    _gradle7_configurations "$items/build.gradle"
+    return 0
+  fi
   if [ "$major" -ge 7 ]; then
     deployer_edit "$bio/build.gradle" "apply plugin: 'maven' -> 'maven-publish' plus a publication (maven removed in Gradle 7)" \
       -e "s/^\([[:space:]]*\)apply plugin: 'maven'[[:space:]]*\$/\1apply plugin: 'maven-publish'\n\1publishing { publications { maven(MavenPublication) { from components.java } } }/"
