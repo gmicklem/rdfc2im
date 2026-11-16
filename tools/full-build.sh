@@ -1209,6 +1209,18 @@ phase_build_dbmodel() {
   run bash -c "curl -sf 'http://localhost:$SOLR_PORT/solr/humanmine-search/update?commit=true' \
     -H 'Content-Type: application/json' -d '{\"delete\": {\"query\": \"*:*\"}}' >/dev/null || true"
   # os.production only - the userprofile database's own schema (savedtemplatequery, tag, ...)
+# The merged mine model that reduce_mine.py reads. Plugins before the maint-2026 rework copied it to
+# dbmodel/build/resources/main/; the maint-2026 plugin leaves it where mergeModels writes it,
+# dbmodel/build/im/mergeModels/ (found 2026-11-16: with the old path every reduce step died
+# "failed to load .../build/resources/main/genomic_model.xml" right after builddb).
+merged_model_xml() {
+  local f
+  for f in "$1/dbmodel/build/im/mergeModels/genomic_model.xml" "$1/dbmodel/build/resources/main/genomic_model.xml"; do
+    [ -f "$f" ] && { echo "$f"; return 0; }
+  done
+  echo "$1/dbmodel/build/resources/main/genomic_model.xml"   # not built yet (--dry-run): the traditional place
+}
+
   # is a SEPARATE task, never run anywhere else in this script. Without it the webapp's own
   # ActionServlet fails to initialise at startup ("userprofileOSW is null" - confirmed live),
   # InterMineContext never initialises, and every single request 500s with
@@ -1228,7 +1240,7 @@ phase_build_dbmodel() {
   source "$HERE/.venv/bin/activate"
   run python3 tools/reduce_mine.py priorities \
     "$mine/dbmodel/resources/genomic_priorities.properties" \
-    "$mine/dbmodel/build/resources/main/genomic_model.xml"
+    "$(merged_model_xml "$mine")"
   # Same "Reducing a mine" class of problem, different file and a much quieter failure:
   # objectstoresummary.config.properties names HPOTerm/InteractionTerm/ProteinDomain (and
   # Interaction/InteractionRegion) in a reduced build that loads none of them.
@@ -1244,7 +1256,7 @@ phase_build_dbmodel() {
            "$mine/dbmodel/build/resources/main/objectstoresummary.config.properties"; do
     [ -f "$f" ] || continue
     run python3 tools/reduce_mine.py objectstoresummary "$f" \
-      "$mine/dbmodel/build/resources/main/genomic_model.xml" \
+      "$(merged_model_xml "$mine")" \
       "$HERE/curation/autocomplete_override.properties"
   done
   # webconfig-model.xml is the remaining "Reducing a mine" file, and its failure is NOT cosmetic:
@@ -1255,7 +1267,7 @@ phase_build_dbmodel() {
   # widgets that cannot work (they reference data this build does not load) is what stops it.
   run python3 tools/reduce_mine.py webconfig \
     "$mine/webapp/src/main/webapp/WEB-INF/webconfig-model.xml" \
-    "$mine/dbmodel/build/resources/main/genomic_model.xml"
+    "$(merged_model_xml "$mine")"
 }
 
 phase_integrate_sources() {

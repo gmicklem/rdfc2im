@@ -3,7 +3,7 @@
 actually runs. See LOAD-TRIAL.md's "Reducing a mine" section for the four files this touches and
 why each one breaks differently if missed - this script is the not-yet-scripted step that section
 describes doing by hand. Always validate against the REAL merged model the mine actually built
-(dbmodel/build/resources/main/genomic_model.xml), never the live HumanMine model - a class core
+(dbmodel/build/im/mergeModels/ or build/resources/main/), never the live HumanMine model - a class core
 to HumanMine's full deployment can be entirely absent from a 9-source reduced build, and vice
 versa a class only some replaced source contributes can still be present.
 
