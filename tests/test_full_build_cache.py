@@ -64,6 +64,44 @@ def test_use_cached_data_restores_and_never_fetches(tmp_path):
     assert not any(" fetch " in c or "cache save" in c for c in cmds), cmds
 
 
+def test_gene_symbol_lookups_are_cached_and_restored_before_translate(tmp_path):
+    fetched = _plan(tmp_path, "--only", "rdfc2im_pipeline", "--sources", "go ncbigene")
+    restored = _plan(tmp_path, "--only", "rdfc2im_pipeline", "--sources", "go ncbigene", "--use-cached-data")
+    if fetched is None:
+        return
+    f, r = _cmds(fetched), _cmds(restored)
+    last_tsv = max(i for i, c in enumerate(f) if "rdfc2im tsv" in c)
+    save = next(i for i, c in enumerate(f) if "cache save gene-id-lookup" in c)
+    assert save > last_tsv and not any("cache restore gene-id-lookup" in c for c in f)
+    restore = next(i for i, c in enumerate(r) if "cache restore gene-id-lookup" in c)
+    assert restore < next(i for i, c in enumerate(r) if "rdfc2im translate" in c)
+    assert not any("cache save gene-id-lookup" in c for c in r)
+    md5 = hashlib.md5(open(PANEL, "rb").read()).hexdigest()
+    assert _meta(next(c for c in f if "cache save gene-id-lookup" in c)) == \
+        _meta(next(c for c in r if "cache restore gene-id-lookup" in c)) == sorted(["taxon=9606", f"genes_md5={md5}"])
+
+
+def test_no_lookup_cache_when_no_source_resolves_symbols(tmp_path):
+    plan = _plan(tmp_path, "--only", "rdfc2im_pipeline", "--sources", "go uniprot", "--use-cached-data")
+    if plan is None:
+        return
+    assert not any("gene-id-lookup" in c for c in _cmds(plan))
+
+
+def test_live_model_is_cached_and_restored(tmp_path):
+    fetched = _plan(tmp_path, "--only", "fetch_inputs")
+    restored = _plan(tmp_path, "--only", "fetch_inputs", "--use-cached-data")
+    if fetched is None:
+        return
+    f, r = _cmds(fetched), _cmds(restored)
+    assert any("sh tools/make-inputs.sh" in c and "OFFLINE" not in c for c in f)
+    assert any("cache save humanmine-model" in c for c in f)
+    assert not any("cache restore" in c for c in f)
+    assert any("cache restore humanmine-model" in c for c in r)
+    assert any("OFFLINE=1" in c and "sh tools/make-inputs.sh" in c for c in r)
+    assert not any("cache save" in c for c in r)
+
+
 def test_saved_and_required_scope_are_identical_for_every_source(tmp_path):
     """A restore that demanded different --meta than save recorded would refuse every time (or,
     worse, check nothing). Both modes must derive them from the same function."""
