@@ -660,6 +660,21 @@ that `JAVA8_HOME` really points at an 8.
 **`FATAL: no .venv at ... - create one with pyyaml+lxml first`** - see Prerequisites. The venv
 must be at the repository root.
 
+**`/service/model` shows `"term": ""` on some classes (GWAS, GWASResult, GOTerm, Disease, ECNumber,
+PathwayReaction on the demo mine).** The model is generated at build time, so a mine only drops
+those blank class terms (im-jqz.58) after it **rebuilds `bio/model`**: `publish_intermine` with
+`--intermine-src`, then `build_dbmodel`. Upgrading or restarting the webapp does not change them.
+The data is unaffected.
+
+**`Web config contains a bad path!` / `PathException: ... GWAS.firstAuthor` in the mine log
+(thousands of lines, one per summary request).** `webconfig-model.xml` still names a field the
+reduced model lacks (`GWAS.firstAuthor`, `GWASResult.study.firstAuthor`: the GWAS Catalog has no
+author, see `accepted_gaps` in `rdfc2im/data/sources.yaml`). The template SQL is not the cause;
+`tests/test_templates_model.py` checks `curation/demo_public_templates.sql` against the model.
+`tools/reduce_mine.py webconfig` now drops such `fieldconfig` entries (im-ore.22; before, it looked
+for a `<classes>` wrapper the file does not have and checked nothing). A running mine keeps the old
+file until `build_dbmodel` and `build_webapp` run again and the webapp is restarted.
+
 **Gradle appears to hang during `integrate_sources`, CPU pinned, no log output.** That is the
 OOM death-spiral: an `OutOfMemoryError` in a background prefetch thread that the daemon never
 surfaces. Check `~/.gradle/gradle.properties` actually contains
