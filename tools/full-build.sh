@@ -23,6 +23,13 @@
 #                       against its md5 first, and a cache fetched for a different gene panel,
 #                       taxon or source scope is refused. Without this option the data is fetched
 #                       and then saved there, so the next build can reuse it.
+#                       Network is still used for what is not cached: the upstream clones in
+#                       $UPSTREAM_CACHE are made when missing (and left alone when present, no pull).
+#   --offline           --use-cached-data plus a guarantee of no network request in the data
+#                       phases (fetch_inputs, rdfc2im_pipeline, rdfc2im_project): a SPARQL request
+#                       raises OfflineError naming the endpoint, a gene-symbol lookup missing from
+#                       the cache names the file, a missing upstream clone is an error. Implies
+#                       --use-cached-data. Also on when the caller exports RDFC2IM_OFFLINE=1.
 #   --cache-dir DIR     Where that cache lives (default: cached_raw_data/ in this repo).
 #   --reactome-levels L  "default" (the lowest-level UniProt2Reactome.txt Reactome publishes -
 #                       leaf pathways only) or "all" (UniProt2Reactome_All_Levels.txt: every
@@ -129,6 +136,8 @@ GENE_PANEL=${GENE_PANEL:-"$HERE/curation/demo_gene_panel.txt"}
 TAXON=${TAXON:-9606}
 SKIP_TEMPLATES=0
 USE_CACHED_DATA=0
+OFFLINE=0
+[ "${RDFC2IM_OFFLINE:-}" = 1 ] && { OFFLINE=1; USE_CACHED_DATA=1; }
 RAW_CACHE_DIR=${RAW_CACHE_DIR:-"$HERE/cached_raw_data"}
 REACTOME_LEVELS=${REACTOME_LEVELS:-default}
 DRY_RUN=0
@@ -223,6 +232,7 @@ while [ $# -gt 0 ]; do
     --taxon) TAXON=$2; shift ;;
     --skip-templates) SKIP_TEMPLATES=1 ;;
     --use-cached-data) USE_CACHED_DATA=1 ;;
+    --offline) OFFLINE=1; USE_CACHED_DATA=1 ;;
     --cache-dir) RAW_CACHE_DIR=$2; shift ;;
     --reactome-levels) REACTOME_LEVELS=$2; shift ;;
     --stack-name) STACK_NAME=$2; shift ;;
@@ -317,7 +327,7 @@ mkdir -p "$LOG_DIR"
 log "full-build.sh starting - run id $RUN_ID, log $LOGFILE, dry_run=$DRY_RUN"
 log "sources: $SOURCES"
 log "trial home: $TRIAL_HOME"
-log "raw-data cache: $RAW_CACHE_DIR (use_cached_data=$USE_CACHED_DATA)"
+log "raw-data cache: $RAW_CACHE_DIR (use_cached_data=$USE_CACHED_DATA offline=$OFFLINE)"
 if [ -n "$INTERMINE_SRC" ]; then
   log "intermine-src: $INTERMINE_SRC (InterMine $IM_VERSION, $IM_LINE line, mine Gradle $IM_GRADLE_VERSION${IM_GRADLE_SHA256:+, sha256 ${IM_GRADLE_SHA256:0:12}...})"
 else
@@ -412,7 +422,13 @@ phase_fetch_inputs() {
   local mdir="$TRIAL_HOME/live-model"
   if [ "$USE_CACHED_DATA" -eq 1 ]; then
     run python3 -m rdfc2im cache restore humanmine-model "$mdir" --cache-dir "$RAW_CACHE_DIR"
-    run env OFFLINE=1 MODEL_DIR="$mdir" CACHE="$UPSTREAM_CACHE" sh tools/make-inputs.sh
+    # The clones are not part of the cache: --use-cached-data clones a missing one and leaves a present
+    # one alone (CACHED=1); --offline (OFFLINE=1) makes a missing one an error.
+    if [ "$OFFLINE" -eq 1 ]; then
+      run env OFFLINE=1 CACHED=1 MODEL_DIR="$mdir" CACHE="$UPSTREAM_CACHE" sh tools/make-inputs.sh
+    else
+      run env CACHED=1 MODEL_DIR="$mdir" CACHE="$UPSTREAM_CACHE" sh tools/make-inputs.sh
+    fi
   else
     run env CACHE="$UPSTREAM_CACHE" sh tools/make-inputs.sh
     run mkdir -p "$mdir"
@@ -504,7 +520,11 @@ lookup_meta() { printf -- '--meta taxon=%s --meta genes_md5=%s' "$TAXON" "$(md5s
 phase_rdfc2im_pipeline() {
   activate_venv
   if [ "$USE_CACHED_DATA" -eq 1 ]; then
-    export RDFC2IM_OFFLINE=1   # any network request now fails, naming what the cache lacks
+    if [ "$OFFLINE" -eq 1 ]; then
+      export RDFC2IM_OFFLINE=1   # any network request now fails, naming what the cache lacks
+    else
+      unset RDFC2IM_OFFLINE
+    fi
     if uses_lookup; then
       # shellcheck disable=SC2046
       run python3 -m rdfc2im cache restore gene-id-lookup "$LOOKUP_DIR" --cache-dir "$RAW_CACHE_DIR" $(lookup_meta)

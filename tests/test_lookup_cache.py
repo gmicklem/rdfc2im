@@ -76,7 +76,7 @@ def test_offline_miss_fails_naming_the_missing_file(tmp_path, monkeypatch):
     assert r.calls == []
     msg = str(e.value)
     assert str(tmp_path / "lookup" / "resolve_ncbigene_symbols-9606-") in msg and "2 symbols" in msg
-    assert "--use-cached-data" in msg
+    assert "--offline" in msg
     assert not (tmp_path / "lookup").exists(), "an offline miss must not create anything"
 
 

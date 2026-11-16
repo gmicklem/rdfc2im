@@ -98,7 +98,9 @@ def test_live_model_is_cached_and_restored(tmp_path):
     assert any("cache save humanmine-model" in c for c in f)
     assert not any("cache restore" in c for c in f)
     assert any("cache restore humanmine-model" in c for c in r)
-    assert any("OFFLINE=1" in c and "sh tools/make-inputs.sh" in c for c in r)
+    mi = [c for c in r if "sh tools/make-inputs.sh" in c]
+    assert mi and all("CACHED=1" in c and "OFFLINE" not in c for c in mi), "cached is not offline"
+    assert not any(c for c in mi if "OFFLINE=1" in c)
     assert not any("cache save" in c for c in r)
 
 
@@ -281,3 +283,49 @@ def test_reactome_levels_rejects_an_unknown_value(tmp_path):
     r = subprocess.run(["bash", "tools/full-build.sh", "--dry-run", "--reactome-levels", "bogus"],
                        cwd=ROOT, capture_output=True, text=True)
     assert r.returncode != 0 and "reactome-levels" in (r.stdout + r.stderr)
+
+
+# --- --use-cached-data is not --offline [im-ore.17] ---------------------------------------------
+
+def _make_inputs_cmds(plan):
+    return [c for c in _cmds(plan) if "sh tools/make-inputs.sh" in c]
+
+
+def test_use_cached_data_alone_lets_make_inputs_clone_and_does_not_set_offline(tmp_path):
+    """The nightly runs --use-cached-data on a runner with no in/.upstream: the clones must be
+    allowed (CACHED=1, not OFFLINE=1) and the pipeline must not export RDFC2IM_OFFLINE."""
+    plan = _plan(tmp_path, "--only", "fetch_inputs", "--use-cached-data")
+    if plan is None:
+        return
+    mi = _make_inputs_cmds(plan)
+    assert mi and all("CACHED=1" in c and "OFFLINE" not in c for c in mi), mi
+    assert "offline=0" in plan
+
+
+def test_offline_implies_use_cached_data_and_forbids_clones(tmp_path):
+    plan = _plan(tmp_path, "--only", "fetch_inputs", "--offline")
+    if plan is None:
+        return
+    cmds = _cmds(plan)
+    assert any("cache restore humanmine-model" in c for c in cmds)
+    assert not any("cache save" in c for c in cmds)
+    mi = _make_inputs_cmds(plan)
+    assert mi and all("OFFLINE=1" in c and "CACHED=1" in c for c in mi), mi
+    assert "offline=1" in plan
+
+
+def test_offline_pipeline_restores_every_source_like_use_cached_data(tmp_path):
+    a = _plan(tmp_path, "--only", "rdfc2im_pipeline", "--sources", "go ncbigene", "--use-cached-data")
+    b = _plan(tmp_path, "--only", "rdfc2im_pipeline", "--sources", "go ncbigene", "--offline")
+    if a is None:
+        return
+    assert _cmds(a) == _cmds(b), "--offline differs from --use-cached-data only in the guards"
+
+
+def test_caller_exported_rdfc2im_offline_means_offline(tmp_path, monkeypatch):
+    monkeypatch.setenv("RDFC2IM_OFFLINE", "1")
+    plan = _plan(tmp_path, "--only", "fetch_inputs")
+    if plan is None:
+        return
+    assert "offline=1" in plan and "use_cached_data=1" in plan
+    assert any("cache restore humanmine-model" in c for c in _cmds(plan))

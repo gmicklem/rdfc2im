@@ -151,7 +151,8 @@ Useful options:
 | `--genes FILE` | Gene panel for the panel-scoped sources (default `curation/demo_gene_panel.txt`) |
 | `--taxon LIST` | NCBI taxon ids (default `9606`) |
 | `--skip-templates` | Do not apply `curation/demo_public_templates.sql` |
-| `--use-cached-data` | Restore the fetched raw data from `cached_raw_data/` instead of fetching it again; the data phases then run fully offline (see below) |
+| `--use-cached-data` | Restore the fetched raw data from `cached_raw_data/` instead of fetching it again. The upstream clones are not part of that cache: missing ones are cloned (needs network, e.g. a fresh CI runner), present ones are left as they are (see below) |
+| `--offline` | `--use-cached-data` plus a guarantee that the data phases make no network request at all; a missing upstream clone is an error. Implies `--use-cached-data`; also on when the caller exports `RDFC2IM_OFFLINE=1` (see below) |
 | `--cache-dir DIR` | Use `DIR` instead of `cached_raw_data/` |
 | `--reactome-levels default\|all` | Which of Reactome's own two files to load (see below); default `default` |
 | `--intermine-src DIR` | Build against the InterMine checkout `DIR` instead of the published 5.0.x artefacts (see "Building against a local InterMine checkout") |
@@ -307,12 +308,24 @@ sandbox it is on the host side of the workspace mount, and outlives the sandbox)
 tools/full-build.sh --use-cached-data
 ```
 
-restores it instead of asking the network: the data phases (`fetch_inputs`, `rdfc2im_pipeline`,
-`rdfc2im_project`) then make **no network request at all**. The build phases that follow still need
-the network for their tooling (Gradle and Maven downloads, Docker images, the 6.0 line's HumanMine
-clone) - that is not data and is not cached here.
+restores it instead of asking the network. There are two modes, because one input is not in the cache:
+the four upstream repositories cloned into `$UPSTREAM_CACHE` (default `in/.upstream`) are git's own
+cache, not part of `cached_raw_data/`, and a fresh checkout (the BlueGenes nightly CI runner, a new
+laptop) has none.
 
-Everything the data phases take from the network, and where `--use-cached-data` finds it:
+| Option | Cached inputs (SPARQL results, gene-id lookups, HumanMine model, Reactome map) | Upstream clones in `$UPSTREAM_CACHE` | Network needed by the data phases | Guards |
+|---|---|---|---|---|
+| none | fetched, then saved | cloned if missing, else `git pull` | yes | none |
+| `--use-cached-data` | restored from `cached_raw_data/` | cloned if missing, else left as they are (no pull) | only the clones, and only when missing | none: a lookup missing from the cache is asked from the network |
+| `--offline` (implies `--use-cached-data`) | restored from `cached_raw_data/` | must exist: a missing one stops the build | none | `RDFC2IM_OFFLINE=1` for the pipeline: any SPARQL request raises `OfflineError` naming the endpoint, a missing lookup names the file |
+
+`--offline` is the mode to use where a network request would be a bug (`unshare -rn tools/full-build.sh
+--only rdfc2im_pipeline --offline` runs in a namespace with no network at all); `--use-cached-data`
+is the everyday and CI mode. The build phases that follow the data phases still need the network for
+their tooling (Gradle and Maven downloads, Docker images, the 6.0 line's HumanMine clone) in both
+modes - that is not data and is not cached here.
+
+Everything the data phases take from the network, and where `--use-cached-data` / `--offline` finds it:
 
 | Fetched from | Phase | Saved as (fetch run) / read from (`--use-cached-data`) |
 |---|---|---|
@@ -320,10 +333,10 @@ Everything the data phases take from the network, and where `--use-cached-data` 
 | RDF Portal SPARQL, gene symbol -> NCBI/Ensembl id (`translate --genes`, `scope.resolve_gene_ids`) | `rdfc2im_pipeline` | `cached_raw_data/gene-id-lookup/` (keyed to taxon and gene-panel md5) |
 | humanmine.org `/service/model?format=xml,json` | `fetch_inputs` | `cached_raw_data/humanmine-model/` |
 | reactome.org `UniProt2Reactome[_All_Levels].txt` | `build_reactome_source` | `cached_raw_data/reactome-uniprot-map/` (keyed to `--reactome-levels`) |
-| GitHub: rdf-config, intermine, humanmine, humanmine-bio-sources | `fetch_inputs` | not in `cached_raw_data/`: the clones in `$UPSTREAM_CACHE` (default `in/.upstream`); offline, no pull is attempted and a missing clone stops the build |
+| GitHub: rdf-config, intermine, humanmine, humanmine-bio-sources | `fetch_inputs` | not in `cached_raw_data/`: the clones in `$UPSTREAM_CACHE` (default `in/.upstream`); `--use-cached-data` clones a missing one and never pulls, `--offline` makes no attempt and a missing clone stops the build |
 
 Nothing else in those phases is networked (`rdfc2im project`, `check`, `tsv`, `items`,
-`make fork-sync` are local). To be sure, `--use-cached-data` also exports `RDFC2IM_OFFLINE=1` for the
+`make fork-sync` are local). To be sure, `--offline` also exports `RDFC2IM_OFFLINE=1` for the
 pipeline phase: any SPARQL request that is still attempted stops with `RDFC2IM_OFFLINE=1: refusing a
 SPARQL request to <endpoint>`, and a gene-symbol lookup missing from the cache stops with the name of
 the missing file. A fetch run sets `RDFC2IM_RESOLVER_REFRESH=1`, so its lookups are asked afresh (not
@@ -645,6 +658,10 @@ there. Run once without the option to fetch afresh (which re-saves) - or, if the
 right and only its recorded `META.json` predates a newer `--meta` key rdfc2im/rawcache.py now checks
 (confirmed live for `levels`, see "A third run" above), edit `META.json`'s `meta` object by hand to add
 the missing key with its true value, then confirm with `cache verify` before trusting it.
+
+**`--offline` stops with `OFFLINE=1 and no clone .../in/.upstream/rdf-config`.** The upstream clones are
+not in `cached_raw_data/`. Run once with `--use-cached-data` (or with neither option) to make them, then
+`--offline` works. A CI runner that has the network should use `--use-cached-data`, not `--offline`.
 
 **`--use-cached-data` stops with `no cached data for gene-id-lookup` or `humanmine-model`.** The cache
 was filled before those two entries existed. Add them without re-fetching the sources: run

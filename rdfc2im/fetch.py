@@ -358,7 +358,7 @@ def _fetch_paged(q, ep, out_path, timeout, sleep, limit, page, log, t0):
 
 
 class OfflineError(RuntimeError):
-    """A network request was attempted while RDFC2IM_OFFLINE=1 (tools/full-build.sh --use-cached-data)."""
+    """A network request was attempted while RDFC2IM_OFFLINE=1 (tools/full-build.sh --offline)."""
 
 
 def offline() -> bool:
@@ -426,8 +426,8 @@ class _NoRedirectPost(urllib.request.HTTPRedirectHandler):
 def _request(ep: str, q: str, method: str, accept: str, timeout: int) -> bytes:
     if offline():
         raise OfflineError(f"RDFC2IM_OFFLINE=1: refusing a SPARQL request to {ep}. In offline mode "
-                           f"(--use-cached-data) the data must come from the cache, not the network: "
-                           f"restore it with `rdfc2im cache restore`, or run once without the option")
+                           f"(--offline) the data must come from the cache, not the network: "
+                           f"restore it with `rdfc2im cache restore`, or run without --offline")
     headers = {"Accept": accept, "User-Agent": "rdfc2im/0.2"}
     if method == "POST":
         req = urllib.request.Request(ep, data=urllib.parse.urlencode({"query": q}).encode(),

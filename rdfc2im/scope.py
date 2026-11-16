@@ -288,7 +288,7 @@ def resolve_gene_ids(resolver, symbols: List[str], taxon: str, cache_dir: str) -
     per line: read from there when present, else resolved live and saved there (written to a temp
     name, then renamed). RDFC2IM_RESOLVER_REFRESH=1 skips the read, so a fetch run (tools/
     full-build.sh without --use-cached-data) always asks the network afresh and re-saves.
-    RDFC2IM_OFFLINE=1 (--use-cached-data) never asks the network: a missing file is an error
+    RDFC2IM_OFFLINE=1 (--offline) never asks the network: a missing file is an error
     naming it. tools/full-build.sh keeps cache_dir in cached_raw_data/gene-id-lookup (checksummed).
     """
     key = hashlib.md5("\n".join(sorted(symbols)).encode("utf-8")).hexdigest()
@@ -300,7 +300,7 @@ def resolve_gene_ids(resolver, symbols: List[str], taxon: str, cache_dir: str) -
         return ids
     if offline():
         raise OfflineError(f"RDFC2IM_OFFLINE=1: no cached gene-symbol lookup {path} ({resolver.__name__}, "
-                           f"taxon {taxon}, {len(symbols)} symbols). Run once without --use-cached-data "
+                           f"taxon {taxon}, {len(symbols)} symbols). Run once without --offline "
                            f"to fetch and save it")
     ids = resolver(symbols, taxon=taxon)
     os.makedirs(cache_dir, exist_ok=True)
