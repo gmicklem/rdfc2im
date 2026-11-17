@@ -497,6 +497,42 @@ Load order in phase 11 is read back out of `project.xml` rather than re-decided,
 `alongside` sources (`uniprot`, `reactome`) must integrate *after* the stock source they
 supplement or they duplicate instead of merging.
 
+## The patched BlueGenes tool set [im-9n4.7]
+
+A BlueGenes started with `BLUEGENES_TOOL_PATH=<dir>` serves its tools from `<dir>/@intermine/<name>/` (the
+unpacked npm package) and `<dir>/tools.edn` (name -> version). The 2021 tarballs cached as
+`cached_raw_data/bluegenes-tools` are not usable as they stand on a 2026 mine: the protein visualizer
+searches RCSB's retired v1 endpoint, the MSA viewer posts to a host InterMine no longer runs (and its bundled
+`msa` library crashes in current browsers), and the JBrowse 2 tool is not on npm. HumanMine runs hand-patched
+copies; `tools/stage-bluegenes-tools.sh` (logic in `rdfc2im/bgtools.py`, standard library only) makes the same
+copies:
+
+```
+tools/stage-bluegenes-tools.sh --jbrowse2-src ../jbrowse2/bluegenes-tool --out $OUT/bluegenes-tools-patched \
+                               --install-to $TOOLS_DIR            # $TOOLS_DIR = BLUEGENES_TOOL_PATH
+```
+
+* Input: `--src-cache` (default `cached_raw_data/bluegenes-tools/data`, restore it first with
+  `rdfc2im cache restore bluegenes-tools <dir>` if it is not in place) plus the `repos/jbrowse2/bluegenes-tool`
+  checkout (its committed `dist/` is used; `--build WORKDIR` rebuilds it with `npm ci && npm run build` in a copy
+  and gives the same bytes).
+* Patches (ids in `patches.json`): `rcsb-v1-to-v2` (protein visualizer, bundle and source), `msa-same-origin`
+  (the aligner address becomes `""`, so the tool POSTs to `/align-sequence` on the BlueGenes origin),
+  `msa-array-at-crash`, `msa-legacy-wheel`, and `version-bump` to `<version>-patched.1` for the two patched
+  packages. Each edit names its anchor text and how often it must occur; any other count aborts with exit 1, so a
+  silent no-op cannot happen.
+* Output: 19 tarballs, `SHA256SUMS`, `patches.json`, byte-identical for the same inputs. The esyn viewer, which
+  HumanMine does not list, is left out and removed from `--install-to` if present.
+* The patched set is cached as `cached_raw_data/bluegenes-tools-patched` (`rdfc2im cache save`, META records source
+  versions, patch ids and sha256), so a build can also restore it and run `--install-to` alone with `--out`
+  pointing at the restored `data/` (install checks every tarball against `patches.json`).
+
+Phase `stage_artifacts` should call it after `tools/trial-stage.sh`, once, for the BlueGenes container's tool
+directory, e.g. `tools/stage-bluegenes-tools.sh --jbrowse2-src "$JBROWSE2_SRC" --out "$RDFC2IM_ARTIFACTS/bluegenes-tools-patched"
+--install-to "$RDFC2IM_ARTIFACTS/bluegenes-tools"` (and mount that directory at BlueGenes' `BLUEGENES_TOOL_PATH`).
+The MSA viewer still needs the aligner container and a `/align-sequence` route on the BlueGenes origin
+(sequence-alignment-service), and the protein visualizer and JBrowse 2 tool need the mine's protein/location data.
+
 ## Watching a build
 
 Every log line goes to the terminal and to `.build-logs/build-<run-id>.log` (in the repository,
