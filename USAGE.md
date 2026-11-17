@@ -132,6 +132,44 @@ postprocessor whose failure the plugin swallows so the exit code stays 0, a sour
 that drops an attribute only where two sources overlap. Each test in `tests/test_live_mine.py`
 names the specific bug it guards against.
 
+## Pre-filtering raw files to the gene panel (tools/subset_raw.py)
+
+The stock InterMine loaders (UniProt XML, GO annotation GAF, NCBI GFF3, FASTA, interaction and
+orthologue tab files) have no gene filter, so their raw files are cut down to the panel first.
+Python 3 standard library only, streaming, `.gz` read and written by suffix.
+
+```
+tools/subset_raw.py idsets --genes curation/demo_gene_panel.txt --out DIR [--items-root out] [--lookup-dir cached_raw_data/gene-id-lookup]
+tools/subset_raw.py filter --format gaf|gff3|uniprot-xml|fasta|tab|gene_info --in PATH --out PATH
+                           [--ids FILE] [--column N[,N...]] [--taxon ID] [--keep-comments]
+```
+
+`idsets` writes `entrez.txt`, `ensembl.txt`, `uniprot.txt`, `symbol.txt` (sorted, one id per line)
+and `idsets.json` (counts, md5 of the panel file, the inputs used). The ids come from the generated
+`<items-root>/{ncbigene,hgnc,ensembl,uniprot}/items/*.xml` (panel genes only) and the gene-id lookup
+cache. No `uniprot_reviewed.txt` is written, because the items do not say which proteins are
+Swiss-Prot.
+
+`filter` prints one JSON line (`format`, `records_in`, `records_out`, `ids_given`, `ids_matched`)
+and exits 0; a missing input, unknown format, or a format that needs `--ids` without one exits 2
+with a message on stderr. Output is written to a temporary name and renamed, so a failed run never
+leaves a half-written file.
+
+- `gaf`: `!` header lines, and rows whose column 2 is in `--ids` (an isoform id matches its base accession).
+- `gff3`: all `#` lines, features whose `Dbxref` has `GeneID:<id>`, plus every descendant by `Parent`
+  (even when children come first) and the ancestors of matching features. An embedded `##FASTA`
+  section is dropped. Two passes over the input.
+- `uniprot-xml`: root element, every `<entry>` with any `<accession>` in `--ids`, and the trailing
+  `<copyright>`. Entries are copied as text, so the output is byte-faithful and well-formed.
+- `fasta`: records whose header accession (`>sp|P10635-2|...` or `>ACC ...`) is in `--ids`; isoforms match on the base accession too.
+- `tab`: `--column` is 1-based; a row is kept when any listed column holds an id (whole cell, or one
+  of its `|`, `;`, `,` separated parts, with or without a `db:` prefix). Lines starting `#` are always kept;
+  `--keep-comments` also keeps the first line.
+- `gene_info`: header kept; `--taxon` keeps that tax_id; `--ids` (optional) also restricts the GeneID.
+  `--taxon 9606` alone gives the all-human-genes resolver file.
+
+Tests: `tests/test_subset_raw.py`, with fixtures and the sources of the real samples in `tests/fixtures/subset_raw/`.
+
 ## Not yet exercised
 
 `linkml-validate` is not wired into `check`. (`fetch` against the real endpoints and a real

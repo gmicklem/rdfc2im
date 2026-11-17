@@ -1,0 +1,12 @@
+##gff-version 3
+##sequence-region chr1 1 1000
+##sequence-region chr2 1 2000
+#!genome-build FIX1
+chr1	fix	exon	10	20	.	+	.	ID=exonA1;Parent=rnaA
+chr1	fix	CDS	12	20	.	+	.	Parent=rnaA;product=no%20id
+chr1	fix	mRNA	10	90	.	+	.	ID=rnaA;Parent=geneA
+chr1	fix	gene	10	100	.	+	.	ID=geneA;Dbxref=GeneID:111,HGNC:HGNC:1;Name=GENEA
+chr2	fix	exon	500	600	.	+	.	ID=exonC1;Parent=rnaC1,rnaC2
+chr2	fix	mRNA	500	700	.	+	.	ID=rnaC1;Parent=geneC
+chr2	fix	mRNA	500	800	.	+	.	ID=rnaC2;Parent=geneC
+chr2	fix	gene	500	900	.	+	.	ID=geneC;Dbxref=GeneID:333,HGNC:HGNC:3;Name=GENEC
