@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<items>
+  <item id="0_1" class="Gene" implements=""><attribute name="primaryIdentifier" value="1017"/><attribute name="symbol" value="CDK2"/></item>
+</items>

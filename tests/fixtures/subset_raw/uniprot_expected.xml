@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<uniprot xmlns="http://uniprot.org/uniprot" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://uniprot.org/uniprot http://www.uniprot.org/support/docs/uniprot.xsd">
+<entry dataset="Swiss-Prot" created="2000-01-01">
+<accession>P10635</accession>
+<accession>Q9UDA1</accession>
+<name>CP2D6_HUMAN</name>
+<protein><recommendedName><fullName>CP2D6_HUMAN &amp; co</fullName></recommendedName></protein>
+<sequence length="4">ACGT</sequence>
+</entry>
+<entry dataset="Swiss-Prot" created="2000-01-01">
+<accession>P04637</accession>
+<name>P53_HUMAN</name>
+<protein><recommendedName><fullName>P53_HUMAN &amp; co</fullName></recommendedName></protein>
+</entry>
+<copyright>
+Copyrighted by the UniProt Consortium, see https://www.uniprot.org/terms Distributed under the Creative Commons Attribution (CC BY 4.0) License
+</copyright>
+</uniprot>

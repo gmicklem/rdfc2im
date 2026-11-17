@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<items>
+  <item id="0_1" class="Gene" implements=""><attribute name="symbol" value="CDK2"/><collection name="proteins"><reference ref_id="0_3"/></collection></item>
+  <item id="0_2" class="Gene" implements=""><attribute name="symbol" value="NOTPANEL"/><collection name="proteins"><reference ref_id="0_5"/></collection></item>
+  <item id="0_3" class="Protein" implements=""><attribute name="primaryAccession" value="P24941"/><collection name="genes"><reference ref_id="0_1"/></collection></item>
+  <item id="0_4" class="Protein" implements=""><attribute name="primaryAccession" value="P04637"/><collection name="genes"><reference ref_id="0_6"/></collection></item>
+  <item id="0_5" class="Protein" implements=""><attribute name="primaryAccession" value="Q00000"/><collection name="genes"><reference ref_id="0_2"/></collection></item>
+  <item id="0_6" class="Gene" implements=""><attribute name="symbol" value="TP53"/></item>
+</items>

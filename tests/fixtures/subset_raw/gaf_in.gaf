@@ -1,0 +1,8 @@
+!gaf-version: 2.2
+!generated-by: fixture
+!date-generated: 2026-01-01
+UniProtKB	P10635	CYP2D6	enables	GO:0016491	GO_REF:0000002	IEA		F	name CYP2D6	CYP2D6	protein	taxon:9606	20260101	UniProt		
+UniProtKB	Q99999	NOPE	enables	GO:0003674	GO_REF:0000002	IEA		F	name NOPE	NOPE	protein	taxon:9606	20260101	UniProt		
+UniProtKB	P04637	TP53	enables	GO:0005515	GO_REF:0000002	IPI		F	name TP53	TP53	protein	taxon:9606	20260101	UniProt		
+UniProtKB	P10635	CYP2D6	enables	GO:0020037	GO_REF:0000002	IEA		F	name CYP2D6	CYP2D6	protein	taxon:9606	20260101	UniProt		
+UniProtKB	P01234	OTHER	enables	GO:0008150	GO_REF:0000002	IEA		F	name OTHER	OTHER	protein	taxon:9606	20260101	UniProt		

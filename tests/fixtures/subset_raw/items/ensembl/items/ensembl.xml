@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<items>
+  <item id="0_1" class="Gene" implements=""><attribute name="secondaryIdentifier" value="ENSG00000123374"/><attribute name="symbol" value="CDK2"/></item>
+  <item id="0_2" class="Gene" implements=""><attribute name="secondaryIdentifier" value="ENSG00000141510"/><attribute name="symbol" value="TP53"/></item>
+  <item id="0_3" class="Gene" implements=""><attribute name="secondaryIdentifier" value="ENSG00000000009"/><attribute name="symbol" value="NOTPANEL"/></item>
+</items>

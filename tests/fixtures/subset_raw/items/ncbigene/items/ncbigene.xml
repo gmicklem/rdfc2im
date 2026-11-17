@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<items>
+  <item id="0_1" class="Gene" implements=""><attribute name="primaryIdentifier" value="1017"/><attribute name="symbol" value="CDK2"/><attribute name="secondaryIdentifier" value="ENSG00000123374"/></item>
+  <item id="0_2" class="Gene" implements=""><attribute name="primaryIdentifier" value="7157"/><attribute name="symbol" value="TP53"/><attribute name="secondaryIdentifier" value="ENSG00000141510"/></item>
+  <item id="0_3" class="Gene" implements=""><attribute name="primaryIdentifier" value="9999"/><attribute name="symbol" value="NOTPANEL"/><attribute name="secondaryIdentifier" value="ENSG00000000009"/></item>
+  <item id="0_4" class="Organism" implements=""><attribute name="taxonId" value="9606"/></item>
+</items>
