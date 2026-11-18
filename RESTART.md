@@ -9,7 +9,7 @@ rdfc2im maps rdf-config models (DBCLS's machine-readable descriptions of RDF Por
 onto the InterMine data model, keeps that mapping as reviewable data with evidence per row, and
 loads the result with InterMine's stock Items XML loader - no per-source Java code. It was built
 at the DBCLS BioHackathon 2026 and demonstrated with a working HumanMine (9 rdfc2im sources, a
-113-gene food/drug-metabolism panel, plus the stock `reactome` source loaded alongside so that
+114-gene food/drug-metabolism panel, plus the stock `reactome` source loaded alongside so that
 `Pathway` connects to `Protein` and `Gene`) served live in containers. The work is written up as
 a BioHackrXiv report. The whole build is now one script, `tools/full-build.sh` - see `BUILD.md`.
 
@@ -108,7 +108,7 @@ below; STATUS.md is regenerated from `rdfc2im/docs.py`, which is where that text
 3. Give `GWASResult` a real integration key; review the DRAFT keys on `Pathway` and `MeshTerm`.
 4. Work out a safe way to retrofit `DataSource.url` onto an already-loaded mine (or accept that
    it only applies cleanly to fresh builds).
-5. Extend beyond the 113-gene panel: full-scale loads of the panel-limited sources, more of
+5. Extend beyond the 114-gene panel: full-scale loads of the panel-limited sources, more of
    HumanMine's ~40 datasets, the open mapping decisions (D1-D13 in `STATUS.md`).
 6. Wire up a `gene_scope_field` resolver (`rdfc2im/scope.py`) for any source beyond the six that
    already have one (ncbigene, hgnc, ensembl, uniprot, clinvar, gwascatalog).

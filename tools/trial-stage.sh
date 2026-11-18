@@ -47,12 +47,12 @@ if grep -rq "localhost:$PG_PORT" "$ART/humanmine/WEB-INF/classes/intermine.prope
 fi
 
 # The war also bakes in a generic project.title at build time. This trial's own display
-# name is specific to whatever this run happens to be demoing (currently the 113-gene
+# name is specific to whatever this run happens to be demoing (currently the 114-gene
 # food/drug-metabolism panel) - not something to bake into the war build itself, since
 # that source is shared with other contributors demoing other builds from the same repo.
 for f in WEB-INF/classes/intermine.properties WEB-INF/web.properties; do
     if [ -f "$ART/humanmine/$f" ]; then
-        sed -i 's|^project.title=.*|project.title=rdfc2im: 113 gene food/drug-metabolism panel|' \
+        sed -i 's|^project.title=.*|project.title=rdfc2im: 114 gene food/drug-metabolism panel|' \
             "$ART/humanmine/$f"
         echo "  patched $f project.title"
     fi

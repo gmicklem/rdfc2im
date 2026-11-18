@@ -99,7 +99,7 @@ def _write_status(ddir, per, ws, sources_cfg, out):
          "| `humanmine-items` source | done: stock intermine-items-**large**-xml-file under its own type name + generated keys/additions; no Java |",
          "| `linkml` (HumanMine LinkML schema with corrected field terms) | done - `curation/linkml/humanmine.yaml`; not yet used by `check` |",
          "| InterMine build + load | **done** - a working demonstration mine, 9 rdfc2im sources (`go`/`ncbigene`/`reactome` in full, "
-         "`hgnc`/`ensembl`/`uniprot`/`clinvar`/`gwascatalog` limited to a 113-gene panel, `pubmed` to their cited publications), "
+         "`hgnc`/`ensembl`/`uniprot`/`clinvar`/`gwascatalog` limited to a 114-gene panel, `pubmed` to their cited publications), "
          "plus the stock `reactome` source loaded alongside ours - it is what gives `Pathway` its `proteins` (and, via its own "
          "postprocessor, `Gene.pathways`), which our mapping never writes. Built by `tools/full-build.sh` (see `BUILD.md`) and "
          "served with BlueGenes; see LOAD-TRIAL.md, and `report/paper/paper.md` for the write-up (BH26JP BioHackrXiv report) |", "",
@@ -139,7 +139,7 @@ def _write_status(ddir, per, ws, sources_cfg, out):
           "", FINDINGS, "",
           "## Where this stands (2026-09-22)",
           "",
-          "A demonstration HumanMine was built end to end - 9 sources, a 113-gene food/drug-metabolism panel, served live "
+          "A demonstration HumanMine was built end to end - 9 sources, a 114-gene food/drug-metabolism panel, served live "
           "with BlueGenes in containers - and written up as a BH26JP BioHackrXiv report (`report/` submodule; the finished "
           "text is `report/paper/paper.md`, its Future Work section is the authoritative forward-looking list). Read the "
           "paper first for the why and the overall shape; LOAD-TRIAL.md is the detailed, chronological technical record "

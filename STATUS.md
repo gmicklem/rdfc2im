@@ -17,7 +17,7 @@
 | `check` | runs (mapping vs model, `via` ranges, items ref_ids, keys); passes with 0 hard problems |
 | `humanmine-items` source | done: stock intermine-items-**large**-xml-file under its own type name + generated keys/additions; no Java |
 | `linkml` (HumanMine LinkML schema with corrected field terms) | done - `curation/linkml/humanmine.yaml`; not yet used by `check` |
-| InterMine build + load | **done** - a working demonstration mine, 9 rdfc2im sources (`go`/`ncbigene`/`reactome` in full, `hgnc`/`ensembl`/`uniprot`/`clinvar`/`gwascatalog` limited to a 113-gene panel, `pubmed` to their cited publications), plus the stock `reactome` source loaded alongside ours - it is what gives `Pathway` its `proteins` (and, via its own postprocessor, `Gene.pathways`), which our mapping never writes. Built by `tools/full-build.sh` (see `BUILD.md`) and served with BlueGenes; see LOAD-TRIAL.md, and `report/paper/paper.md` for the write-up (BH26JP BioHackrXiv report) |
+| InterMine build + load | **done** - a working demonstration mine, 9 rdfc2im sources (`go`/`ncbigene`/`reactome` in full, `hgnc`/`ensembl`/`uniprot`/`clinvar`/`gwascatalog` limited to a 114-gene panel, `pubmed` to their cited publications), plus the stock `reactome` source loaded alongside ours - it is what gives `Pathway` its `proteins` (and, via its own postprocessor, `Gene.pathways`), which our mapping never writes. Built by `tools/full-build.sh` (see `BUILD.md`) and served with BlueGenes; see LOAD-TRIAL.md, and `report/paper/paper.md` for the write-up (BH26JP BioHackrXiv report) |
 
 ## Per-source status
 
@@ -135,7 +135,7 @@ D1 side-stepped (`typeOfGene` in `curation/extensions_additions.xml`); D2 `inSub
 
 ## Where this stands (2026-09-22)
 
-A demonstration HumanMine was built end to end - 9 sources, a 113-gene food/drug-metabolism panel, served live with BlueGenes in containers - and written up as a BH26JP BioHackrXiv report (`report/` submodule; the finished text is `report/paper/paper.md`, its Future Work section is the authoritative forward-looking list). Read the paper first for the why and the overall shape; LOAD-TRIAL.md is the detailed, chronological technical record (one section per source's first real load, in the order they were done) that the paper's Results and Table 3 are drawn from.
+A demonstration HumanMine was built end to end - 9 sources, a 114-gene food/drug-metabolism panel, served live with BlueGenes in containers - and written up as a BH26JP BioHackrXiv report (`report/` submodule; the finished text is `report/paper/paper.md`, its Future Work section is the authoritative forward-looking list). Read the paper first for the why and the overall shape; LOAD-TRIAL.md is the detailed, chronological technical record (one section per source's first real load, in the order they were done) that the paper's Results and Table 3 are drawn from.
 
 **The live demo mine does not persist if its machine or containers go away.** The data lives in the Docker named volumes `rdfc2im-pgdata` and `rdfc2im-solrdata`, not in the checkout. Rebuilding it is no longer a matter of working through LOAD-TRIAL.md by hand, though: it is one command, `tools/full-build.sh`, documented from scratch in `BUILD.md`. To preserve an already-loaded mine instead of reloading it, `pg_dump` the `humanmine-production` and `humanmine-userprofile` databases.
 

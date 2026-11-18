@@ -233,7 +233,7 @@ HUMANMINE_60_REF=${HUMANMINE_60_REF:-maint-2026}
 HUMANMINE_BIO_60_URL=${HUMANMINE_BIO_60_URL:-https://github.com/gmicklem/humanmine-bio-sources.git}
 HUMANMINE_BIO_60_REF=${HUMANMINE_BIO_60_REF:-maint-2026}
 BIND_ADDR=${BIND_ADDR:-127.0.0.1}
-MINE_TITLE=${MINE_TITLE:-"rdfc2im: 113 gene food/drug-metabolism panel"}
+MINE_TITLE=${MINE_TITLE:-"rdfc2im: 114 gene food/drug-metabolism panel"}
 
 # The demo panel this project actually built and verified this session (STATUS.md Table 2 /
 # LOAD-TRIAL.md). Each source's scope mode decides which rdfc2im CLI flags it gets in
