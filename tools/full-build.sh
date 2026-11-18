@@ -26,6 +26,9 @@
 #                       response: curation/humanmine_bluegenes_properties.json. Both write through the web service
 #                       as the superuser, so the mine must be up (they wait up to 5 minutes); BUILD.md,
 #                       "The report layout". Default off.
+#   --tools-url URL     The BlueGenes whose /api/tools/all lists the tools the layout may keep (default
+#                       http://localhost:$BG_PORT, the stack's bare BlueGenes, which has no patched tools; for the
+#                       ut demo give the front, http://localhost:15001). Also REPORT_LAYOUT_TOOLS_URL.
 #   --use-cached-data   Restore the fetched raw data (SPARQL results, the Reactome download) from
 #                       cached_raw_data/ instead of fetching it again. Every file is checked
 #                       against its md5 first, and a cache fetched for a different gene panel,
@@ -211,6 +214,7 @@ GENE_PANEL=${GENE_PANEL:-"$HERE/curation/demo_gene_panel.txt"}
 TAXON=${TAXON:-9606}
 SKIP_TEMPLATES=0
 REPORT_LAYOUT=""
+TOOLS_URL=${REPORT_LAYOUT_TOOLS_URL:-}
 USE_CACHED_DATA=0
 OFFLINE=0
 [ "${RDFC2IM_OFFLINE:-}" = 1 ] && { OFFLINE=1; USE_CACHED_DATA=1; }
@@ -314,6 +318,7 @@ while [ $# -gt 0 ]; do
     --taxon) TAXON=$2; shift ;;
     --skip-templates) SKIP_TEMPLATES=1 ;;
     --report-layout) REPORT_LAYOUT=$2; shift ;;
+    --tools-url) TOOLS_URL=$2; shift ;;
     --use-cached-data) USE_CACHED_DATA=1 ;;
     --offline) OFFLINE=1; USE_CACHED_DATA=1 ;;
     --cache-dir) RAW_CACHE_DIR=$2; shift ;;
@@ -2017,7 +2022,7 @@ phase_apply_templates() {
 # an entry whose template the mine does not serve.
 apply_report_layout() {
   [ -f "$REPORT_LAYOUT" ] || die "--report-layout: no such file: $REPORT_LAYOUT"
-  local mine="http://localhost:$MINE_PORT/humanmine" bg="http://localhost:$BG_PORT"
+  local mine="http://localhost:$MINE_PORT/humanmine" bg=${TOOLS_URL:-"http://localhost:$BG_PORT"}
   run python3 tools/apply_humanmine_templates.py "$(dirname "$REPORT_LAYOUT")/humanmine_templates.xml" --mine "$mine" --wait 300
   run python3 tools/apply_report_layout.py "$REPORT_LAYOUT" --mine "$mine" --bluegenes "$bg" --wait 300
 }
