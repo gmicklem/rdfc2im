@@ -29,9 +29,9 @@ def _fake_intermine_60(tmp_path):
     return str(src)
 
 
-def _run(tmp_path, *args, stock_dir=True):
+def _run(tmp_path, *args, stock_dir=True, env_extra=None):
     env = dict(os.environ, TRIAL_HOME=str(tmp_path / "trial_home"), RUN_ID="test",
-               LOG_DIR=str(tmp_path / "logs"))
+               LOG_DIR=str(tmp_path / "logs"), **(env_extra or {}))
     if stock_dir:
         env["RDFC2IM_STOCK_DIR"] = str(tmp_path / "stock")
     env.pop("RDFC2IM_STOCK_LOCAL", None)
@@ -40,9 +40,9 @@ def _run(tmp_path, *args, stock_dir=True):
     return r.returncode, r.stdout + r.stderr
 
 
-def _plan(tmp_path, *args):
+def _plan(tmp_path, *args, env_extra=None):
     """The dry-run log, or None where check_prereqs fails for reasons that are not ours."""
-    rc, out = _run(tmp_path, *args)
+    rc, out = _run(tmp_path, *args, env_extra=env_extra)
     if rc != 0 and "[check_prereqs] FATAL" in out and "stock" not in out.split("FATAL", 1)[1][:200]:
         return None
     assert rc == 0, out
@@ -150,7 +150,8 @@ def test_subset_filters_with_subset_raw_and_caches_by_gene_panel(tmp_path):
         assert f"--meta {k}" in save, (k, save)
     cached = _cmds(_plan(tmp_path, "--only", "subset_stock_data", "--use-cached-data", *_stock(tmp_path)),
                    "subset_stock_data")
-    assert not any("subset_raw.py filter" in c for c in cached), cached
+    # the stock files come from the filtered cache; only the resolver's entrez is always (re)made
+    assert not any("subset_raw.py filter" in c and "--format gene_info" not in c for c in cached), cached
     restore = next(c for c in cached if "cache restore stock-go-annotation " in c)
     assert "--meta genes_md5=" in restore and "--meta spec_md5=" in restore and "licence" not in restore
 
@@ -174,3 +175,70 @@ def test_the_jar_of_an_intermine_stock_source_comes_from_publish_intermine(tmp_p
     assert "UniProt2Reactome.txt" in plan                  # reactome is still built first
     old = _plan(tmp_path, "--only", "build_reactome_source", *_stock(tmp_path))
     assert "[build_stock_sources]" in old                   # the old phase name still works
+
+
+# ---- the ID-resolver gate (plan 50 2.2, T0.3)
+
+def _show(tmp_path, *args):
+    return _plan(tmp_path, *args, env_extra={"RDFC2IM_DRY_RUN_SHOW_WRITES": "1"})
+
+
+def test_an_empty_stock_list_leaves_resolver_steps_out_entirely(tmp_path):
+    for phase in ("fetch_stock_data", "subset_stock_data", "prepare_mine_checkout"):
+        plan = _show(tmp_path, "--only", phase)
+        if plan is None:
+            return
+        mine = [l for l in plan.splitlines() if f"[{phase}]" in l]
+        assert not any(w in l for l in mine for w in ("stock-raw-resolver", "gene_info", "idresolver", "/resolver")), (phase, mine)
+        assert "resolver.file.rootpath" not in plan
+
+
+def test_fetch_gets_gene_info_into_its_own_raw_group(tmp_path):
+    plan = _plan(tmp_path, "--only", "fetch_stock_data", *_stock(tmp_path))
+    if plan is None:
+        return
+    stock, cmds = tmp_path / "stock", _cmds(plan, "fetch_stock_data")
+    url = "https://ftp.ncbi.nlm.nih.gov/gene/DATA/GENE_INFO/Mammalia/Homo_sapiens.gene_info.gz"
+    dl = next(i for i, c in enumerate(cmds) if c.startswith("curl -fsSL") and c.endswith(url))
+    save = next(i for i, c in enumerate(cmds) if "cache save stock-raw-resolver " in c)
+    assert dl < save and f"--cache-dir {stock}/cache" in cmds[save], cmds
+    assert f"--meta url.gene_info={url}" in cmds[save] and "--meta redistributable=true" in cmds[save]
+    # every other raw group now carries the flag too, so check-release has something to read
+    assert any("cache save stock-raw-uniprot " in c for c in cmds)
+    cached = _cmds(_plan(tmp_path, "--only", "fetch_stock_data", "--use-cached-data", *_stock(tmp_path)),
+                   "fetch_stock_data")
+    assert any("cache verify stock-raw-resolver " in c and f"--meta url.gene_info={url}" in c for c in cached), cached
+    assert not any("curl" in c for c in cached)
+
+
+def test_subset_writes_the_all_human_gene_info_as_entrez_in_the_resolver_root(tmp_path):
+    plan = _plan(tmp_path, "--only", "subset_stock_data", *_stock(tmp_path))
+    if plan is None:
+        return
+    stock, cmds = tmp_path / "stock", _cmds(plan, "subset_stock_data")
+    flt = next(c for c in cmds if "subset_raw.py filter --format gene_info" in c)
+    assert f"--in {stock}/cache/stock-raw-resolver/data/Homo_sapiens.gene_info.gz" in flt
+    assert flt.endswith(f"--out {stock}/resolver/entrez --taxon 9606"), flt      # plain text, no --ids (D-1)
+    assert cmds.index(f"mkdir -p {stock}/resolver") < cmds.index(flt)
+    plan = _plan(tmp_path, "--only", "subset_stock_data", "--resolver-scope", "panel", *_stock(tmp_path))
+    flt = next(c for c in _cmds(plan, "subset_stock_data") if "subset_raw.py filter --format gene_info" in c)
+    assert flt.endswith(f"--taxon 9606 --ids {stock}/idsets/entrez.txt"), flt
+    rc, out = _run(tmp_path, "--only", "subset_stock_data", "--resolver-scope", "mouse", *_stock(tmp_path))
+    assert rc == 2 and "--resolver-scope wants panel or taxon" in out
+
+
+def test_the_mine_properties_name_the_resolver_root_and_stale_caches_go(tmp_path):
+    plan = _show(tmp_path, "--only", "prepare_mine_checkout", *_stock(tmp_path))
+    if plan is None:
+        return
+    stock = tmp_path / "stock"
+    assert f"\nresolver.file.rootpath={stock}/resolver\n" in plan
+    cmds = _cmds(plan, "prepare_mine_checkout")
+    assert any(c.startswith("find ") and "-name idresolver.cache" in c and c.endswith("-delete") for c in cmds), cmds
+    i_del = next(i for i, c in enumerate(cmds) if "idresolver.cache" in c)
+    i_write = next(i for i, c in enumerate(cmds) if c.startswith("write ") and "humanmine.properties" in c)
+    assert i_del < i_write < len(cmds)
+    base = _show(tmp_path, "--only", "prepare_mine_checkout")
+    n_base = int(re.search(r"humanmine.properties \((\d+) lines\)", base).group(1))
+    assert f"humanmine.properties ({n_base + 1} lines)" in plan
+

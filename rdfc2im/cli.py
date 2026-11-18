@@ -11,7 +11,7 @@
   rdfc2im linkml       curation/linkml/humanmine.yaml from humanmine_model.json + humanmine_model.xml
   rdfc2im docs         out/_docs/{STATUS.md, CURATION_GUIDE.md}
   rdfc2im all          allow + translate + tsv + items + project + check + docs  (fetch only with --fetch)
-  rdfc2im cache        save|restore|verify|list checksummed copies of fetched data in cached_raw_data/
+  rdfc2im cache        save|restore|verify|list|check-release checksummed copies of fetched data in cached_raw_data/
   rdfc2im stock        list|check|jars|files|postprocess|size|meta: the stock-source table
                        (rdfc2im/data/stock_sources.yaml) for full-build.sh --stock-sources
 
@@ -152,11 +152,18 @@ def _add_cache_parser(sub):
         c.add_argument("--meta", action="append", default=[], metavar="KEY=VALUE",
                        help="what the data was fetched for; on restore every KEY must match what "
                             "save recorded, or the restore is refused")
+        if name == "save":
+            c.add_argument("--for-release", action="store_true",
+                           help="refuse (exit 1, nothing written) unless --meta redistributable=true "
+                                "(or the group is a known pre-flag one: see rawcache.RELEASE_ALLOWED_UNFLAGGED)")
     c = cs.add_parser("verify", parents=[common], help="re-hash cached files against their MD5SUMS")
     c.add_argument("group", nargs="*", help="default: every entry")
     c.add_argument("--meta", action="append", default=[], metavar="KEY=VALUE",
                    help="also refuse an entry whose recorded KEY differs (as restore does)")
     cs.add_parser("list", parents=[common])
+    cs.add_parser("check-release", parents=[common],
+                  help="list every group with its redistributable/licence values; exit 1 if any may not "
+                       "go into a release asset (run before making the CI release tarball)")
 
 
 def run_cache(a) -> int:
@@ -168,7 +175,7 @@ def run_cache(a) -> int:
                 raise rawcache.CacheError(f"--meta wants KEY=VALUE, got {kv!r}")
             meta[k] = v
         if a.cache_cmd == "save":
-            i = rawcache.save(a.group, a.src_dir, a.cache_dir, meta)
+            i = rawcache.save(a.group, a.src_dir, a.cache_dir, meta, for_release=a.for_release)
             print(f"cache save {a.group}: {i['files']} files, {i['bytes']} bytes, verified -> {a.cache_dir}/{a.group}")
         elif a.cache_cmd == "restore":
             i = rawcache.restore(a.group, a.dest_dir, a.cache_dir, meta)
@@ -181,6 +188,16 @@ def run_cache(a) -> int:
             for g in names:
                 i = rawcache.verify(g, a.cache_dir, meta)
                 print(f"ok  {g}: {i['files']} files, {i['bytes']} bytes, cached {i['saved_at']}")
+        elif a.cache_cmd == "check-release":
+            rows = rawcache.release_report(a.cache_dir)
+            if not rows:
+                raise rawcache.CacheError(f"nothing cached in {a.cache_dir}/")
+            for g, ok, flag, lic, why in rows:
+                print(f"{'ok     ' if ok else 'REFUSED'}  {g}\tredistributable={flag}\tlicence={lic}\t{why}")
+            bad = [r[0] for r in rows if not r[1]]
+            if bad:
+                raise rawcache.CacheError(f"{len(bad)} group(s) may not go into a release asset: {' '.join(bad)}")
+            print(f"check-release: all {len(rows)} groups in {a.cache_dir}/ may go into a release asset")
         else:
             for g in rawcache.groups(a.cache_dir):
                 i = rawcache.verify(g, a.cache_dir)

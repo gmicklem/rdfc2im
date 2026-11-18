@@ -66,9 +66,23 @@
 #                       panel with tools/subset_raw.py (cache groups stock-<name>, keyed to genes_md5),
 #                       stage_src_data links the results into HumanMine's own data paths under the
 #                       data root, and rdfc2im project / reduce_mine.py keep their <source> entries.
+#                       With a non-empty list the build also gates its ID resolver (plan 50 2.2): fetch_stock_data
+#                       downloads NCBI's Homo_sapiens.gene_info.gz (cache group stock-raw-resolver),
+#                       subset_stock_data writes it, filtered, as $RDFC2IM_STOCK_DIR/resolver/entrez, and
+#                       prepare_mine_checkout sets resolver.file.rootpath to that directory in
+#                       humanmine.properties and deletes any stale idresolver.cache.
+#   --resolver-scope panel|taxon  What that entrez file holds: taxon (default) every gene of --taxon, so the
+#                       mine holds all human genes as identifiers and interaction/orthologue partners outside
+#                       the panel still resolve (plan 50 D-1); panel only the panel genes (strict subset).
 #   --stock-local DIR   Local copies of stock data: DIR/<source>/<raw file name>. Used instead of a
 #                       download when present; the only way in for a source that is not
 #                       redistributable (OMIM: D-7). Also RDFC2IM_STOCK_LOCAL.
+#   --jbrowse2-src DIR  The jbrowse2 bluegenes-tool checkout (also env JBROWSE2_SRC): stage_artifacts then
+#                       runs tools/stage-bluegenes-tools.sh, which writes the patched BlueGenes tool set to
+#                       <artifacts>/bluegenes-tools-patched and installs it to <artifacts>/bluegenes-tools
+#                       (BUILD.md, "The patched BlueGenes tool set"). Without it stage_artifacts is as before.
+#   --with-front        After the stack is up, start the aligner and nginx front (trial/front/up.sh). Off by
+#                       default.
 #   -h, --help          This text.
 #
 # Every side-effecting external command (gradle, docker, psql, curl) is emitted through `run`,
@@ -186,6 +200,9 @@ RAW_CACHE_DIR=${RAW_CACHE_DIR:-"$HERE/cached_raw_data"}
 REACTOME_LEVELS=${REACTOME_LEVELS:-default}
 STOCK_SOURCES=${STOCK_SOURCES:-}
 STOCK_LOCAL=${RDFC2IM_STOCK_LOCAL:-}
+RESOLVER_SCOPE=taxon
+JBROWSE2_SRC=${JBROWSE2_SRC:-}
+WITH_FRONT=0
 DRY_RUN=0
 LIST_PHASES=0
 FROM_PHASE=""
@@ -285,6 +302,9 @@ while [ $# -gt 0 ]; do
     --intermine-src) INTERMINE_SRC=$2; shift ;;
     --stock-sources) STOCK_SOURCES=$2; shift ;;
     --stock-local) STOCK_LOCAL=$2; shift ;;
+    --resolver-scope) RESOLVER_SCOPE=$2; shift ;;
+    --jbrowse2-src) JBROWSE2_SRC=$2; shift ;;
+    --with-front) WITH_FRONT=1 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "unknown option: $1" >&2; usage; exit 2 ;;
   esac
@@ -296,6 +316,10 @@ done
 [ "$FROM_PHASE" = build_reactome_source ] && FROM_PHASE=build_stock_sources
 [ "$ONLY_PHASE" = build_reactome_source ] && ONLY_PHASE=build_stock_sources
 STOCK_SOURCES=$(echo ${STOCK_SOURCES//,/ })   # one space between names; commas allowed
+case "$RESOLVER_SCOPE" in
+  panel|taxon) ;;
+  *) echo "--resolver-scope wants panel or taxon, not '$RESOLVER_SCOPE'" >&2; exit 2 ;;
+esac
 
 case "$REACTOME_LEVELS" in
   default|all) ;;
@@ -326,6 +350,11 @@ DATA_ROOT=${RDFC2IM_DATA_ROOT:-/micklem/data}; DATA_ROOT=${DATA_ROOT%/}
 # asset): only the small filtered groups of redistributable sources go there.
 STOCK_DIR=${RDFC2IM_STOCK_DIR:-"$DATA_ROOT/_stock"}; STOCK_DIR=${STOCK_DIR%/}
 STOCK_RAW_CACHE="$STOCK_DIR/cache"
+# The ID resolver's data directory (resolver.file.rootpath): EntrezGeneIdResolverFactory reads
+# $RESOLVER_ROOT/entrez, plain text in NCBI gene_info format (plan 50 2.2). Only used with --stock-sources.
+RESOLVER_ROOT="$STOCK_DIR/resolver"
+RESOLVER_URL=https://ftp.ncbi.nlm.nih.gov/gene/DATA/GENE_INFO/Mammalia/Homo_sapiens.gene_info.gz
+RESOLVER_GROUP=stock-raw-resolver
 PG_CONTAINER="$RDFC2IM_PREFIX-postgres"
 SOLR_CONTAINER="$RDFC2IM_PREFIX-solr"
 MINE_CONTAINER="$RDFC2IM_PREFIX-mine"
@@ -991,6 +1020,7 @@ phase_fetch_stock_data() {
   [ -n "$STOCK_SOURCES" ] || { log "no --stock-sources: nothing to fetch"; return 0; }
   activate_venv
   local rows src fid origin url raw unpack member fmt ids col taxon keep work kind sdir sname
+  _fetch_resolver_data
   rows=$(_stock_files)
   for src in $STOCK_SOURCES; do
     local group="stock-raw-$src" urls=() fids=() raws=() whole=0
@@ -1034,9 +1064,46 @@ phase_fetch_stock_data() {
     for i in "${!urls[@]}"; do
       run curl -fsSL --retry 3 --retry-delay 10 -o "$incoming/${raws[$i]}" "${urls[$i]}"
     done
-    run python3 -m rdfc2im cache save "$group" "$incoming" --cache-dir "$STOCK_RAW_CACHE" "${save_meta[@]}"
+    # shellcheck disable=SC2046  # --meta k=v words without whitespace
+    run python3 -m rdfc2im cache save "$group" "$incoming" --cache-dir "$STOCK_RAW_CACHE" "${save_meta[@]}" \
+      $(python3 -m rdfc2im stock meta "$src" --record)
     run rm -rf "$incoming"
   done
+}
+
+# The ID resolver's gene_info (plan 50 2.2): one raw cache group, stock-raw-resolver, beside the stock
+# sources', fetched under the same rules (Last-Modified check, --use-cached-data only verifies). Public
+# domain (NCBI), so the group says redistributable=true; it lives in the stock cache, not cached_raw_data/.
+_fetch_resolver_data() {
+  local raw; raw=$(basename "$RESOLVER_URL")
+  local meta=(--meta "url.gene_info=$RESOLVER_URL")
+  if [ "$USE_CACHED_DATA" -eq 1 ]; then
+    if [ -f "$STOCK_RAW_CACHE/$RESOLVER_GROUP/META.json" ] || [ "$DRY_RUN" -eq 1 ]; then
+      run python3 -m rdfc2im cache verify "$RESOLVER_GROUP" --cache-dir "$STOCK_RAW_CACHE" "${meta[@]}"
+    else
+      die "resolver: nothing cached in $STOCK_RAW_CACHE/$RESOLVER_GROUP - run once without --use-cached-data/--offline"
+    fi
+    return 0
+  fi
+  local lm
+  if [ "$DRY_RUN" -eq 1 ]; then
+    log "+ curl -fsSIL $RESOLVER_URL  (its Last-Modified)"; lm=dry-run
+  else
+    lm=$(_last_modified "$RESOLVER_URL")
+  fi
+  meta+=(--meta "last_modified.gene_info=$lm")
+  if [ "$DRY_RUN" -eq 0 ] && [ "$lm" != unknown ] && [ -f "$STOCK_RAW_CACHE/$RESOLVER_GROUP/META.json" ] &&
+     python3 -m rdfc2im cache verify "$RESOLVER_GROUP" --cache-dir "$STOCK_RAW_CACHE" "${meta[@]}" >/dev/null 2>&1; then
+    log "resolver: cached gene_info is current (same URL and Last-Modified) - not fetched again"
+    return 0
+  fi
+  local incoming="$STOCK_DIR/incoming/resolver"
+  run rm -rf "$incoming"
+  run mkdir -p "$incoming"
+  run curl -fsSL --retry 3 --retry-delay 10 -o "$incoming/$raw" "$RESOLVER_URL"
+  run python3 -m rdfc2im cache save "$RESOLVER_GROUP" "$incoming" --cache-dir "$STOCK_RAW_CACHE" "${meta[@]}" \
+    --meta redistributable=true --meta licence=public_domain_NCBI
+  run rm -rf "$incoming"
 }
 
 # Where a source's filtered cache group lives: cached_raw_data/ (the CI release asset's source) for
@@ -1099,10 +1166,17 @@ phase_subset_stock_data() {
   rows=$(_stock_files)
   run python3 tools/subset_raw.py idsets --genes "$GENE_PANEL" --out "$STOCK_DIR/idsets" --items-root out \
     --lookup-dir "$LOOKUP_DIR" --taxon "$TAXON"
-  # HOOK (T0.3, the ID-resolver gate, plan 50 2.2 mechanism 1): write the filtered NCBI gene_info as
-  # ${resolver.file.rootpath}/entrez here (subset_raw.py filter --format gene_info --taxon 9606, all
-  # human genes under D-1), so psi, biogrid, panther, omim and the HumanMine expression loaders drop
-  # what the resolver does not know; prepare_mine_checkout then sets resolver.file.rootpath.
+  # The ID-resolver gate (plan 50 2.2 mechanism 1): the filtered NCBI gene_info as
+  # ${resolver.file.rootpath}/entrez, so psi, biogrid, panther, omim and the HumanMine expression
+  # loaders drop what the resolver does not know. Under D-1 the mine holds ALL human genes as
+  # identifiers (deep annotation only for the panel), so the default keeps every row of the taxon;
+  # --resolver-scope panel keeps only the panel's Entrez ids. prepare_mine_checkout sets
+  # resolver.file.rootpath. The factory reads plain text, so the output has no .gz suffix.
+  run mkdir -p "$RESOLVER_ROOT"
+  local rargs=(--format gene_info --in "$STOCK_RAW_CACHE/$RESOLVER_GROUP/data/$(basename "$RESOLVER_URL")"
+               --out "$RESOLVER_ROOT/entrez" --taxon "$TAXON")
+  [ "$RESOLVER_SCOPE" = panel ] && rargs+=(--ids "$STOCK_DIR/idsets/entrez.txt")
+  run python3 tools/subset_raw.py filter "${rargs[@]}"
   local genes_md5; genes_md5=$(md5sum "$GENE_PANEL" | cut -d' ' -f1)
   local src
   for src in $STOCK_SOURCES; do
@@ -1151,6 +1225,8 @@ print(" ".join("--meta release.%s=%s" % (k.split(".", 1)[1], v) for k, v in sort
 write_file() {
   local dest=$1 content=$2
   log "+ write $dest ($(printf '%s' "$content" | wc -l) lines)"
+  # RDFC2IM_DRY_RUN_SHOW_WRITES=1: also print what a dry run would write (tests read it)
+  [ "$DRY_RUN" -eq 1 ] && [ "${RDFC2IM_DRY_RUN_SHOW_WRITES:-}" = 1 ] && printf '%s\n' "$content"
   [ "$DRY_RUN" -eq 1 ] && return 0
   mkdir -p "$(dirname "$dest")"
   printf '%s\n' "$content" > "$dest"
@@ -1454,7 +1530,8 @@ phase_prepare_mine_checkout() {
   # Must be the one defining integration.production, NOT bio/model's copy (integration.bio-test)
   # - confirmed live, LOAD-TRIAL.md: the wrong one fails with "Failed to instantiate
   # IntegrationWriter class".
-  write_file "$HOME/.intermine/humanmine.properties" "$(cat <<PROPS
+  local props
+  props="$(cat <<PROPS
 db.production=psql
 db.production.datasource.serverName=localhost:$PG_PORT
 db.production.datasource.databaseName=humanmine-production
@@ -1481,10 +1558,10 @@ webapp.path=humanmine
 # live: it calls getServerName(props.getProperty("webapp.deploy.url")) with a null deployUrl,
 # which NPEs on deployUrl.contains("//") and fails the whole project's configuration (blocking
 # :dbmodel:builddb too, same class of problem as the gretty fix above). The code LOOKS like it
-# should skip this via `if (props.hasProperty("webapp.hostname")) ... else getServerName(...)`,
+# should skip this via \`if (props.hasProperty("webapp.hostname")) ... else getServerName(...)\`,
 # but that's a Groovy trap: Properties.hasProperty(key) is the Groovy MOP method (does this
 # OBJECT have a declared field/property with this name?), not Properties.containsKey(key) - it
-# is FALSE for every loaded entry, always, regardless of what's in the file, so the `else`
+# is FALSE for every loaded entry, always, regardless of what's in the file, so the \`else\`
 # branch always runs and webapp.hostname (tried first, see prior commit) can never help. Setting
 # webapp.deploy.url instead works because THAT one is read with the real, correct
 # Properties.getProperty(key) API. This build never runs a cargo task at all (deployment goes
@@ -1505,9 +1582,16 @@ superuser.account=superuser@intermine.org
 superuser.initialPassword=intermine
 PROPS
 )"
-  # HOOK (T0.3, plan 50 row 7): with --stock-sources, add resolver.file.rootpath (the directory
-  # subset_stock_data writes the filtered entrez gene_info to) to the properties above, and delete
-  # any idresolver.cache the resolver left from an earlier build.
+  # The ID-resolver gate (plan 50 2.2): with --stock-sources, resolver.file.rootpath is the directory
+  # subset_stock_data wrote the filtered entrez gene_info to. EntrezGeneIdResolverFactory also keeps
+  # a built resolver in idresolver.cache (written to the working directory of the Gradle run, read
+  # back from the classpath) and prefers it to the data file, so any one left by an earlier build -
+  # possibly made from a different entrez file - is deleted before integrate.
+  if [ -n "$STOCK_SOURCES" ]; then
+    props+=$'\n'"resolver.file.rootpath=$RESOLVER_ROOT"
+    run find "$mine" -maxdepth 3 -name idresolver.cache -type f -delete
+  fi
+  write_file "$HOME/.intermine/humanmine.properties" "$props"
   log "~/.intermine/humanmine.properties done (default.intermine.properties.file=$prod_props)"
 }
 
@@ -1839,6 +1923,13 @@ GRADLE
 phase_stage_artifacts() {
   run env TRIAL_HOME="$TRIAL_HOME" PG_PORT="$PG_PORT" SOLR_PORT="$SOLR_PORT" \
       ${ARTIFACTS_DIR:+RDFC2IM_ARTIFACTS="$ARTIFACTS_DIR"} sh tools/trial-stage.sh
+  # The patched BlueGenes tool set (BUILD.md, "The patched BlueGenes tool set"): only with --jbrowse2-src
+  # (or env JBROWSE2_SRC), the one input that is not in cached_raw_data/.
+  if [ -n "$JBROWSE2_SRC" ]; then
+    local art=${ARTIFACTS_DIR:-$HERE/trial/artifacts}
+    run tools/stage-bluegenes-tools.sh --jbrowse2-src "$JBROWSE2_SRC" --src-cache "$RAW_CACHE_DIR/bluegenes-tools/data" \
+      --out "$art/bluegenes-tools-patched" --install-to "$art/bluegenes-tools"
+  fi
 }
 
 phase_start_mine_stack() {
@@ -1846,6 +1937,8 @@ phase_start_mine_stack() {
   # The webapp reads the database once, at startup - postprocessing and the war it's serving
   # must both be in place before this, and it must run again after either changes.
   run docker restart "$MINE_CONTAINER" "$BG_CONTAINER"
+  # --with-front: the aligner and the nginx front on the BlueGenes origin (trial/front/README.md)
+  [ "$WITH_FRONT" -eq 0 ] || run trial/front/up.sh
 }
 
 phase_apply_templates() {
