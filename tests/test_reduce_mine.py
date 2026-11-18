@@ -174,6 +174,30 @@ def test_objectstoresummary_keeps_config_keys_and_drops_absent_classes(tmp_path)
     assert "# a comment" in out
 
 
+def test_objectstoresummary_drops_autocomplete_fields_the_class_lacks(tmp_path, capsys):
+    """A class that is in the model without one of its autocomplete fields (ProteinDomain.shortName when interpro-go
+    declares ProteinDomain but interpro is not loaded) made AutoCompleter.buildIndex throw after the first classes:
+    create-autocomplete-index FAILED, the Gradle task still exited 0 and the core stayed empty. Found by the
+    clean milestone 1 build [im-9n4.19]; the trim only handled absent classes."""
+    model = tmp_path / "genomic_model.xml"
+    model.write_text(MODEL)
+    cfg = tmp_path / "objectstoresummary.config.properties"
+    cfg.write_text(
+        "org.intermine.model.bio.Gene.autocomplete = symbol name primaryIdentifier\n"
+        "org.intermine.model.bio.Pathway.autocomplete = shortName\n"
+        "org.intermine.model.bio.Organism.autocomplete = name taxonId\n"
+        "org.intermine.model.bio.Gene.fields = symbol\n"
+    )
+    reduce_mine.cmd_objectstoresummary([str(cfg), str(model)])
+    out = cfg.read_text()
+    assert "Gene.autocomplete = symbol primaryIdentifier\n" in out   # name is not a Gene field; inherited one stays
+    assert "Pathway" not in out                                       # no field left: the line goes
+    assert "Organism.autocomplete = name taxonId\n" in out
+    assert "Gene.fields = symbol" in out                              # only .autocomplete lines are field lists
+    assert "name" not in [t for l in out.splitlines() if "Gene.autocomplete" in l for t in l.split()[2:]]
+    assert "Gene.name, Pathway.shortName" in capsys.readouterr().out
+
+
 # ------------------------------------------------------------------ sources
 
 SOURCES_XML = """<?xml version="1.0"?>

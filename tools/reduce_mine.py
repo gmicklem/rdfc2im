@@ -164,10 +164,10 @@ def cmd_objectstoresummary(args):
     """
     path, model_xml = args[0], args[1]
     override = args[2] if len(args) > 2 else None
-    classes, _ = load_model_classes(model_xml)
+    classes, extends = load_model_classes(model_xml)
     with open(path, encoding="utf-8") as fh:
         lines = fh.readlines()
-    kept, dropped = [], []
+    kept, dropped, no_field = [], [], []
     for line in lines:
         s = line.strip()
         if not s or s.startswith("#") or "=" not in s:
@@ -188,10 +188,18 @@ def cmd_objectstoresummary(args):
             kept.append(line)
             continue
         cls = key.rsplit(".", 1)[0].rsplit(".", 1)[-1]   # strip ".<property>", take simple name
-        if cls in classes:
-            kept.append(line)
-        else:
+        if cls not in classes:
             dropped.append(cls)
+        elif key.endswith(".autocomplete"):
+            # a class in the model without one of the listed fields: AutoCompleter.buildIndex throws on it, the
+            # Gradle task prints FAILED but exits 0, and the autocomplete core stays empty [im-9n4.19]
+            fields = s.split("=", 1)[1].split()
+            have = [f for f in fields if resolve_path(classes, extends, cls, f)]
+            no_field.extend(f"{cls}.{f}" for f in fields if f not in have)
+            if have:
+                kept.append(line if have == fields else f"{key} = {' '.join(have)}\n")
+        else:
+            kept.append(line)
     added, replaced = [], []
     if override and os.path.exists(override):
         over = {}
@@ -219,7 +227,9 @@ def cmd_objectstoresummary(args):
         print(f"reduce_mine objectstoresummary: override applied "
               f"({len(added)} added, {len(replaced)} replaced): {', '.join(names)}")
     print(f"reduce_mine objectstoresummary: dropped {len(dropped)} line(s) for absent classes"
-          + (": " + ", ".join(sorted(set(dropped))) if dropped else ""))
+          + (": " + ", ".join(sorted(set(dropped))) if dropped else "")
+          + (f"; {len(no_field)} autocomplete field(s) the class lacks: " + ", ".join(sorted(no_field))
+             if no_field else ""))
 
 
 WIDGET_PATH_ATTRS = ["views", "enrich", "enrichIdentifier", "constraints", "pathStrings"]
