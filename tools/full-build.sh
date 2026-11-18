@@ -786,6 +786,18 @@ phase_build_humanmine_items() {
   if [ ! -d "$bio" ]; then
     if [ "$IM_LINE" = "6.0" ]; then _copy_bio_sources_60 "$bio"; else run cp -r "$UPSTREAM_CACHE/humanmine-bio-sources" "$bio"; fi
   fi
+  # hpo-annotation_additions.xml (humanmine-bio-sources d67fc5d) declares `Disease.dataSets` without the reverse
+  # reference BioEntity.dataSets has, and our Disease extends BioEntity (curation/extensions_additions.xml, merged
+  # first), so :dbmodel:mergeModels stops with "replacing the BioEntity.dataSets collection with Disease.dataSets
+  # failed because the reverse references differ" [im-9n4.15]. Disease inherits dataSets: the line is redundant.
+  # Removed in this build's copy only; the fork should drop it too.
+  if [ "$IM_LINE" = "6.0" ] && [ -n "$STOCK_SOURCES" ]; then
+    case " $STOCK_SOURCES " in *" hpo-annotation "*)
+      deployer_edit "$bio/hpo-annotation/src/main/resources/hpo-annotation_additions.xml" \
+        "delete Disease.dataSets (BioEntity already has it; the redefinition breaks mergeModels)" \
+        -e '/<collection name="dataSets" referenced-type="DataSet"\/>/d' ;;
+    esac
+  fi
   # The dead JCenter/Bintray plugin in bio-source-humanmine-static fails Gradle's config phase
   # for every sibling project (confirmed live, LOAD-TRIAL.md). Not needed for this source list.
   # (The 6.0 line's fork has no such plugin, and its settings.gradle lists the include on a comma

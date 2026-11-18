@@ -997,3 +997,57 @@ def test_the_protein_atlas_and_human_tissue_tool_queries_return_rows():
     assert _human_gene_rows(view, "PAX6")
     assert _human_gene_rows("Gene.symbol Gene.rnaSeqResults.tissue Gene.rnaSeqResults.expressionScore "
                             "Gene.rnaSeqResults.expressionType", "PAX6")
+
+
+# ----------------------------------------------------------------- stock hpo-annotation, orphanet [im-9n4.15]
+HPO_DATA_SET = "hpo-annotation"
+ORPHANET_DATA_SET = "orphanet"
+
+
+def _disease_skip():
+    if not mine_up():
+        return _skip(f"live checks off or no mine at {MINE_BASE} (make test-live)")
+    try:
+        ok = bool(query_rows_q('<query model="genomic" view="DataSet.name"><constraint path="DataSet.name" op="ONE OF">'
+                               f'<value>{HPO_DATA_SET}</value></constraint></query>'))
+    except Exception:
+        ok = False
+    return None if ok else _skip("mine built without --stock-sources hpo-annotation")
+
+
+def test_the_example_genes_have_diseases_from_hpo_annotation():
+    if (s := _disease_skip()) is not None:
+        return s
+    assert len(_human_gene_rows("Gene.diseases.primaryIdentifier", "PAX6")) > 0
+    assert len(_human_gene_rows("Gene.diseases.primaryIdentifier", EXAMPLE_GENE)) > 0
+
+
+def test_orphanet_diseases_have_names_and_hpo_annotations_hang_off_diseases():
+    """Disease.name: orphanet must outrank hpo-annotation (which sets none), or the diseases both load lose their name."""
+    if (s := _disease_skip()) is not None:
+        return s
+    unnamed = query_rows_q('<query model="genomic" view="Disease.primaryIdentifier"><constraint path="Disease.primaryIdentifier" '
+                           'op="CONTAINS" value="ORPHANET:"/><constraint path="Disease.name" op="IS NULL"/></query>')
+    assert unnamed == [], unnamed[:5]
+    rows = _human_gene_rows("Gene.diseases.hpoAnnotations.hpoTerm.identifier Gene.diseases.hpoAnnotations.evidences.source", "PAX6")
+    assert rows and all(r[0] and r[0].startswith("HP:") for r in rows)
+
+
+def test_diseases_are_not_duplicated_by_the_disease_loaders():
+    if (s := _disease_skip()) is not None:
+        return s
+    ids = [r[0] for r in query_rows("Disease.primaryIdentifier", "Disease.primaryIdentifier", "IS NOT NULL", "")]
+    assert ids and len(ids) == len(set(ids)), "duplicate Disease.primaryIdentifier"
+
+
+def test_the_disease_templates_run_with_rows_for_the_example_gene():
+    if (s := _disease_skip()) is not None:
+        return s
+    names = set(_get_json(f"{MINE_BASE}/service/templates?format=json")["templates"])
+    for t in ("Gene_Disease2", "Gene_Disease_HPO", "Gene_HPOphenotype_2", "Gene_Interact_disease"):
+        if t not in names:
+            continue
+        q = urllib.parse.urlencode({"name": t, "constraint1": "Gene", "op1": "LOOKUP", "value1": "PAX6",
+                                    "extra1": "H. sapiens", "format": "json"})
+        payload = _get_json(f"{MINE_BASE}/service/template/results?{q}")
+        assert payload.get("wasSuccessful") and payload["results"], (t, payload.get("error"))

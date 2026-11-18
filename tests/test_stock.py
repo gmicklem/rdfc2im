@@ -439,3 +439,11 @@ def test_expression_and_disease_files_are_redistributable_and_hpa_says_share_ali
         assert t[n]["redistributable"] is True, n
     assert "share-alike" in t["protein-atlas"]["licence"] and "share-alike" in t["protein-atlas-rna"]["licence"]
     assert t["omim"]["redistributable"] is False
+
+
+def test_disease_name_priority_ranks_orphanet_above_hpo_annotation():
+    """hpo-annotation sets no Disease.name; ranked above orphanet it starved the names of the diseases both load."""
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "curation", "priorities_override.properties")
+    line = next(l for l in open(path, encoding="utf-8") if l.startswith("Disease.name"))
+    order = [w.strip() for w in line.split("=", 1)[1].split(",")]
+    assert order.index("orphanet") < order.index("hpo-annotation"), order
