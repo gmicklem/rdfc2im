@@ -1829,20 +1829,27 @@ phase_postprocess() {
   # produce anything real (confirmed live). update-data-sources needs a Micklem-lab-specific
   # file path this build does not have; also skipped.
   local mine="$TRIAL_HOME/humanmine"
-  # HOOK (plan 50 row 12; first used by T1.1 onwards): the postprocesses the --stock-sources need
-  # (the table's `postprocess`: the genomic-location tasks for ncbi-gff/ncbi-fasta, do-sources for
-  # go-annotation's GoPostprocess) are listed here but not yet run.
+  run_in "$mine" "${GRADLE_ENV[@]}" ./gradlew "${IM_GRADLE_ARGS[@]}" :dbmodel:postProcess -Pprocess=create-references
+  # The postprocesses the --stock-sources need (plan 50 row 12; the table's `postprocess`: the
+  # genomic-location tasks for ncbi-gff/ncbi-fasta, do-sources for go-annotation's GoPostprocess), in
+  # HumanMine's <post-processing> order, which `rdfc2im stock postprocess` prints [im-9n4.6]. All of
+  # them sit between create-references and create-attribute-indexes there. do-sources is scoped with
+  # -Psource to the stock sources that asked for it, as it is to reactome below.
   if [ -n "$STOCK_SOURCES" ]; then
     activate_venv
     local pp p wanted
     pp=$(_stock_rows postprocess)
     while IFS=$'\t' read -r -u 3 p wanted; do
-      [ -n "$p" ] && log "HOOK: stock postprocess $p (for $wanted) is not run yet"
+      [ -n "$p" ] || continue
+      log "stock postprocess $p (for $wanted)"
+      if [ "$p" = do-sources ]; then
+        run_in "$mine" "${GRADLE_ENV[@]}" ./gradlew "${IM_GRADLE_ARGS[@]}" :dbmodel:postProcess -Pprocess=do-sources -Psource="$wanted"
+      else
+        run_in "$mine" "${GRADLE_ENV[@]}" ./gradlew "${IM_GRADLE_ARGS[@]}" :dbmodel:postProcess -Pprocess="$p"
+      fi
     done 3<<< "$pp"
   fi
-  for task in create-references create-attribute-indexes; do
-    run_in "$mine" "${GRADLE_ENV[@]}" ./gradlew "${IM_GRADLE_ARGS[@]}" :dbmodel:postProcess -Pprocess="$task"
-  done
+  run_in "$mine" "${GRADLE_ENV[@]}" ./gradlew "${IM_GRADLE_ARGS[@]}" :dbmodel:postProcess -Pprocess=create-attribute-indexes
   # Gene.pathways is populated ONLY by reactome's own source postprocessor - stock
   # reactome_additions.xml says so in as many words ("<!-- populated by postprocess -->" above
   # its Gene class), and ReactomePostProcess's javadoc is literally "Copy over Protein.pathways

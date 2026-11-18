@@ -223,6 +223,7 @@ def _add_stock_parser(sub):
             c.add_argument("--sources", default="", help="this build's rdfc2im sources (a replaced stock "
                            "source is refused)")
             c.add_argument("--taxon", default="9606")
+        if name in ("check", "postprocess"):
             c.add_argument("--project-xml", default=None, help="default: the workspace's project_xml")
         if name == "jars":
             c.add_argument("--im-version", required=True, help="the --intermine-src checkout's version")
@@ -282,7 +283,8 @@ def run_stock(a, ws) -> int:
         elif a.stock_cmd == "files":
             rows = stock.file_rows(table, names, a.stock_dir, a.raw_cache, a.local)
         elif a.stock_cmd == "postprocess":
-            rows = stock.postprocess_rows(table, names)
+            px = a.project_xml or ws.get("project_xml")
+            rows = stock.postprocess_rows(table, names, px if px and os.path.exists(px) else None)
         else:
             rows = [str(stock.download_bytes(table, names, a.local))]
         for r in rows:

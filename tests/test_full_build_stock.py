@@ -180,6 +180,26 @@ def test_use_cached_data_cuts_a_missing_filtered_group_from_the_cached_raw_one(t
     assert not any("--format gaf" in c for c in cmds), cmds
 
 
+def test_postprocess_runs_the_stock_postprocesses_in_humanmines_order(tmp_path):
+    """[im-9n4.6] The hook ran nothing; now the table's postprocesses run between create-references
+    and create-attribute-indexes in HumanMine's order, do-sources scoped to the sources wanting it."""
+    plan = _plan(tmp_path, "--only", "postprocess", "--intermine-src", _fake_intermine_60(tmp_path),
+                 "--stock-sources", "uniprot go-annotation ncbi-gff ncbi-fasta", "--sources",
+                 "go ncbigene reactome hgnc ensembl uniprot clinvar gwascatalog pubmed")
+    if plan is None:
+        return
+    pp = [c.split("-Pprocess=", 1)[1].rstrip(")") for c in _cmds(plan, "postprocess") if "-Pprocess=" in c]
+    assert pp[:9] == ["create-references", "create-chromosome-locations-and-lengths", "transfer-sequences",
+                      "do-sources -Psource=go-annotation", "create-gene-flanking-features",
+                      "create-location-overlap-index", "create-overlap-view", "create-attribute-indexes",
+                      "do-sources -Psource=reactome"], pp
+    assert "HOOK" not in plan
+    # without stock sources: as before
+    plain = _plan(tmp_path, "--only", "postprocess")
+    pp = [c.split("-Pprocess=", 1)[1].rstrip(")") for c in _cmds(plain, "postprocess") if "-Pprocess=" in c]
+    assert pp[:3] == ["create-references", "create-attribute-indexes", "do-sources -Psource=reactome"], pp
+
+
 def test_stage_links_into_humanmines_own_paths_and_never_over_a_real_file(tmp_path):
     plan = _plan(tmp_path, "--only", "stage_src_data", *_stock(tmp_path))
     if plan is None:

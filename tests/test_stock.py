@@ -235,6 +235,25 @@ def test_cache_meta_keys_the_filter_spec_and_records_redistribution():
     assert all(" " not in w for w in stock.cache_meta(t, "hpo-annotation"))
 
 
+def test_postprocess_rows_follow_humanmines_post_processing_order(tmp_path):
+    """[im-9n4.6] phase_postprocess runs the rows in the order printed: HumanMine's, not the table's."""
+    t = stock.load_table()
+    px = tmp_path / "project.xml"
+    px.write_text('<project type="bio"><sources/><post-processing>'
+                  '<post-process name="create-references"/><post-process name="transfer-sequences"/>'
+                  '<post-process name="do-sources"/><post-process name="create-overlap-view"/>'
+                  '<post-process name="create-chromosome-locations-and-lengths"/>'
+                  '</post-processing></project>')
+    rows = stock.postprocess_rows(t, ["ncbi-gff", "go-annotation", "ncbi-fasta"], str(px))
+    names = [r.split("\t")[0] for r in rows]
+    # the four HumanMine lists in its order; the ones it does not list follow in first-wanted order
+    assert names[:4] == ["transfer-sequences", "do-sources", "create-overlap-view",
+                         "create-chromosome-locations-and-lengths"], names
+    assert set(names[4:]) == {"create-gene-flanking-features", "create-location-overlap-index"}, names
+    assert "do-sources\tgo-annotation" in rows
+    assert stock.postprocess_rows(t, ["uniprot", "uniprot-fasta", "uniprot-keywords"], str(px)) == []
+
+
 def test_postprocess_rows_and_download_size():
     t = stock.load_table()
     assert stock.postprocess_rows(t, ["go-annotation", "ncbi-gff"])[0] == "do-sources\tgo-annotation"
