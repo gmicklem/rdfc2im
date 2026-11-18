@@ -1,0 +1,245 @@
+# NCBI RefSeq annotation of GRCh38 (GRCh38_latest_genomic.gff, release RS_2024_08), loaded by InterMine's
+# ncbi-gff source: genes, transcripts, exons and CDSs with their locations on chromosomes 1-22, X, Y.
+source: ncbi-gff
+loader:
+  repository: intermine
+  path: bio/sources/ncbi-gff
+  classes:
+    - org.intermine.bio.dataconversion.NcbiGffGFF3RecordHandler
+    - org.intermine.bio.dataconversion.NcbiGffGFF3SeqHandler
+    - org.intermine.bio.dataconversion.GFF3Converter
+    - org.intermine.bio.dataconversion.GFF3RecordHandler
+    - org.intermine.bio.dataconversion.GFF3SeqHandler
+    - org.intermine.bio.io.gff3.GFF3Record
+    - org.intermine.bio.task.GFF3ConverterTask
+  commit: 5351d0c301
+basis: >-
+  read from code at intermine 5351d0c301 (NcbiGffGFF3RecordHandler.java, NcbiGffGFF3SeqHandler.java,
+  ncbi-gff.properties; bio/core GFF3Converter.java, GFF3RecordHandler.java, GFF3SeqHandler.java,
+  GFF3Record.java, GFF3Parser.java, GFF3ConverterTask.java, gff_config.properties); names and settings
+  from the hybrid build's project.xml (gff3.taxonId 9606, gff3.seqClsName Chromosome,
+  gff3.dataSourceName NCBI, gff3.dataSetTitle ncbi-gff)
+data_source: NCBI
+data_sets: [ncbi-gff]
+home: https://www.ncbi.nlm.nih.gov
+# The code has no default names: GFF3ConverterTask throws when gff3.dataSourceName or gff3.dataSetTitle
+# is unset (GFF3ConverterTask.java:185-192); the values are project.xml's.
+writes: [DataSource, DataSet, Organism, Chromosome, Gene, MRNA, Transcript, Exon, CDS, Location, Synonym,
+         SOTerm, Ontology]
+# Classes by GFF type (column 3): the class is TypeUtil.javaiseClassName(type) and must exist in the
+# model, else the load stops (GFF3Converter.java:324-331): gene -> Gene, mRNA -> MRNA,
+# transcript -> Transcript, exon -> Exon, CDS -> CDS (the five types on NC_ rows in the sample); other
+# RefSeq types (lnc_RNA -> LncRNA, pseudogene -> Pseudogene, miRNA, tRNA, ...) would become their own
+# classes with only the generic fields. gff_config.properties excludes for 9606: region,
+# recombination_region, recombination_feature, response_element, enhancer_blocking_element,
+# epigenetically_modified_region, imprinting_control_region.
+# SOTerm and Ontology: the store hook gives every SequenceFeature a sequenceOntologyTerm
+# (GFF3Converter.java:110-111, BioStoreHook.java:115-157).
+files:
+  - id: gff
+    format: gff3
+    release: [{"from": "line", "pattern": "^#!annotation-source (.+)$", "label": "annotation"}, {"from": "line", "pattern": "^#!genome-build (\\S+)", "label": "assembly"}]
+    record: one GFF3 feature line (lines starting with '#' are directives or comments and are skipped)
+    record_key: null
+    unlisted: not loaded
+    unlisted_reason: >-
+      the converter and the NCBI handler read column-9 attributes only by name (ID, Name, Parent,
+      Dbxref, description, product, transcript_id); the gff_config.properties attribute map for 9606
+      names only Dbxref.GeneID, so no other attribute is copied (GFF3Converter.java:312-376,
+      NcbiGffGFF3RecordHandler.java:41-101)
+    fields:
+      - key: "col:1"
+        name: seqid
+        description: RefSeq accession of the sequence (NC_000001.11, NT_..., NW_...)
+        maps_to: [Chromosome.primaryIdentifier, Chromosome.organism, Location.locatedOn, Gene.chromosome]
+        status: loaded
+        reason: "also a filter"
+        code: NcbiGffGFF3SeqHandler.java:39-84, GFF3Converter.java:734-761, NcbiGffGFF3RecordHandler.java:44-52
+        note: >-
+          NC_000001.11 ... NC_000024.10 are mapped to the chromosome names 1-22, X, Y, which become
+          Chromosome.primaryIdentifier (one Chromosome item per name, organism 9606). A row whose seqid
+          does not start with NC_ (alt and unplaced scaffolds NT_, NW_) is removed with its synonyms
+          and location by the record handler. An NC_ seqid that is not in the table (NC_012920.1, MT)
+          keeps its feature but gets no Chromosome and no Location. For every located feature,
+          SequenceFeature.chromosome and chromosomeLocation are set (Gene.chromosome stands for all
+          the feature classes).
+      - key: "col:2"
+        name: source
+        description: annotation source (BestRefSeq, Gnomon, ...)
+        maps_to: []
+        status: not loaded
+        reason: "read but never used"
+        code: GFF3Record.java:76-79
+      - key: "col:3"
+        name: type
+        description: SO feature type (gene, mRNA, transcript, exon, CDS, ...)
+        maps_to: []
+        status: not loaded
+        reason: "read: picks the class of the feature (see the comment above) and the handler's branch"
+        code: GFF3Converter.java:293-331, NcbiGffGFF3RecordHandler.java:55-100
+      - key: "col:4"
+        name: start
+        description: 1-based start
+        maps_to: [Location.start, Gene.length]
+        status: loaded
+        reason: ""
+        code: GFF3Converter.java:537-583, 840-845
+        note: >-
+          Start and end are swapped when start > end. length = |end - start| + 1 on the feature (Gene.length
+          stands for all feature classes). A CDS is split over several rows with the same ID: the first
+          row makes the CDS, each later row only adds one more Location (GFF3Converter.java:321-348), so
+          CDS.length and chromosomeLocation are those of the first segment.
+      - key: "col:5"
+        name: end
+        description: 1-based end
+        maps_to: [Location.end, Gene.length]
+        status: loaded
+        reason: ""
+        code: GFF3Converter.java:537-583, 840-845
+      - key: "col:6"
+        name: score
+        description: score ('.' when none)
+        maps_to: [Gene.score]
+        status: loaded
+        reason: "only when not '.'"
+        code: GFF3Record.java:105-116, GFF3Converter.java:384-387
+        note: Every row of the sample has '.', so nothing is stored in practice. SequenceFeature.score.
+      - key: "col:7"
+        name: strand
+        description: strand (+, - or .)
+        maps_to: [Location.strand]
+        status: loaded
+        reason: ""
+        code: GFF3Converter.java:572-578
+        note: "'+' -> 1, '-' -> -1, anything else -> 0."
+      - key: "col:8"
+        name: phase
+        description: CDS phase (0, 1, 2 or .)
+        maps_to: []
+        status: not loaded
+        reason: "read but never used"
+        code: GFF3Record.java:124-127
+      - key: "attr:ID"
+        name: ID
+        description: feature id (gene-TAS1R3, rna-NM_152228.3, exon-NM_152228.3-1, cds-NP_689414.2)
+        maps_to: [Exon.primaryIdentifier, CDS.primaryIdentifier]
+        status: loaded
+        reason: ""
+        code: GFF3Converter.java:312, 350-354, 847-862, NcbiGffGFF3RecordHandler.java:85-86
+        note: >-
+          The default primaryIdentifier of every feature, and the key children find their parent by.
+          It stays the primaryIdentifier for Exon and CDS (and any class the handler does not treat);
+          for Gene it is replaced by the GeneID Dbxref, for MRNA and Transcript by transcript_id. Rows
+          with an ID already seen add only a Location.
+      - key: "attr:Parent"
+        name: Parent
+        description: ID(s) of the parent feature(s)
+        maps_to: [MRNA.gene, Transcript.gene, Exon.transcripts]
+        status: loaded
+        reason: "only for MRNA, Transcript and Exon"
+        code: NcbiGffGFF3RecordHandler.java:30-35, GFF3Converter.java:377-380, 585-614
+        note: >-
+          MRNA.gene and Transcript.gene take the single parent; Exon.transcripts takes all parents. CDS
+          and the other classes get no parent link (CDS.transcript, CDS.gene, CDS.protein stay empty).
+          A parent must come before its child in the file, else the load stops.
+      - key: "attr:Dbxref"
+        name: Dbxref
+        description: comma-separated database cross-references (GeneID:83756, HGNC:HGNC:15661, ...)
+        maps_to: [Gene.primaryIdentifier]
+        status: loaded
+        reason: "only the GeneID prefix, only on gene rows"
+        code: NcbiGffGFF3RecordHandler.java:59-64, gff_config.properties (9606.gene.attributes.Dbxref.GeneID), GFF3Converter.java:441-466
+        note: No CrossReference objects are made from any prefix.
+      - key: "attr:Dbxref:GeneID"
+        name: GeneID
+        description: NCBI Gene (Entrez) id
+        maps_to: [Gene.primaryIdentifier]
+        status: loaded
+        reason: ""
+        code: NcbiGffGFF3RecordHandler.java:59-64, GFF3Converter.java:441-466
+        note: >-
+          The Entrez id, the key Gene merges on with the rdfc2im genes (ncbi-gff_keys.properties). Set
+          on gene rows only; mRNA, exon and CDS rows also carry it but it is not read there.
+      - key: "attr:Dbxref:HGNC"
+        name: HGNC
+        description: HGNC id (HGNC:HGNC:15661)
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: NcbiGffGFF3RecordHandler.java:59-64
+      - key: "attr:Dbxref:MIM"
+        name: MIM
+        description: OMIM number
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: NcbiGffGFF3RecordHandler.java:59-64
+      - key: "attr:Dbxref:GenBank"
+        name: GenBank
+        description: GenBank/RefSeq accession of the transcript or protein
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: NcbiGffGFF3RecordHandler.java:59-64
+      - key: "attr:Dbxref:Ensembl"
+        name: Ensembl
+        description: Ensembl transcript or protein id (ENST..., ENSP...)
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: NcbiGffGFF3RecordHandler.java:59-64
+      - key: "attr:Dbxref:CCDS"
+        name: CCDS
+        description: CCDS id of the CDS
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: NcbiGffGFF3RecordHandler.java:59-64
+      - key: "attr:Name"
+        name: Name
+        description: display name (gene symbol; transcript or protein accession)
+        maps_to: [Gene.symbol, Synonym.value, Synonym.subject]
+        status: loaded
+        reason: ""
+        code: GFF3Converter.java:356-371, 616-659, NcbiGffGFF3RecordHandler.java:65-66
+        note: >-
+          The first Name becomes the feature's symbol (BioEntity.symbol; Gene.symbol stands for all
+          classes: MRNA/Transcript get the NM_/XM_ accession, CDS the NP_/XP_ accession). Because no
+          symbol attribute is configured for 9606, every Name that differs from the primary identifier
+          also becomes a Synonym of the feature (GFF3Converter.java:643-648). Exon rows have no Name.
+      - key: "attr:description"
+        name: description
+        description: gene description
+        maps_to: [Gene.briefDescription]
+        status: loaded
+        reason: "gene rows only"
+        code: NcbiGffGFF3RecordHandler.java:67-70
+      - key: "attr:product"
+        name: product
+        description: product name of the transcript, exon or CDS
+        maps_to: [MRNA.name, Transcript.name, Exon.name]
+        status: loaded
+        reason: "mRNA, transcript and exon rows only (not CDS)"
+        code: NcbiGffGFF3RecordHandler.java:79-82, 96-99
+      - key: "attr:transcript_id"
+        name: transcript_id
+        description: RefSeq transcript accession (NM_152228.3)
+        maps_to: [MRNA.primaryIdentifier, Transcript.primaryIdentifier]
+        status: loaded
+        reason: "mRNA and transcript rows only"
+        code: NcbiGffGFF3RecordHandler.java:71-78
+        note: Required on those rows (no null check). Exon and CDS rows also carry it; not read there.
+      - {key: "attr:gbkey", name: gbkey, description: "GenBank feature key (Gene, mRNA, CDS, misc_RNA, ...)", maps_to: [], status: not loaded, reason: not read, code: "NcbiGffGFF3RecordHandler.java:41-101"}
+      - {key: "attr:gene", name: gene, description: "gene symbol on every row", maps_to: [], status: not loaded, reason: not read, code: "NcbiGffGFF3RecordHandler.java:41-101"}
+      - {key: "attr:gene_biotype", name: gene_biotype, description: "gene biotype (protein_coding, lncRNA, ...)", maps_to: [], status: not loaded, reason: not read, code: "NcbiGffGFF3RecordHandler.java:41-101", note: "Gene.typeOfGene is not set from it."}
+      - {key: "attr:gene_synonym", name: gene_synonym, description: "other symbols of the gene", maps_to: [], status: not loaded, reason: not read, code: "GFF3Converter.java:468-493", note: "Only a configured synonym attribute would be read; none is configured for 9606."}
+      - {key: "attr:experiment", name: experiment, description: "experimental evidence text", maps_to: [], status: not loaded, reason: not read, code: "NcbiGffGFF3RecordHandler.java:41-101"}
+      - {key: "attr:model_evidence", name: model_evidence, description: "Gnomon model evidence text", maps_to: [], status: not loaded, reason: not read, code: "NcbiGffGFF3RecordHandler.java:41-101"}
+      - {key: "attr:tag", name: tag, description: "tags such as MANE Select", maps_to: [], status: not loaded, reason: not read, code: "NcbiGffGFF3RecordHandler.java:41-101"}
+      - {key: "attr:protein_id", name: protein_id, description: "RefSeq protein accession of a CDS", maps_to: [], status: not loaded, reason: not read, code: "NcbiGffGFF3RecordHandler.java:41-101", note: "So CDS.protein is not linked."}
+      - {key: "attr:Note", name: Note, description: "free-text note", maps_to: [], status: not loaded, reason: not read, code: "NcbiGffGFF3RecordHandler.java:41-101"}
+      - {key: "attr:exception", name: exception, description: "annotation exception text", maps_to: [], status: not loaded, reason: not read, code: "NcbiGffGFF3RecordHandler.java:41-101"}
+      - {key: "attr:inference", name: inference, description: "inference text", maps_to: [], status: not loaded, reason: not read, code: "NcbiGffGFF3RecordHandler.java:41-101"}
+      - {key: "attr:transl_except", name: transl_except, description: "translation exceptions of a CDS", maps_to: [], status: not loaded, reason: not read, code: "NcbiGffGFF3RecordHandler.java:41-101"}
+      - {key: "attr:partial", name: partial, description: "feature is partial", maps_to: [], status: not loaded, reason: not read, code: "NcbiGffGFF3RecordHandler.java:41-101"}
+      - {key: "attr:end_range", name: end_range, description: "range of a partial end", maps_to: [], status: not loaded, reason: not read, code: "NcbiGffGFF3RecordHandler.java:41-101"}

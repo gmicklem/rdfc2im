@@ -1,0 +1,122 @@
+# The Human Protein Atlas: immunohistochemistry levels of proteins per tissue and cell type
+# (normal_ihc_data.tsv), with a hand-made tissue to organ-system table (tissue_to_organ.tsv).
+source: protein-atlas
+loader:
+  repository: humanmine-bio-sources
+  path: protein-atlas
+  classes: [org.intermine.bio.dataconversion.ProteinAtlasConverter]
+  commit: d67fc5d
+basis: read from code at humanmine-bio-sources d67fc5d (ProteinAtlasConverter.java, BioFileConverter.java, BioStoreHook.java)
+data_source: The Human Protein Atlas          # ProteinAtlasConverter.java:52
+data_sets: [The Human Protein Atlas expression profiles]   # ProteinAtlasConverter.java:51 (licence CC BY-SA 3.0, :53)
+home: https://www.proteinatlas.org/
+writes: [ProteinAtlasExpression, Gene, Tissue, TissueGroup, Organism, DataSet, DataSource, Ontology, SOTerm]
+# Ontology (Sequence Ontology) and SOTerm (gene) come from BioFileConverter/BioStoreHook for every Gene.
+files:
+  - id: normal
+    format: tab
+    comment: "#"
+    skip_lines: 0
+    header_line: "match:Gene	"   # the header line, wherever it is: a filtered copy may lack it [im-9n4.42]
+    record: one row (the staining level of one gene in one cell type of one tissue)
+    record_key: null
+    unlisted: not loaded
+    unlisted_reason: >-
+      processNormalTissue reads column 1 by position and only the columns named Tissue, Cell type,
+      Level and Reliability by header name (ProteinAtlasConverter.java:169-173).
+    fields:
+      - key: "col:1"
+        name: Gene
+        description: Ensembl gene id
+        maps_to: [Gene.primaryIdentifier, ProteinAtlasExpression.gene]
+        status: loaded
+        reason: "resolved through the ID resolver"
+        code: ProteinAtlasConverter.java:178
+        note: >-
+          Read by position (line[0]). Resolved through the human ID resolver
+          (IdResolverService.getIdResolverByOrganism, taxon 9606, :70, :313-326); the row is dropped
+          unless the id resolves to exactly one gene, whose resolved id (the NCBI Gene id with
+          HumanMine's entrez resolver) becomes Gene.primaryIdentifier (:296-311). Without a human
+          resolver the raw Ensembl id is used. Gene.organism is set to taxon 9606.
+      - key: "col:2"
+        name: Gene name
+        description: gene symbol
+        maps_to: []
+        status: not loaded
+        reason: "not read by the converter"
+        code: ProteinAtlasConverter.java:169-173
+        note: "Gene.symbol is not set by this source."
+      - key: "col:3"
+        name: Tissue
+        description: tissue name
+        maps_to: [Tissue.name, ProteinAtlasExpression.tissue]
+        status: loaded
+        reason: ""
+        code: ProteinAtlasConverter.java:170
+        note: >-
+          Found by header name (default position 3 for the old file). The first letter is
+          capitalised (StringUtils.capitalize, :182) and one Tissue item is made per name
+          (:183, :287-294). Tissue.name is set when the tissue is stored, by processTissueToOrgan
+          (:117, :130) or by close() (:142-151) for tissues the organs file does not list.
+      - key: "col:4"
+        name: IHC tissue name
+        description: tissue name as used in the IHC analysis
+        maps_to: []
+        status: not loaded
+        reason: "not read by the converter"
+        code: ProteinAtlasConverter.java:170
+        note: "columnIndex matches the whole header cell (equalsIgnoreCase), so 'Tissue' does not pick this column."
+      - key: "col:5"
+        name: Cell type
+        description: cell type within the tissue
+        maps_to: [ProteinAtlasExpression.cellType]
+        status: loaded
+        reason: ""
+        code: ProteinAtlasConverter.java:185
+        note: "Column found by header name (:171); stored as it is (:193)."
+      - key: "col:6"
+        name: Level
+        description: staining level (Not detected, Low, Medium, High)
+        maps_to: [ProteinAtlasExpression.level]
+        status: loaded
+        reason: ""
+        code: ProteinAtlasConverter.java:186
+        note: "Column found by header name (:172); stored as it is (:194); the old alterLevel mapping is commented out."
+      - key: "col:7"
+        name: Reliability
+        description: reliability of the annotation (Enhanced, Supported, Approved, Uncertain)
+        maps_to: [ProteinAtlasExpression.reliability]
+        status: loaded
+        reason: ""
+        code: ProteinAtlasConverter.java:187
+        note: "Column found by header name (:173); stored as it is (:196)."
+  - id: organs
+    format: tab
+    comment: "#"
+    skip_lines: 0
+    header_line: null
+    record: one row (one tissue and the organ system it belongs to)
+    record_key: null
+    unlisted: not loaded
+    unlisted_reason: processTissueToOrgan reads only the first two columns (ProteinAtlasConverter.java:106-107)
+    fields:
+      - key: "col:1"
+        name: Tissue name
+        description: tissue name, as in the Tissue column of normal_ihc_data.tsv after capitalisation
+        maps_to: [Tissue.name]
+        status: loaded
+        reason: ""
+        code: ProteinAtlasConverter.java:106
+        note: >-
+          The file has no header and the converter skips none: every non-# line is a tissue. The name
+          is used as it is (not capitalised) and joins the normal file's tissues only when it equals
+          the capitalised Tissue cell exactly (getTissue is a case-sensitive map, :287-294); a name
+          not in the normal file makes a Tissue with no ProteinAtlasExpression.
+      - key: "col:2"
+        name: Tissue group
+        description: organ system (hand-made grouping, rdfc2im/data/hpa_tissue_to_organ.tsv)
+        maps_to: [TissueGroup.name, Tissue.tissueGroup]
+        status: loaded
+        reason: ""
+        code: ProteinAtlasConverter.java:107
+        note: "One TissueGroup per distinct name (:110-116); Tissue.tissueGroup set at :118."

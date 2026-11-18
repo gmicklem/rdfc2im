@@ -1,0 +1,156 @@
+# The HUPO-PSI molecular interactions controlled vocabulary (mi.obo, staged as psi-mi.obo), loaded by
+# InterMine's psi-mi-ontology source through the shared OBO converter as InteractionTerm objects.
+source: psi-mi-ontology
+loader:
+  repository: intermine
+  path: bio/sources/psi-mi-ontology
+  classes:
+    - org.intermine.bio.task.OboConverterTask
+    - org.intermine.bio.dataconversion.OboConverter
+    - org.intermine.bio.ontology.OboParser
+  commit: 5351d0c301
+basis: >-
+  read from code at intermine 5351d0c301 (psi-mi-ontology.properties; bio/core OboConverterTask.java,
+  OboConverter.java, OboParser.java, obo_xrefs.properties). The source directory holds no Java of its own.
+data_source: PSI Molecular Interactions
+data_sets: [PSI Molecular Interactions]
+home: http://www.psidev.info/
+# psi-mi-ontology.properties: obo.ontology.name=PSI Molecular Interactions, obo.term.class=InteractionTerm,
+# obo.ontology.url=https://github.com/HUPO-PSI/psi-mi-CV, licence CC BY 4.0. OboConverter names the
+# DataSource and the DataSet after the ontology when no dataset/datasource is set (OboConverter.java:186-208);
+# HumanMine's project.xml sets neither.
+writes: [Ontology, DataSource, DataSet, InteractionTerm, OntologyTermSynonym, OntologyRelation]
+# OntologyTerm items (for xrefs) are made only for xref prefixes FBbt, FMA, MA, WBbt, ZFA
+# (obo_xrefs.properties); mi.obo has none of these, so none are made.
+files:
+  - id: obo
+    format: obo
+    release: [{"from": "line", "pattern": "^data-version: (.+)$", "label": "data-version"}, {"from": "line", "pattern": "^date: (.+)$", "label": "date"}]
+    record: one [Term] stanza = one PSI-MI term
+    record_key: null
+    unlisted: not loaded
+    unlisted_reason: >-
+      OboParser keeps every tag in a map, but only the tags listed here are read from it
+      (OboParser.java:237-342); is_a links come from OBO-Edit's reasoner run on the same file
+      (OboParser.java:109-146, 412-459)
+    fields:
+      - key: "header/format-version"
+        name: format-version
+        description: OBO format version
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: OboParser.java:187-232
+      - key: "header/default-namespace"
+        name: default-namespace
+        description: namespace of terms without a namespace tag (PSI-MI)
+        maps_to: [InteractionTerm.namespace]
+        status: loaded
+        reason: ""
+        code: OboParser.java:227-230, 318-324, OboConverter.java:305-307
+        note: mi.obo has no namespace tags, so every term gets PSI-MI.
+      - {key: "header/date", name: date, description: "date the file was saved", maps_to: [], status: not loaded, reason: not read, code: "OboParser.java:187-232"}
+      - {key: "header/saved-by", name: saved-by, description: "who saved the file", maps_to: [], status: not loaded, reason: not read, code: "OboParser.java:187-232"}
+      - {key: "header/auto-generated-by", name: auto-generated-by, description: "tool that wrote the file", maps_to: [], status: not loaded, reason: not read, code: "OboParser.java:187-232"}
+      - {key: "header/subsetdef", name: subsetdef, description: "subset definitions", maps_to: [], status: not loaded, reason: not read, code: "OboParser.java:187-232"}
+      - {key: "header/synonymtypedef", name: synonymtypedef, description: "synonym type definitions", maps_to: [], status: not loaded, reason: not read, code: "OboParser.java:187-232"}
+      - {key: "header/idspace", name: idspace, description: "id space declaration", maps_to: [], status: not loaded, reason: not read, code: "OboParser.java:187-232"}
+      - {key: "header/remark", name: remark, description: "free-text remarks (CV version, ...)", maps_to: [], status: not loaded, reason: not read, code: "OboParser.java:187-232"}
+      - {key: "header/ontology", name: ontology, description: "ontology id (mi)", maps_to: [], status: not loaded, reason: "not read (Ontology.name and url come from psi-mi-ontology.properties)", code: "OboConverter.java:67-77"}
+      - {key: "header/owl-axioms", name: owl-axioms, description: "OWL axioms that do not fit OBO", maps_to: [], status: not loaded, reason: not read, code: "OboParser.java:187-232"}
+      - key: "Term/id"
+        name: id
+        description: term accession (MI:0000)
+        maps_to: [InteractionTerm.identifier]
+        status: loaded
+        reason: ""
+        code: OboParser.java:253-264, OboConverter.java:236, 280-282
+        note: >-
+          Each term also gets InteractionTerm.ontology (the Ontology 'PSI Molecular Interactions'),
+          obsolete=false and itself in InteractionTerm.parents (OboConverter.java:279, 311-313).
+      - key: "Term/name"
+        name: name
+        description: term name
+        maps_to: [InteractionTerm.name]
+        status: loaded
+        reason: ""
+        code: OboParser.java:257-263, OboConverter.java:276-278
+        note: A stanza without a name is dropped.
+      - key: "Term/def"
+        name: def
+        description: quoted definition with references in brackets
+        maps_to: [InteractionTerm.description]
+        status: loaded
+        reason: "the quoted text only"
+        code: OboParser.java:326-337, OboConverter.java:308-310
+        note: >-
+          The text between the quotes, unescaped; the [PMID:...] references are dropped. The parser cuts
+          every line at its first '!' before reading it (OboParser.java:200-202), so a definition
+          holding '!' is cut short (and then may not match the quote pattern and is lost).
+      - key: "Term/synonym"
+        name: synonym
+        description: quoted synonym with scope and type (EXACT PSI-MI-short [])
+        maps_to: [OntologyTermSynonym.name, OntologyTermSynonym.type, InteractionTerm.synonyms]
+        status: loaded
+        reason: ""
+        code: OboParser.java:287-290, 370-382, OboConverter.java:283-291, 327-331
+        note: >-
+          Name = the quoted text; type = the tag name 'synonym', not the scope (EXACT, RELATED) nor the
+          synonym type (PSI-MI-short): those are dropped.
+      - key: "Term/alt_id"
+        name: alt_id
+        description: alternative (merged) accession
+        maps_to: [OntologyTermSynonym.name, OntologyTermSynonym.type, InteractionTerm.synonyms]
+        status: loaded
+        reason: ""
+        code: OboParser.java:307-311, 376-377
+        note: Stored as a synonym of type 'alt_id'. It is also tried as an xref, but MI is not an accepted xref prefix.
+      - key: "Term/xref"
+        name: xref
+        description: cross-references (PMID:..., id-validation-regexp:..., search-url:...)
+        maps_to: []
+        status: not loaded
+        reason: "read: kept only for the prefixes FBbt, FMA, MA, WBbt, ZFA (obo_xrefs.properties); none occur in mi.obo"
+        code: OboParser.java:313-316, 393-404, OboConverter.java:292-303
+      - key: "Term/is_a"
+        name: is_a
+        description: parent term
+        maps_to: [InteractionTerm.parents, OntologyRelation.parentTerm, OntologyRelation.childTerm, OntologyRelation.relationship, OntologyRelation.direct, OntologyRelation.redundant, InteractionTerm.relations]
+        status: loaded
+        reason: ""
+        code: OboParser.java:109-146, 412-459, OboConverter.java:338-368
+        note: >-
+          The parser does not read is_a lines itself: it runs OBO-Edit's link-file writer on the file,
+          which writes the asserted and the implied (transitive) links, and reads those back. Each link
+          between two loaded terms adds the parent to the child's parents (so parents holds every
+          ancestor) and makes one OntologyRelation (relationship 'is_a', direct = asserted, redundant),
+          added to both terms' relations.
+      - key: "Term/is_obsolete"
+        name: is_obsolete
+        description: true for an obsolete term
+        maps_to: []
+        status: not loaded
+        reason: "read: obsolete terms are skipped (no InteractionTerm)"
+        code: OboParser.java:261, 269-271, OboConverter.java:232-235
+      - {key: "Term/subset", name: subset, description: "subsets the term belongs to (PSI-MI_slim, Drugable, ...)", maps_to: [], status: not loaded, reason: not read, code: "OboParser.java:280-342"}
+      - {key: "Term/comment", name: comment, description: "free-text comment", maps_to: [], status: not loaded, reason: not read, code: "OboParser.java:280-342"}
+      - {key: "Term/created_by", name: created_by, description: "curator who made the term", maps_to: [], status: not loaded, reason: not read, code: "OboParser.java:280-342"}
+      - {key: "Term/creation_date", name: creation_date, description: "date the term was made", maps_to: [], status: not loaded, reason: not read, code: "OboParser.java:280-342"}
+      - {key: "Term/property_value", name: property_value, description: "extra annotation properties", maps_to: [], status: not loaded, reason: not read, code: "OboParser.java:280-342"}
+      - key: "Term/relationship"
+        name: relationship
+        description: typed link to another term (part_of, ...)
+        maps_to: [OntologyRelation.relationship]
+        status: unknown
+        reason: >-
+          the links come from OBO-Edit's link writer (third-party code, not in this checkout); whether it
+          emits relationship links with a type the parser knows cannot be read here. mi.obo has neither
+          relationship tags nor Typedef stanzas, so it does not arise for this file.
+        code: OboParser.java:109-146, 237-250, 416
+      - key: "Typedef/id"
+        name: id
+        description: relation type id
+        maps_to: []
+        status: not loaded
+        reason: "read: registers a relation type for the links (no object of its own); mi.obo has no Typedef stanzas"
+        code: OboParser.java:239-250

@@ -1,0 +1,47 @@
+# InterPro's mapping of InterPro entries to GO terms (interpro2go), loaded by InterMine's interpro-go
+# source as GO annotations of ProteinDomain objects.
+source: interpro-go
+loader:
+  repository: intermine
+  path: bio/sources/interpro-go
+  classes: [org.intermine.bio.dataconversion.InterproGoConverter]
+  commit: 5351d0c301
+basis: read from code at intermine 5351d0c301 (InterproGoConverter.java; FormattedTextParser.java)
+data_source: InterPro
+data_sets: [InterPro domain GO annotations]
+home: https://www.ebi.ac.uk/interpro/
+writes: [DataSource, DataSet, ProteinDomain, GOTerm, GOAnnotation]
+# The converter is built with storeOntology=false (InterproGoConverter.java:48), so no SO Ontology item.
+files:
+  - id: interpro2go
+    format: tab
+    release: [{"from": "line", "pattern": "^!date: (.+)$", "label": "date"}]
+    comment: "!"
+    skip_lines: 0
+    header_line: null
+    record: >-
+      one line = one InterPro entry mapped to one GO term, e.g.
+      'InterPro:IPR000003 Retinoid X receptor/HNF4 > GO:DNA binding ; GO:0003677'
+    record_key: null
+    unlisted: not loaded
+    unlisted_reason: the file has no tabs, so the whole line is col:1; there is no other column
+    fields:
+      - key: "col:1"
+        name: mapping line
+        description: "InterPro:<IPR id> <entry name> > GO:<term name> ; GO:<term id>"
+        maps_to: [ProteinDomain.primaryIdentifier, GOTerm.identifier, GOAnnotation.subject, GOAnnotation.ontologyTerm, ProteinDomain.goAnnotation]
+        status: loaded
+        reason: "partly: the two names are not read"
+        code: InterproGoConverter.java:59-96, 107-132
+        note: >-
+          The converter does not split on tabs: it splits each line on ';' (FormattedTextParser,
+          which also drops lines starting with '#'; the '!' header lines have no ';', so they are
+          logged as bad lines and skipped). A line that does not give exactly two parts is skipped.
+          Part 1 is split on spaces and its first word, minus the 'InterPro:' prefix, is the
+          InterPro id (IPR000003) -> ProteinDomain.primaryIdentifier. The rest of part 1, the
+          InterPro entry name and the '> GO:<term name>' text, is not read: ProteinDomain gets no
+          name here and GOTerm gets no name here. Part 2, trimmed, is the GO id (GO:0003677) ->
+          GOTerm.identifier. Each line makes one GOAnnotation (subject = the ProteinDomain,
+          ontologyTerm = the GOTerm), also added to ProteinDomain.goAnnotation. No evidence,
+          qualifier or publication is set. An entry name that itself held a ';' would make the line
+          skipped.

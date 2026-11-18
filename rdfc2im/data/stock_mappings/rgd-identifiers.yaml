@@ -1,0 +1,147 @@
+# RGD's list of active rat genes (GENES_RAT.txt), loaded by InterMine's rgd-identifiers source: it gives
+# the rat genes that panther creates (RGD id) their symbol, name and description.
+source: rgd-identifiers
+loader:
+  repository: intermine
+  path: bio/sources/rgd-identifiers
+  classes: [org.intermine.bio.dataconversion.RgdIdentifiersConverter]
+  commit: 5351d0c301
+basis: read from code at intermine 5351d0c301 (RgdIdentifiersConverter.java; FormattedTextParser.java for the '#' lines)
+data_source: Rat Genome Database
+data_sets: [Rat gene identifiers]
+home: https://rgd.mcw.edu/
+writes: [DataSource, DataSet, Organism, Gene, CrossReference, SOTerm, Ontology]
+# DataSource also gets 'Ensembl' and 'NCBI' items (the sources of the CrossReferences).
+# SOTerm and Ontology: BioFileConverter's store hook gives every Gene a sequenceOntologyTerm (BioStoreHook.java:115-157).
+files:
+  - id: genes
+    format: tab
+    release: [{"from": "line", "pattern": "^# GENERATED-ON: (\\S+)", "label": "generated"}]
+    comment: "#"
+    skip_lines: 0
+    header_line: "match:GENE_RGD_ID	"   # the header line, wherever it is: a filtered copy may lack it [im-9n4.42]
+    # In the download, lines 1-103 start with '#' (format notes and a numbered column list) and line 104
+    # is the header (GENE_RGD_ID, SYMBOL, ...). The filtered sample in stock_ut/subset has the 103 '#'
+    # lines but NOT the header line, although stock_sources.yaml says keep_header: true; the converter
+    # does not need it (it skips '#' lines and a line starting GENE_RGD_ID).
+    record: one row = one active rat gene
+    record_key: null
+    unlisted: not loaded
+    unlisted_reason: RgdIdentifiersConverter reads only line[0], [1], [2], [3], [20] and [37] (RgdIdentifiersConverter.java:77-82)
+    fields:
+      - key: "col:1"
+        name: GENE_RGD_ID
+        description: the RGD_ID of the gene (a bare number)
+        maps_to: [Gene.primaryIdentifier]
+        status: loaded
+        reason: ""
+        code: RgdIdentifiersConverter.java:74-77, 86
+        note: >-
+          Stored as 'RGD:' + the number (RGD:2044), the form panther writes. A line whose first cell
+          starts with GENE_RGD_ID (the header) is skipped. Every Gene also gets Gene.organism = taxon
+          10116 (constant, RgdIdentifiersConverter.java:40, 85).
+      - key: "col:2"
+        name: SYMBOL
+        description: official gene symbol
+        maps_to: [Gene.symbol]
+        status: loaded
+        reason: ""
+        code: RgdIdentifiersConverter.java:78, 87
+      - key: "col:3"
+        name: NAME
+        description: gene name
+        maps_to: [Gene.name]
+        status: loaded
+        reason: ""
+        code: RgdIdentifiersConverter.java:79, 94-96
+        note: Not set when blank.
+      - key: "col:4"
+        name: GENE_DESC
+        description: gene description (if available)
+        maps_to: [Gene.description]
+        status: loaded
+        reason: ""
+        code: RgdIdentifiersConverter.java:80, 97-99
+        note: Not set when blank.
+      - {key: "col:5", name: CHROMOSOME_CELERA, description: "chromosome for Celera assembly", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:6", name: CHROMOSOME_mRatBN7.2, description: "chromosome for reference assembly mRatBN7.2", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:7", name: CHROMOSOME_RGSC_v3.4, description: "chromosome for reference assembly RGSC_v3.4", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:8", name: FISH_BAND, description: "fish band information", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:9", name: START_POS_CELERA, description: "start position for Celera assembly", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:10", name: STOP_POS_CELERA, description: "stop position for Celera assembly", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:11", name: STRAND_CELERA, description: "strand information for Celera assembly", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:12", name: START_POS_mRatBN7.2, description: "start position for reference assembly mRatBN7.2", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:13", name: STOP_POS_mRatBN7.2, description: "stop position for reference assembly mRatBN7.2", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:14", name: STRAND_mRatBN7.2, description: "strand information for reference assembly mRatBN7.2", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:15", name: START_POS_RGSC_v3.4, description: "start position for reference assembly RGSC_v3.4", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:16", name: STOP_POS_RGSC_v3.4, description: "stop position for reference assembly RGSC_v3.4", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:17", name: STRAND_RGSC_v3.4, description: "strand information for reference assembly RGSC_v3.4", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:18", name: CURATED_REF_RGD_ID, description: "RGD_ID of paper(s) used to curate gene", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:19", name: CURATED_REF_PUBMED_ID, description: "PUBMED_ID of paper(s) used to curate gene", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:20", name: UNCURATED_PUBMED_ID, description: "PUBMED ids of papers associated with the gene at NCBI but not used for curation", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - key: "col:21"
+        name: NCBI_GENE_ID
+        description: NCBI Gene ID
+        maps_to: [CrossReference.identifier, Gene.crossReferences]
+        status: loaded
+        reason: ""
+        code: RgdIdentifiersConverter.java:81, 100-102
+        note: >-
+          A CrossReference of the gene with source DataSource 'NCBI', when not blank. It is not used
+          as an identifier of the Gene, so rat genes do not merge with Entrez-keyed genes through it.
+      - {key: "col:22", name: UNIPROT_ID, description: "UniProtKB id(s)", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:23", name: GENE_REFSEQ_STATUS, description: "gene RefSeq Status (from NCBI)", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:24", name: GENBANK_NUCLEOTIDE, description: "GenBank Nucleotide ID(s)", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:25", name: TIGR_ID, description: "TIGR ID(s)", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:26", name: GENBANK_PROTEIN, description: "GenBank Protein ID(s)", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:27", name: CANONICAL_PROTEIN, description: "UniProt canonical protein(s)", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:28", name: MARKER_RGD_ID, description: "RGD_ID(s) of markers associated with given gene", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:29", name: MARKER_SYMBOL, description: "marker symbol", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:30", name: OLD_SYMBOL, description: "old symbol alias(es)", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82", note: "No Synonym objects are made."}
+      - {key: "col:31", name: OLD_NAME, description: "old name alias(es)", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:32", name: QTL_RGD_ID, description: "RGD_ID(s) of QTLs associated with given gene", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:33", name: QTL_SYMBOL, description: "QTL symbol", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:34", name: NOMENCLATURE_STATUS, description: "nomenclature status", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:35", name: SPLICE_RGD_ID, description: "RGD_IDs for gene splices", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:36", name: SPLICE_SYMBOL, description: "symbol for gene", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:37", name: GENE_TYPE, description: "gene type", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82", note: "Not used as a filter either: every row becomes a Gene."}
+      - key: "col:38"
+        name: ENSEMBL_ID
+        description: Ensembl Gene ID(s), ';'-separated
+        maps_to: [CrossReference.identifier, Gene.crossReferences]
+        status: loaded
+        reason: ""
+        code: RgdIdentifiersConverter.java:82, 89-92, 121-127
+        note: >-
+          Each ';'-separated id becomes a CrossReference of the gene with source DataSource 'Ensembl'.
+          The code also has a block meant to set Gene.primaryIdentifier to a unique Ensembl id
+          (lines 110-118), but the map it reads (geneEnsemblIds) is never filled, so it does nothing.
+      - {key: "col:39", name: (UNUSED), description: "blank", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:40", name: CHROMOSOME_Rnor_5.0, description: "chromosome for Rnor_5.0 reference assembly", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:41", name: START_POS_Rnor_5.0, description: "start position for Rnor_5.0 reference assembly", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:42", name: STOP_POS_Rnor_5.0, description: "stop position for Rnor_5.0 reference assembly", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:43", name: STRAND_Rnor_5.0, description: "strand information for Rnor_5.0 reference assembly", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:44", name: CHROMOSOME_Rnor_6.0, description: "chromosome for Rnor_6.0 reference assembly", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:45", name: START_POS_Rnor_6.0, description: "start position for Rnor_6.0 reference assembly", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:46", name: STOP_POS_Rnor_6.0, description: "stop position for Rnor_6.0 reference assembly", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:47", name: STRAND_Rnor_6.0, description: "strand information for Rnor_6.0 reference assembly", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:48", name: CHROMOSOME_ENSEMBL, description: "chromosome for mRatBN7.2 Ensembl assembly", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:49", name: START_POS_ENSEMBL, description: "start position for mRatBN7.2 Ensembl assembly", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:50", name: STOP_POS_ENSEMBL, description: "stop position for mRatBN7.2 Ensembl assembly", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:51", name: STRAND_ENSEMBL, description: "strand information for mRatBN7.2 Ensembl assembly", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:52", name: CHROMOSOME_GRCr8, description: "chromosome for GRCr8 NCBI assembly", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:53", name: START_POS_GRCr8, description: "start position for GRCr8 NCBI assembly", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:54", name: STOP_POS_GRCr8, description: "stop position for GRCr8 NCBI assembly", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:55", name: STRAND_GRCr8, description: "strand information for GRCr8 NCBI assembly", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:56", name: CHROMOSOME_UTH_SHR, description: "chromosome for UTH_Rnor_SHR_Utx assembly", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:57", name: START_POS_UTH_SHR, description: "start position for UTH_Rnor_SHR_Utx assembly", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:58", name: STOP_POS_UTH_SHR, description: "stop position for UTH_Rnor_SHR_Utx assembly", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:59", name: STRAND_UTH_SHR, description: "strand information for UTH_Rnor_SHR_Utx assembly", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:60", name: CHROMOSOME_UTH_SHRSP, description: "chromosome for UTH_Rnor_SHRSP_BbbUtx_1.0 assembly", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:61", name: START_POS_UTH_SHRSP, description: "start position for UTH_Rnor_SHRSP_BbbUtx_1.0 assembly", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:62", name: STOP_POS_UTH_SHRSP, description: "stop position for UTH_Rnor_SHRSP_BbbUtx_1.0 assembly", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:63", name: STRAND_UTH_SHRSP, description: "strand information for UTH_Rnor_SHRSP_BbbUtx_1.0 assembly", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:64", name: CHROMOSOME_UTH_WKY, description: "chromosome for UTH_Rnor_WKY_Bbb_1.0 assembly", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:65", name: START_POS_UTH_WKY, description: "start position for UTH_Rnor_WKY_Bbb_1.0 assembly", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:66", name: STOP_POS_UTH_WKY, description: "stop position for UTH_Rnor_WKY_Bbb_1.0 assembly", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}
+      - {key: "col:67", name: STRAND_UTH_WKY, description: "strand information for UTH_Rnor_WKY_Bbb_1.0 assembly", maps_to: [], status: not loaded, reason: not read, code: "RgdIdentifiersConverter.java:77-82"}

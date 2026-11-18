@@ -1,0 +1,266 @@
+# BioGRID interactions for human, PSI-MI 2.5 XML in the compact form
+# (BIOGRID-ORGANISM-Homo_sapiens-<release>.psi25.xml), cut to interactions with a panel participant.
+source: biogrid
+loader:
+  repository: intermine
+  path: bio/sources/biogrid
+  classes: [org.intermine.bio.dataconversion.BioGridConverter]
+  commit: 5351d0c301
+basis: >-
+  read from code at intermine 5351d0c301 (BioGridConverter.java, src/main/resources/biogrid_config.properties;
+  bio/core BioStoreHook for DataSet and CrossReference.source). Setting assumed: biogrid.organisms = 9606
+  (stock_sources.yaml).
+data_source: BioGRID
+data_sets: [BioGRID interaction data set]
+home: http://www.thebiogrid.org/
+writes: [DataSource, DataSet, Organism, Gene, CrossReference, Publication, InteractionTerm, InteractionExperiment,
+         Interaction, InteractionDetail]
+# Notes:
+# - DataSource, DataSet and licence (MIT) come from the constructor (BioGridConverter.java:96-97).
+# - The file is read only if its name gives a genus_species in biogrid.organisms: the organism is taken from
+#   substring(17) up to the next '-' (BioGridConverter.java:132-136, 151-170).
+# - Gene: for 9606 the config says primaryIdentifier = shortLabel (biogrid_config.properties:41). See
+#   interactor/names/shortLabel below.
+# - An interaction is dropped whole if any participant has no Gene (BioGridConverter.java:463-483, 516).
+# - Experiments are stored in close(), all of them, used or not (BioGridConverter.java:240-250).
+# - Model check: InteractionDetail.allInteractors is typed Interactor in the demo model and Gene does not extend
+#   Interactor, yet Gene refs are put in it (BioGridConverter.java:541-547, 590).
+files:
+  - id: organisms
+    format: xml
+    release: [{"from": "member_name", "pattern": "-(\\d+\\.\\d+\\.\\d+)\\.psi25\\.xml$", "label": "release"}]
+    record: one interaction (a BioGRID interaction with its participants, linked to experiments and interactors by id)
+    record_key: entrySet/entry/interactionList/interaction
+    unlisted: not loaded
+    unlisted_reason: >-
+      BioGridHandler only acts on the element paths it tests for (BioGridConverter.java:276-395, 418-524); every
+      path in the file that matches one of those tests is listed below.
+    fields:
+      # ---------------- source ----------------
+      - key: "entrySet/entry/source/names/shortLabel"
+        name: source label
+        description: "e.g. 'BIOGRID: All Interactions for Organism Homo sapiens (NCBITax: 9606)'"
+        maps_to: []
+        status: not loaded
+        reason: "read into a buffer but never used"
+        code: BioGridConverter.java:286-288
+        note: "There is no endElement branch for it."
+      - key: "entrySet/entry/source"
+        name: source (rest)
+        description: release, bibref, xref and attributes of the source
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: BioGridConverter.java:276-395
+        note: ""
+      # ---------------- experiments ----------------
+      - key: "entrySet/entry/experimentList/experimentDescription/@id"
+        name: experiment id
+        description: id that interactions use in experimentRef
+        maps_to: []
+        status: not loaded
+        reason: "read: links interactions to the experiment"
+        code: BioGridConverter.java:282-283, 498-501, 771-778
+        note: ""
+      - key: "entrySet/entry/experimentList/experimentDescription/names/shortLabel"
+        name: experiment short label
+        description: first author and year, e.g. Lehner B (2004)
+        maps_to: [InteractionExperiment.name]
+        status: loaded
+        reason: ""
+        code: BioGridConverter.java:290-292, 426-430, 785-809
+        note: "Experiments are merged on (publication, shortLabel); an empty label gives the name 'NAME NOT AVAILABLE'. When merged, only the first experiment's detection method and description are kept."
+      - key: "entrySet/entry/experimentList/experimentDescription/names/fullName"
+        name: experiment full name
+        description: title of the paper
+        maps_to: [InteractionExperiment.description]
+        status: loaded
+        reason: ""
+        code: BioGridConverter.java:294-296, 432-437, 796-798
+        note: ""
+      - key: "entrySet/entry/experimentList/experimentDescription/bibref/xref/primaryRef/@id"
+        name: publication id
+        description: PubMed id of the paper
+        maps_to: [Publication.pubMedId, InteractionExperiment.publication]
+        status: loaded
+        reason: "only all-digit ids"
+        code: BioGridConverter.java:298-304, 606-621, 805
+        note: "@db is not checked."
+      - key: "entrySet/entry/experimentList/experimentDescription/hostOrganismList"
+        name: host organism
+        description: organism the experiment was done in
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: BioGridConverter.java:276-395
+        note: "InteractionExperiment.hostOrganism is never set by this converter."
+      - key: "entrySet/entry/experimentList/experimentDescription/interactionDetectionMethod/xref/primaryRef/@id"
+        name: interaction detection method
+        description: PSI-MI term of the method, e.g. MI:0018 two hybrid
+        maps_to: [InteractionTerm.identifier, InteractionExperiment.interactionDetectionMethods]
+        status: loaded
+        reason: ""
+        code: BioGridConverter.java:306-309, 754-769, 795
+        note: "Only the MI id; names come from the psi-mi-ontology source."
+      - key: "entrySet/entry/experimentList/experimentDescription/interactionDetectionMethod/names"
+        name: detection method names
+        description: label of the method
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: BioGridConverter.java:306-309
+        note: ""
+      # ---------------- interactors ----------------
+      - key: "entrySet/entry/interactorList/interactor/@id"
+        name: interactor id
+        description: id that participants use in interactorRef
+        maps_to: []
+        status: not loaded
+        reason: "read: links participants to the interactor's Gene"
+        code: BioGridConverter.java:314-317
+        note: ""
+      - key: "entrySet/entry/interactorList/interactor/names/shortLabel"
+        name: interactor short label
+        description: official gene symbol, e.g. MAP2K4
+        maps_to: [Gene.primaryIdentifier]
+        status: loaded
+        reason: "through the ID resolver"
+        code: BioGridConverter.java:334-335, 445-454, 623-658, 714-727, 660-693; biogrid_config.properties:41
+        note: "How the gene is found: for 9606 the config takes the shortLabel (the symbol). If the ID resolver (IdResolverService.getIdResolverByOrganism(9606)) has taxon 9606, the symbol must resolve to exactly one gene, and Gene.primaryIdentifier is the resolved id; otherwise the interactor gets no Gene and its interactions are dropped. If the resolver lacks 9606, the raw symbol is stored as Gene.primaryIdentifier. No symbol is set on Gene."
+      - key: "entrySet/entry/interactorList/interactor/names/alias"
+        name: interactor alias
+        description: synonyms of the gene
+        maps_to: []
+        status: not loaded
+        reason: "read: an identifier source only for taxa configured by alias (not 9606)"
+        code: BioGridConverter.java:330-332, 457-459, 630-631
+        note: ""
+      - key: "entrySet/entry/interactorList/interactor/xref/primaryRef"
+        name: interactor primary xref
+        description: main identifier of the interactor (often refseq)
+        maps_to: []
+        status: not loaded
+        reason: "read: an identifier source only for taxa configured by xref (not 9606)"
+        code: BioGridConverter.java:321-327, 632-633
+        note: "All xrefs go into one map by lower-cased @db; the last id per db wins."
+      - key: "entrySet/entry/interactorList/interactor/xref/secondaryRef"
+        name: interactor secondary xrefs
+        description: further identifiers (entrez gene/locuslink, ensembl, uniprot, hgnc, biogrid, ...)
+        maps_to: [CrossReference.identifier, CrossReference.subject, CrossReference.source, Gene.crossReferences]
+        status: loaded
+        reason: "only db biogrid"
+        code: BioGridConverter.java:321-327, 670-673, 695-706, 920-925; BioStoreHook.java:89-94
+        note: "The biogrid id becomes one CrossReference on the Gene; its source is not set by the converter, so the store hook sets it to the DataSource BioGRID. The entrez gene, ensembl, uniprot, hgnc and other xrefs are not stored."
+      - key: "entrySet/entry/interactorList/interactor/organism/@ncbiTaxId"
+        name: interactor organism
+        description: NCBI taxon of the interactor
+        maps_to: [Organism.taxonId, Gene.organism]
+        status: loaded
+        reason: "read: only interactors of taxa in biogrid.organisms get a Gene"
+        code: BioGridConverter.java:337-357, 729-752
+        note: "A non-human interactor gets no Gene, so its interactions are dropped. Strain ids are mapped by the config (none for 9606)."
+      - key: "entrySet/entry/interactorList/interactor/organism/names"
+        name: organism names
+        description: label and full name of the organism
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: BioGridConverter.java:337-357
+        note: ""
+      - key: "entrySet/entry/interactorList/interactor/interactorType"
+        name: interactor type
+        description: protein, ...
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: BioGridConverter.java:276-395
+        note: ""
+      # ---------------- interactions ----------------
+      - key: "entrySet/entry/interactionList/interaction/names/shortLabel"
+        name: interaction short label
+        description: e.g. APOB-MTTP
+        maps_to: [InteractionDetail.name]
+        status: loaded
+        reason: ""
+        code: BioGridConverter.java:388-389, 503-508, 583-588
+        note: "If empty, the name is 'BioGRID:' plus the gene ids joined by '_'."
+      - key: "entrySet/entry/interactionList/interaction/xref"
+        name: interaction xref
+        description: BioGRID interaction id
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: BioGridConverter.java:276-395
+        note: ""
+      - key: "entrySet/entry/interactionList/interaction/experimentList/experimentRef"
+        name: experiment ref
+        description: id of the experiment
+        maps_to: [InteractionDetail.experiment]
+        status: loaded
+        reason: ""
+        code: BioGridConverter.java:363-364, 498-501, 582
+        note: ""
+      - key: "entrySet/entry/interactionList/interaction/participantList/participant/interactorRef"
+        name: interactor ref
+        description: id of the participating interactor
+        maps_to: [Interaction.participant1, Interaction.participant2, InteractionDetail.interaction, InteractionDetail.allInteractors]
+        status: loaded
+        reason: ""
+        code: BioGridConverter.java:367-368, 463-483, 526-537, 549-604
+        note: "For each ordered pair of different Genes an Interaction and an InteractionDetail are made (both directions). Prey-prey pairs are skipped. Details identical in name, roles, types, experiment and interaction are stored once."
+      - key: "entrySet/entry/interactionList/interaction/participantList/participant/experimentalRoleList/experimentalRole/names/shortLabel"
+        name: experimental role
+        description: bait or prey
+        maps_to: [InteractionDetail.role1, InteractionDetail.role2]
+        status: loaded
+        reason: ""
+        code: BioGridConverter.java:385-386, 486-496, 569-579
+        note: ""
+      - key: "entrySet/entry/interactionList/interaction/participantList/participant/experimentalRoleList/experimentalRole/xref"
+        name: experimental role term
+        description: PSI-MI id of the role
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: BioGridConverter.java:385-386
+        note: ""
+      - key: "entrySet/entry/interactionList/interaction/participantList/participant/participantIdentificationMethodList"
+        name: participant identification method
+        description: e.g. predetermined participant
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: BioGridConverter.java:276-395
+        note: ""
+      - key: "entrySet/entry/interactionList/interaction/participantList/participant/biologicalRole"
+        name: biological role
+        description: e.g. unspecified role
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: BioGridConverter.java:276-395
+        note: ""
+      - key: "entrySet/entry/interactionList/interaction/interactionType/xref/primaryRef/@id"
+        name: interaction type term
+        description: PSI-MI id of the interaction type, e.g. MI:0407
+        maps_to: [InteractionDetail.type]
+        status: loaded
+        reason: "mapped to 'physical' or 'genetic'"
+        code: BioGridConverter.java:101-120, 370-378, 580
+        note: "A fixed table maps 4 MI ids to physical and 14 to genetic; any other id stops the whole load with 'Bad interaction type'."
+      - key: "entrySet/entry/interactionList/interaction/interactionType/names/shortLabel"
+        name: interaction type label
+        description: direct interaction, physical association, ...
+        maps_to: [InteractionDetail.relationshipType]
+        status: loaded
+        reason: ""
+        code: BioGridConverter.java:380-382, 511-514, 581
+        note: ""
+      - key: "entrySet/entry/interactionList/interaction/attributeList"
+        name: interaction attributes
+        description: BioGRID Evidence Code, throughput, qualifications, ...
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: BioGridConverter.java:276-395
+        note: "The BioGRID evidence code (e.g. Two-hybrid) is lost."

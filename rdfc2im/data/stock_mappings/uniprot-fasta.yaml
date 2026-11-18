@@ -1,0 +1,112 @@
+# UniProt's Swiss-Prot isoform sequences (uniprot_sprot_varsplic.fasta), loaded by InterMine's fasta
+# source type through UniProtFastaLoaderTask: one Protein with its Sequence per isoform.
+source: uniprot-fasta
+loader:
+  repository: intermine
+  path: bio/sources/fasta
+  classes:
+    - org.intermine.bio.dataconversion.UniProtFastaLoaderTask
+    - org.intermine.bio.dataconversion.FastaLoaderTask
+  commit: 5351d0c301
+basis: >-
+  read from code at intermine 5351d0c301 (UniProtFastaLoaderTask.java, FastaLoaderTask.java,
+  UniProtFastaLoaderTaskTest.java for the identifier); names and settings from the hybrid build's
+  project.xml (fasta.className Protein, fasta.classAttribute primaryAccession, fasta.sequenceType
+  protein, fasta.taxonId 9606)
+data_source: UniProt
+data_sets: [uniprot-fasta]
+home: https://www.uniprot.org/
+# The code has no default names: DataSource.name is project.xml's fasta.dataSourceName and DataSet.name
+# its fasta.dataSetTitle (FastaLoaderTask.java:142-152, 359-394, 439-450); without a title the load throws.
+writes: [DataSource, DataSet, Organism, Sequence, Protein]
+files:
+  - id: varsplic
+    format: fasta
+    record: >-
+      one FASTA record = one isoform, e.g.
+      '>sp|Q9UNQ0-2|ABCG2_HUMAN Isoform 2 of ... OS=Homo sapiens OX=9606 GN=ABCG2' and its residues
+    record_key: null
+    unlisted: not loaded
+    unlisted_reason: >-
+      the loader reads only the accession, the OS= name and the residues (FastaLoaderTask.java:295-372,
+      420-437; UniProtFastaLoaderTask.java:33-59)
+    fields:
+      - key: "header:db"
+        name: db
+        description: sp (Swiss-Prot) or tr (TrEMBL)
+        maps_to: []
+        status: not loaded
+        reason: not read (only the part between the first two '|' is kept)
+        code: FastaLoaderTask.java:429-435
+      - key: "header:accession"
+        name: accession
+        description: UniProt isoform accession (Q9UNQ0-2)
+        maps_to: [Protein.primaryAccession]
+        status: loaded
+        reason: ""
+        code: FastaLoaderTask.java:329-331, 420-437
+        note: >-
+          The middle part of 'sp|Q9UNQ0-2|ABCG2_HUMAN' (fasta.classAttribute = primaryAccession), as
+          the loader's own test expects (UniProtFastaLoaderTaskTest.java:116). The isoform is not
+          linked to its canonical Protein here (no canonicalProtein, no uniprotAccession).
+      - key: "header:entry_name"
+        name: entry name
+        description: UniProt entry name (ABCG2_HUMAN)
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: FastaLoaderTask.java:429-435
+      - key: "header:description"
+        name: description
+        description: protein name of the isoform (Isoform 2 of ...)
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: FastaLoaderTask.java:295-372
+      - key: "header:OS"
+        name: OS
+        description: organism name (Homo sapiens)
+        maps_to: [Organism.taxonId, Protein.organism]
+        status: loaded
+        reason: "also a filter"
+        code: UniProtFastaLoaderTask.java:33-59, FastaLoaderTask.java:299-301, 456-473
+        note: >-
+          The name after OS= (with a trailing ' OX', ' GN', ' PE' or ' SV' cut off) is looked up in a
+          map of 'Genus species' names built from fasta.taxonId; a record of any other organism
+          returns no Organism and is skipped. The OX= taxon id itself is not read.
+      - key: "header:OX"
+        name: OX
+        description: NCBI taxon id (9606)
+        maps_to: []
+        status: not loaded
+        reason: "not read (the taxon comes from the OS= name)"
+        code: UniProtFastaLoaderTask.java:35-45
+      - key: "header:GN"
+        name: GN
+        description: gene name
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: UniProtFastaLoaderTask.java:33-59
+      - key: "header:PE"
+        name: PE
+        description: protein existence level
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: UniProtFastaLoaderTask.java:33-59
+      - key: "header:SV"
+        name: SV
+        description: sequence version
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: UniProtFastaLoaderTask.java:33-59
+      - key: "sequence"
+        name: sequence
+        description: amino-acid residues of the isoform
+        maps_to: [Sequence.residues, Sequence.length, Sequence.md5checksum, Protein.sequence, Protein.length, Protein.md5checksum]
+        status: loaded
+        reason: ""
+        code: FastaLoaderTask.java:303-311, 337-355
+        note: The length and the MD5 checksum of the residues are set on both the Sequence and the Protein.

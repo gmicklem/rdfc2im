@@ -1,0 +1,69 @@
+# Expression Atlas E-MTAB-513 (Illumina Body Map 2.0): FPKM per gene in 16 tissues
+# (assay groups g1..g16), loaded as AtlasExpression.
+source: atlas-express
+loader:
+  repository: humanmine-bio-sources
+  path: atlas-express
+  classes: [org.intermine.bio.dataconversion.AtlasExpressConverter]
+  commit: d67fc5d
+basis: read from code at humanmine-bio-sources d67fc5d (AtlasExpressConverter.java, BioFileConverter.java, BioStoreHook.java)
+data_source: ArrayExpress                     # AtlasExpressConverter.java:34
+data_sets: [atlas-express]                    # AtlasExpressConverter.java:33 (no licence set, :53)
+home: http://www.ebi.ac.uk/arrayexpress/
+writes: [AtlasExpression, Gene, Organism, DataSet, DataSource, Ontology, SOTerm]
+# Ontology and SOTerm (gene) come from BioFileConverter/BioStoreHook.
+files:
+  - id: fpkms
+    format: tab
+    comment: "#"
+    skip_lines: 0
+    header_line: "match:GeneID	"   # the header line, wherever it is: a filtered copy may lack it [im-9n4.42]
+    record: one row (one gene, with one cell per assay group)
+    record_key: null
+    unlisted: not loaded
+    unlisted_reason: >-
+      The converter reads column 1 and every column from 3 to the end of the header
+      (AtlasExpressConverter.java:82, :90); column 2 is skipped. All 18 header columns are listed.
+    fields:
+      - key: "col:1"
+        name: GeneID
+        description: Ensembl gene id
+        maps_to: [Gene.primaryIdentifier, AtlasExpression.gene]
+        status: loaded
+        reason: "resolved through the ID resolver"
+        code: AtlasExpressConverter.java:82
+        note: >-
+          Resolved through the human ID resolver (IdResolverService.getIdResolverByOrganism,
+          taxon 9606, :55, :153-167); the row is dropped unless the id resolves to exactly one gene,
+          whose resolved id (the NCBI Gene id with HumanMine's entrez resolver) becomes
+          Gene.primaryIdentifier (:136-151). Without a human resolver the raw Ensembl id is used.
+          Gene.organism is taxon 9606.
+      - key: "col:2"
+        name: Gene Name
+        description: gene symbol
+        maps_to: []
+        status: not loaded
+        reason: "dropped on purpose"
+        code: AtlasExpressConverter.java:89-90
+        note: "The loop over tissue columns starts at index 2 ('skip first two columns')."
+      # Columns 3-18: one per assay group, in the file's order (g1, g10..g16, g2..g9). Each non-empty
+      # cell makes one AtlasExpression: condition = the group's tissue name (hard-coded table
+      # ASSAY_GROUPS, :43-45, from E-MTAB-513-configuration.xml), expression = the third of the five
+      # comma separated values (the median; a cell without five values is used as it is, :128-134),
+      # type = "FPKM value" (or "TPM value" when the file name contains "tpm", :107-112).
+      - {key: "col:3", name: g1, description: "assay group g1 (leukocyte)", maps_to: [AtlasExpression.expression, AtlasExpression.condition], status: loaded, reason: "", code: "AtlasExpressConverter.java:92-100", note: "condition 'leukocyte'"}
+      - {key: "col:4", name: g10, description: "assay group g10 (prostate)", maps_to: [AtlasExpression.expression, AtlasExpression.condition], status: loaded, reason: "", code: "AtlasExpressConverter.java:92-100", note: "condition 'prostate'"}
+      - {key: "col:5", name: g11, description: "assay group g11 (lung)", maps_to: [AtlasExpression.expression, AtlasExpression.condition], status: loaded, reason: "", code: "AtlasExpressConverter.java:92-100", note: "condition 'lung'"}
+      - {key: "col:6", name: g12, description: "assay group g12 (thyroid)", maps_to: [AtlasExpression.expression, AtlasExpression.condition], status: loaded, reason: "", code: "AtlasExpressConverter.java:92-100", note: "condition 'thyroid'"}
+      - {key: "col:7", name: g13, description: "assay group g13 (colon)", maps_to: [AtlasExpression.expression, AtlasExpression.condition], status: loaded, reason: "", code: "AtlasExpressConverter.java:92-100", note: "condition 'colon'"}
+      - {key: "col:8", name: g14, description: "assay group g14 (testis)", maps_to: [AtlasExpression.expression, AtlasExpression.condition], status: loaded, reason: "", code: "AtlasExpressConverter.java:92-100", note: "condition 'testis'"}
+      - {key: "col:9", name: g15, description: "assay group g15 (adipose)", maps_to: [AtlasExpression.expression, AtlasExpression.condition], status: loaded, reason: "", code: "AtlasExpressConverter.java:92-100", note: "condition 'adipose'"}
+      - {key: "col:10", name: g16, description: "assay group g16 (adrenal)", maps_to: [AtlasExpression.expression, AtlasExpression.condition], status: loaded, reason: "", code: "AtlasExpressConverter.java:92-100", note: "condition 'adrenal'"}
+      - {key: "col:11", name: g2, description: "assay group g2 (lymph node)", maps_to: [AtlasExpression.expression, AtlasExpression.condition], status: loaded, reason: "", code: "AtlasExpressConverter.java:92-100", note: "condition 'lymph node'"}
+      - {key: "col:12", name: g3, description: "assay group g3 (ovary)", maps_to: [AtlasExpression.expression, AtlasExpression.condition], status: loaded, reason: "", code: "AtlasExpressConverter.java:92-100", note: "condition 'ovary'"}
+      - {key: "col:13", name: g4, description: "assay group g4 (breast)", maps_to: [AtlasExpression.expression, AtlasExpression.condition], status: loaded, reason: "", code: "AtlasExpressConverter.java:92-100", note: "condition 'breast'"}
+      - {key: "col:14", name: g5, description: "assay group g5 (kidney)", maps_to: [AtlasExpression.expression, AtlasExpression.condition], status: loaded, reason: "", code: "AtlasExpressConverter.java:92-100", note: "condition 'kidney'"}
+      - {key: "col:15", name: g6, description: "assay group g6 (liver)", maps_to: [AtlasExpression.expression, AtlasExpression.condition], status: loaded, reason: "", code: "AtlasExpressConverter.java:92-100", note: "condition 'liver'"}
+      - {key: "col:16", name: g7, description: "assay group g7 (skeletal muscle)", maps_to: [AtlasExpression.expression, AtlasExpression.condition], status: loaded, reason: "", code: "AtlasExpressConverter.java:92-100", note: "condition 'skeletal muscle'"}
+      - {key: "col:17", name: g8, description: "assay group g8 (heart)", maps_to: [AtlasExpression.expression, AtlasExpression.condition], status: loaded, reason: "", code: "AtlasExpressConverter.java:92-100", note: "condition 'heart'"}
+      - {key: "col:18", name: g9, description: "assay group g9 (brain)", maps_to: [AtlasExpression.expression, AtlasExpression.condition], status: loaded, reason: "", code: "AtlasExpressConverter.java:92-100", note: "condition 'brain'"}

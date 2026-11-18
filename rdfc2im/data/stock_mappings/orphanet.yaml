@@ -1,0 +1,177 @@
+# Orphanet product 1 (en_product1.xml): rare disorders with their ORPHAcode, name, synonyms,
+# cross-references and definitions. The converter keeps the code and the name only.
+source: orphanet
+loader:
+  repository: humanmine-bio-sources
+  path: orphanet
+  classes: [org.intermine.bio.dataconversion.OrphanetConverter]
+  commit: d67fc5d
+basis: read from code at humanmine-bio-sources d67fc5d (OrphanetConverter.java, BioFileConverter.java)
+data_source: Orphanet                         # OrphanetConverter.java:39
+data_sets: [orphanet]                         # OrphanetConverter.java:38 (licence CC BY 4.0, :41)
+home: https://www.orpha.net/consor/cgi-bin/index.php
+writes: [Disease, DataSet, DataSource, Ontology]
+# Ontology (Sequence Ontology) comes from BioFileConverter; Disease is not a SequenceFeature, so no SOTerm.
+# Disease.organism is not set. Any file other than en_product1.xml throws (:59-63).
+files:
+  - id: product1
+    format: xml
+    release: [{"from": "line", "pattern": "<JDBOR [^>]*version=\"([^\"]+)\"", "label": "JDBOR version"}, {"from": "line", "pattern": "<JDBOR [^>]*date=\"([^\"]+)\"", "label": "date"}]
+    record: one Disorder element (one rare disease or group of diseases)
+    record_key: JDBOR/DisorderList/Disorder
+    unlisted: not loaded
+    unlisted_reason: >-
+      processXML reads only the first OrphaCode and the first Name descendant of each Disorder
+      (OrphanetConverter.java:78-79); every other element and attribute is ignored.
+    fields:
+      - key: "JDBOR/@date"
+        name: date
+        description: date the file was made
+        maps_to: []
+        status: not loaded
+        reason: "not read by the converter"
+        code: OrphanetConverter.java:74
+        note: "DataSet.version is not set."
+      - key: "JDBOR/@version"
+        name: version
+        description: Orphanet data and software version
+        maps_to: []
+        status: not loaded
+        reason: "not read by the converter"
+        code: OrphanetConverter.java:74
+        note: ""
+      - key: "JDBOR/@copyright"
+        name: copyright
+        description: copyright line
+        maps_to: []
+        status: not loaded
+        reason: "not read by the converter"
+        code: OrphanetConverter.java:74
+        note: ""
+      - key: "JDBOR/@dbserver"
+        name: dbserver
+        description: Orphanet database server
+        maps_to: []
+        status: not loaded
+        reason: "not read by the converter"
+        code: OrphanetConverter.java:74
+        note: ""
+      - key: "JDBOR/Availability"
+        name: Availability
+        description: licence of the file (CC-BY-4.0)
+        maps_to: []
+        status: not loaded
+        reason: "not read by the converter"
+        code: OrphanetConverter.java:74
+        note: "The DataSet licence is the constant https://creativecommons.org/licenses/by/4.0/ (:41), not read from here."
+      - key: "JDBOR/DisorderList/@count"
+        name: count
+        description: number of disorders in the list
+        maps_to: []
+        status: not loaded
+        reason: "not read by the converter"
+        code: OrphanetConverter.java:74
+        note: ""
+      - key: "JDBOR/DisorderList/Disorder/@id"
+        name: id
+        description: Orphanet internal disorder id
+        maps_to: []
+        status: not loaded
+        reason: "not read by the converter"
+        code: OrphanetConverter.java:77-79
+        note: "The identifier is built from OrphaCode, not from this id."
+      - key: "JDBOR/DisorderList/Disorder/OrphaCode"
+        name: OrphaCode
+        description: ORPHAcode of the disorder
+        maps_to: [Disease.primaryIdentifier]
+        status: loaded
+        reason: ""
+        code: OrphanetConverter.java:78
+        note: >-
+          Stored as ORPHANET:<code> (:81), the form hpo-annotation makes of ORPHA:<code>. Taken as the
+          first OrphaCode descendant of the Disorder (getElementsByTagName(...).item(0)); the Disorder's
+          own OrphaCode is its first child, before the OrphaCodes of TargetDisorder/RootDisorder in
+          DisorderDisorderAssociationList.
+      - key: "JDBOR/DisorderList/Disorder/ExpertLink"
+        name: ExpertLink
+        description: link to the disorder's page on orpha.net
+        maps_to: []
+        status: not loaded
+        reason: "not read by the converter"
+        code: OrphanetConverter.java:78-79
+        note: ""
+      - key: "JDBOR/DisorderList/Disorder/Name"
+        name: Name
+        description: preferred name of the disorder
+        maps_to: [Disease.name]
+        status: loaded
+        reason: ""
+        code: OrphanetConverter.java:79
+        note: >-
+          Taken as the first Name descendant of the Disorder (item(0)); in the file the Disorder's own
+          Name comes before the Name elements inside DisorderType, DisorderGroup, ExternalReference
+          and TextSectionType, so it is the right one.
+      - key: "JDBOR/DisorderList/Disorder/Name/@lang"
+        name: lang
+        description: language of the name (en)
+        maps_to: []
+        status: not loaded
+        reason: "not read by the converter"
+        code: OrphanetConverter.java:79
+        note: ""
+      - key: "JDBOR/DisorderList/Disorder/DisorderFlagList"
+        name: DisorderFlagList
+        description: status flags of the disorder entry
+        maps_to: []
+        status: not loaded
+        reason: "not read by the converter"
+        code: OrphanetConverter.java:77-83
+        note: ""
+      - key: "JDBOR/DisorderList/Disorder/SynonymList"
+        name: SynonymList
+        description: synonyms of the disorder name
+        maps_to: []
+        status: not loaded
+        reason: "not read by the converter"
+        code: OrphanetConverter.java:77-83
+        note: "Disease.synonyms is not filled."
+      - key: "JDBOR/DisorderList/Disorder/DisorderType"
+        name: DisorderType
+        description: type of the entry (Disease, Malformation syndrome, Clinical subtype, ...)
+        maps_to: []
+        status: not loaded
+        reason: "not read by the converter"
+        code: OrphanetConverter.java:77-83
+        note: ""
+      - key: "JDBOR/DisorderList/Disorder/DisorderGroup"
+        name: DisorderGroup
+        description: level of the entry (Group of disorders, Disorder, Subtype of disorder)
+        maps_to: []
+        status: not loaded
+        reason: "not read by the converter"
+        code: OrphanetConverter.java:77-83
+        note: ""
+      - key: "JDBOR/DisorderList/Disorder/ExternalReferenceList"
+        name: ExternalReferenceList
+        description: mappings to ICD-10, ICD-11, OMIM, MONDO, MeSH, UMLS, GARD, ...
+        maps_to: []
+        status: not loaded
+        reason: "not read by the converter"
+        code: OrphanetConverter.java:77-83
+        note: "Disease.crossReferences is not filled; the OMIM mappings would link ORPHANET: and OMIM: diseases."
+      - key: "JDBOR/DisorderList/Disorder/DisorderDisorderAssociationList"
+        name: DisorderDisorderAssociationList
+        description: links to related disorders (TargetDisorder, RootDisorder, association type)
+        maps_to: []
+        status: not loaded
+        reason: "not read by the converter"
+        code: OrphanetConverter.java:77-83
+        note: "These are TargetDisorder/RootDisorder elements, not Disorder, so getElementsByTagName(\"Disorder\") does not pick them up (:74)."
+      - key: "JDBOR/DisorderList/Disorder/SummaryInformationList"
+        name: SummaryInformationList
+        description: text sections (the definition of the disorder)
+        maps_to: []
+        status: not loaded
+        reason: "not read by the converter"
+        code: OrphanetConverter.java:77-83
+        note: "Disease has no description field in this model."

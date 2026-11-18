@@ -1,0 +1,688 @@
+# UniProtKB/Swiss-Prot XML for human (uniprot_sprot_human.xml, staged as 9606_uniprot_sprot.xml).
+# One <entry> per reviewed protein; the converter makes a Protein per entry and one per described isoform.
+source: uniprot
+loader:
+  repository: intermine
+  path: bio/sources/uniprot
+  classes:
+    - org.intermine.bio.dataconversion.UniprotConverter
+    - org.intermine.bio.dataconversion.UniprotEntry
+    - org.intermine.bio.dataconversion.UniprotConfig
+  commit: 5351d0c301
+basis: >-
+  read from code at intermine 5351d0c301 (UniprotConverter.java, UniprotEntry.java, UniprotConfig.java,
+  src/main/resources/uniprot_config.properties, uniprot_keys.properties; bio/core BioDirectoryConverter.java
+  for DataSource, DataSet, Organism, Synonym and CrossReference items). Settings assumed: only
+  uniprot.organisms = 9606 is set (stock_sources.yaml), so the converter defaults apply: creategenes true,
+  creatego false, loadfragments false, allowduplicates false, loadtrembl true.
+data_source: UniProt
+data_sets: [Swiss-Prot data set]
+home: https://www.uniprot.org/
+writes: [DataSource, DataSet, Ontology, OntologyTerm, Organism, Protein, Sequence, ECNumber, Comment, Component,
+         UniProtFeature, Publication, Gene, Synonym, CrossReference]
+# Notes (comments, since the format has no top-level notes key):
+# - The DataSet name is entry/@dataset plus ' data set' (UniprotConverter.java:344); every entry here says
+#   Swiss-Prot, so it is 'Swiss-Prot data set', the same name the constructor passes (UniprotConverter.java:90).
+#   DataSource 'UniProt' (UniprotConverter.java:90, 105).
+# - CrossReference items also create DataSources named after the xref database: 'UniProt' for accessions,
+#   'RefSeq' and 'UniGene' for dbReferences (BioDirectoryConverter.java:193-211).
+# - GO classes (GOAnnotation, GOEvidence, GOEvidenceCode, GOTerm) are made only when creatego is true
+#   (UniprotConverter.java:72, 960-986, 1079-1085); it is false here, so they are not in writes.
+# - Duplicate sequences: a second entry of the same organism with the same md5 checksum is not stored as a
+#   Protein; its primary accession becomes a Synonym of the first one (UniprotConverter.java:654-666).
+files:
+  - id: sprot
+    format: xml
+    record: one UniProtKB entry (one reviewed protein, with its isoforms, names, gene links, comments, features and sequence)
+    record_key: uniprot/entry
+    unlisted: not loaded
+    unlisted_reason: >-
+      UniprotHandler only acts on the element names it tests for (UniprotConverter.java:334-463, 477-605); every
+      path in this file that matches one of those tests is listed below. Note that a few tests match by element
+      name at any depth (ecNumber, keyword, accession, feature, sequence), so an unlisted path with one of those
+      names would be read too.
+    fields:
+      # ---------------- entry attributes ----------------
+      - key: "uniprot/entry/@dataset"
+        name: dataset
+        description: UniProtKB section of the entry (Swiss-Prot or TrEMBL)
+        maps_to: [DataSet.name, Protein.dataSets]
+        status: loaded
+        reason: ""
+        code: UniprotConverter.java:342-345, 675
+        note: "Stored as '<dataset> data set' (here 'Swiss-Prot data set'), licence CC BY 4.0, dataSource UniProt. An entry without the attribute gets no data set and is not stored (UniprotConverter.java:668)."
+      - key: "uniprot/entry/@created"
+        name: created
+        description: date the entry was first created
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: UniprotConverter.java:342-345
+        note: ""
+      - key: "uniprot/entry/@modified"
+        name: modified
+        description: date the entry was last modified
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: UniprotConverter.java:342-345
+        note: ""
+      - key: "uniprot/entry/@version"
+        name: version
+        description: entry version
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: UniprotConverter.java:342-345
+        note: ""
+      # ---------------- accession and name ----------------
+      - key: "uniprot/entry/accession"
+        name: accession
+        description: UniProtKB accession; the first is the primary accession, the rest are secondary
+        maps_to: [Protein.primaryAccession, Protein.uniprotAccession, Protein.secondaryIdentifier, Synonym.value, CrossReference.identifier]
+        status: loaded
+        reason: ""
+        code: UniprotConverter.java:364-365, 535-540, 813-819, 898-902; UniprotEntry.java:319-326
+        note: "The first accession sets primaryAccession, uniprotAccession and secondaryIdentifier. The secondary accessions (not the primary) each become a Synonym and a CrossReference (source DataSource 'UniProt'). An entry whose primary accession was already seen is skipped as a duplicate (UniprotConverter.java:1383-1400)."
+      - key: "uniprot/entry/name"
+        name: name
+        description: UniProtKB entry name (mnemonic), e.g. ABCG5_HUMAN
+        maps_to: [Protein.primaryIdentifier, Protein.uniprotName]
+        status: loaded
+        reason: ""
+        code: UniprotConverter.java:360-361, 532-534, 821-828
+        note: "Isoform Proteins get primaryIdentifier '<name>-<n>' from the isoform accession suffix, which is also stored as a Synonym (UniprotConverter.java:855-862, 904-910)."
+      # ---------------- protein names ----------------
+      - key: "uniprot/entry/protein/recommendedName/fullName"
+        name: recommended full name
+        description: recommended protein name
+        maps_to: [Protein.name]
+        status: loaded
+        reason: ""
+        code: UniprotConverter.java:346-349, 492-493, 814
+        note: "Only Protein.name; the recommended full name is not also made a Synonym (the first test wins)."
+      - key: "uniprot/entry/protein/recommendedName/shortName"
+        name: recommended short name
+        description: short form of the recommended name
+        maps_to: [Synonym.value]
+        status: loaded
+        reason: ""
+        code: UniprotConverter.java:350-355, 494-495, 912-915
+        note: "Synonym of the Protein."
+      - key: "uniprot/entry/protein/alternativeName/fullName"
+        name: alternative full name
+        description: alternative protein name
+        maps_to: [Synonym.value]
+        status: loaded
+        reason: ""
+        code: UniprotConverter.java:350-355, 494-495, 912-915
+        note: "Synonym of the Protein."
+      - key: "uniprot/entry/protein/alternativeName/shortName"
+        name: alternative short name
+        description: short form of an alternative name
+        maps_to: [Synonym.value]
+        status: loaded
+        reason: ""
+        code: UniprotConverter.java:350-355, 494-495, 912-915
+        note: "Synonym of the Protein."
+      - key: "uniprot/entry/protein/recommendedName/ecNumber"
+        name: EC number
+        description: Enzyme Commission number of the protein
+        maps_to: [ECNumber.identifier, Protein.ecNumbers]
+        status: loaded
+        reason: ""
+        code: UniprotConverter.java:362-363, 496-497, 831-853
+        note: "The test matches an ecNumber element at any depth, so ecNumbers under alternativeName or component also go to the Protein. The entry/dbReference of type EC is not used for this."
+      - key: "uniprot/entry/protein/component/recommendedName/fullName"
+        name: component name
+        description: name of a chain or peptide the precursor is cleaved into
+        maps_to: [Component.name, Component.protein]
+        status: loaded
+        reason: ""
+        code: UniprotConverter.java:356-359, 541-545, 717-720, 864-876
+        note: "Canonical entries only; isoform entries get no components (UniprotEntry.java:915-952)."
+      - key: "uniprot/entry/protein/component/recommendedName/shortName"
+        name: component short name
+        description: short name of a component
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: UniprotConverter.java:350-359
+        note: "The synonym test needs protein two levels up; under component it is three."
+      - key: "uniprot/entry/protein/component/alternativeName"
+        name: component alternative name
+        description: alternative names of a component
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: UniprotConverter.java:350-359
+        note: ""
+      - key: "uniprot/entry/protein/cdAntigenName"
+        name: CD antigen name
+        description: CD antigen nomenclature name
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: UniprotConverter.java:346-359
+        note: ""
+      # ---------------- gene ----------------
+      - key: "uniprot/entry/gene/name"
+        name: gene name
+        description: gene name (type primary, synonym, ORF or ordered locus)
+        maps_to: [Synonym.value]
+        status: loaded
+        reason: "only names of type 'synonym', as protein synonyms"
+        code: UniprotConverter.java:433-434, 494-495, 528-529, 1142-1150
+        note: "The converter keeps the name under its type (UniprotEntry.java:741-746) to find gene identifiers for taxa configured with the 'name' method; human is configured with dbref GeneID (uniprot_config.properties:66-67), so these are not used for the Gene. Because attName is set to the type value, a name of type 'synonym' hits the protein-synonym branch first and becomes a Synonym of the Protein (UniprotConverter.java:494-495), not a gene name. No gene symbol is set on Gene by this converter for human."
+      - key: "uniprot/entry/gene/name/@type"
+        name: gene name type
+        description: primary, synonym, ORF or ordered locus
+        maps_to: []
+        status: not loaded
+        reason: "read: chooses where the gene name goes (see gene/name)"
+        code: UniprotConverter.java:433-434
+        note: ""
+      # ---------------- organism ----------------
+      - key: "uniprot/entry/organism/dbReference/@id"
+        name: NCBI taxonomy id
+        description: taxon of the source organism
+        maps_to: [Organism.taxonId, Protein.organism, Gene.organism]
+        status: loaded
+        reason: ""
+        code: UniprotConverter.java:366-367, 465-471, 695, 1078; BioDirectoryConverter.java:166-180
+        note: "Any dbReference directly under organism is taken as the taxon; its @type is not checked. Subspecies ids are mapped to the configured main taxon (uniprot_config.properties subspecies lines)."
+      - key: "uniprot/entry/organism/dbReference/@type"
+        name: taxonomy database
+        description: always 'NCBI Taxonomy'
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: UniprotConverter.java:366-367
+        note: ""
+      - key: "uniprot/entry/organism/name"
+        name: organism name
+        description: scientific and common name of the organism
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: UniprotConverter.java:334-463
+        note: "Organism gets only taxonId from this converter."
+      - key: "uniprot/entry/organism/lineage"
+        name: lineage
+        description: taxonomic lineage
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: UniprotConverter.java:334-463
+        note: ""
+      # ---------------- references ----------------
+      - key: "uniprot/entry/reference/citation/dbReference/@id"
+        name: citation PubMed id
+        description: PubMed id of the cited publication
+        maps_to: [Publication.pubMedId, Protein.publications, Gene.publications]
+        status: loaded
+        reason: ""
+        code: UniprotConverter.java:409-411, 698-700, 1057-1065, 1271-1288
+        note: "Only dbReferences of type PubMed. The Protein's publications are also added to its Gene."
+      - key: "uniprot/entry/reference/citation/dbReference/@type"
+        name: citation database
+        description: PubMed or DOI (and others)
+        maps_to: []
+        status: not loaded
+        reason: "read: only type PubMed is kept; DOI and other ids are dropped"
+        code: UniprotConverter.java:409-410
+        note: ""
+      - key: "uniprot/entry/reference/citation/title"
+        name: citation title
+        description: title of the cited work
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: UniprotConverter.java:409-411
+        note: "Publication gets only pubMedId here; titles and authors come from a later publications source, if any."
+      - key: "uniprot/entry/reference/citation/authorList"
+        name: author list
+        description: authors of the cited work
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: UniprotConverter.java:409-411
+        note: ""
+      - key: "uniprot/entry/reference/citation/@type"
+        name: citation type
+        description: journal article, submission, book, ...
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: UniprotConverter.java:409-411
+        note: "The citation's other attributes (date, name, volume, first, last, db) are not read either."
+      - key: "uniprot/entry/reference/scope"
+        name: reference scope
+        description: what the reference was used for, e.g. NUCLEOTIDE SEQUENCE
+        maps_to: []
+        status: not loaded
+        reason: "read: a scope containing RETRACTED drops the last publication added"
+        code: UniprotConverter.java:453-454, 582-587; UniprotEntry.java:261-264
+        note: "It removes the last PubMed publication collected so far, which is the reference's own only if that reference had a PubMed id."
+      - key: "uniprot/entry/reference/source"
+        name: reference source
+        description: strain, tissue or plasmid of the sequenced material
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: UniprotConverter.java:334-463
+        note: ""
+      - key: "uniprot/entry/reference/@key"
+        name: reference key
+        description: number of the reference within the entry
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: UniprotConverter.java:334-463
+        note: ""
+      # ---------------- comments ----------------
+      - key: "uniprot/entry/comment/@type"
+        name: comment type
+        description: topic of the comment (function, subunit, disease, ...)
+        maps_to: [Comment.type]
+        status: loaded
+        reason: ""
+        code: UniprotConverter.java:412-414, 503-504
+        note: "There is no list of kept types in the config: every comment that has a direct text child is stored, whatever its type."
+      - key: "uniprot/entry/comment/text"
+        name: comment text
+        description: free text of the comment
+        maps_to: [Comment.description, Protein.comments]
+        status: loaded
+        reason: ""
+        code: UniprotConverter.java:415-420, 498-527, 703-706
+        note: "Only a text that is a direct child of comment (so not reaction/text). Comments with no direct text (catalytic activity, cofactor, interaction, most subcellular location) make no Comment. Text longer than 2712 characters is cut and ends with '...'. For type disease the description starts with 'MIM:<id>; <name>; <acronym>; <description> '. Isoform Proteins share the canonical entry's comments."
+      - key: "uniprot/entry/comment/text/@evidence"
+        name: comment evidence
+        description: evidence keys (entry/evidence/@key) for the text
+        maps_to: []
+        status: not loaded
+        reason: "read: meant to fill Comment.publications, but the lookup never matches (see entry/evidence)"
+        code: UniprotConverter.java:417-420, 764-786
+        note: "Each key is looked up in a map that is filled only from entry/evidence/@attribute, which the current XML does not have; the converter logs 'bad evidence code' and stores no publications."
+      - key: "uniprot/entry/comment/disease/name"
+        name: disease name
+        description: name of the disease in a disease comment
+        maps_to: [Comment.description]
+        status: loaded
+        reason: "as part of the comment text"
+        code: UniprotConverter.java:442-444, 546-559, 512-514, 1447-1463
+        note: "Prefixed to the disease comment's text; no Disease object is made."
+      - key: "uniprot/entry/comment/disease/acronym"
+        name: disease acronym
+        description: acronym of the disease
+        maps_to: [Comment.description]
+        status: loaded
+        reason: "as part of the comment text"
+        code: UniprotConverter.java:442-444, 546-559
+        note: ""
+      - key: "uniprot/entry/comment/disease/description"
+        name: disease description
+        description: description of the disease
+        maps_to: [Comment.description]
+        status: loaded
+        reason: "as part of the comment text"
+        code: UniprotConverter.java:442-444, 546-559
+        note: ""
+      - key: "uniprot/entry/comment/disease/dbReference/@id"
+        name: disease xref id
+        description: MIM number of the disease
+        maps_to: [Comment.description]
+        status: loaded
+        reason: "as part of the comment text"
+        code: UniprotConverter.java:446-452
+        note: "Written as '<type>:<id>', e.g. 'MIM:618666'."
+      - key: "uniprot/entry/comment/disease/dbReference/@type"
+        name: disease xref database
+        description: MIM
+        maps_to: [Comment.description]
+        status: loaded
+        reason: "as part of the comment text"
+        code: UniprotConverter.java:446-452
+        note: ""
+      - key: "uniprot/entry/comment/disease/@id"
+        name: disease id
+        description: UniProt disease id (DI-nnnnn)
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: UniprotConverter.java:442-452
+        note: ""
+      - key: "uniprot/entry/comment/isoform/id"
+        name: isoform id
+        description: isoform accession, e.g. Q9H222-2
+        maps_to: [Protein.primaryAccession, Protein.canonicalProtein, Protein.isUniprotCanonical, Synonym.value]
+        status: loaded
+        reason: ""
+        code: UniprotConverter.java:370-381, 560-578, 676-678, 727-740; UniprotEntry.java:502-526, 926-952
+        note: "A 'described' isoform becomes its own Protein (primaryAccession = isoform id, uniprotAccession = the canonical accession, isUniprotCanonical false, canonicalProtein = the entry's Protein, no sequence). The 'displayed' isoform id becomes a Synonym of the canonical Protein. A second id, or ids after a comma, become Synonyms."
+      - key: "uniprot/entry/comment/isoform/name"
+        name: isoform name
+        description: isoform name, often just a number
+        maps_to: [Synonym.value]
+        status: loaded
+        reason: "only names that are not all digits"
+        code: UniprotConverter.java:368-369, 588-591
+        note: ""
+      - key: "uniprot/entry/comment/isoform/sequence/@type"
+        name: isoform sequence type
+        description: displayed, described, external or not described
+        maps_to: []
+        status: not loaded
+        reason: "read: displayed marks the canonical isoform, described makes an isoform Protein; other types are ignored"
+        code: UniprotConverter.java:374-381
+        note: "Isoform residues are not in this file; stock_sources.yaml loads them from the varsplic FASTA (uniprot-fasta)."
+      - key: "uniprot/entry/comment/isoform/sequence/@ref"
+        name: isoform sequence ref
+        description: feature ids (VSP_...) that describe the isoform
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: UniprotConverter.java:374-381
+        note: ""
+      - key: "uniprot/entry/comment/event"
+        name: alternative products event
+        description: alternative splicing, promoter usage, ...
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: UniprotConverter.java:334-463
+        note: ""
+      - key: "uniprot/entry/comment/interactant"
+        name: interactant
+        description: binary interaction partner (interaction comments)
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: UniprotConverter.java:334-463
+        note: "Interaction comments have no direct text, so no Comment is made for them."
+      - key: "uniprot/entry/comment/organismsDiffer"
+        name: organisms differ
+        description: whether the interactants come from different organisms
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: UniprotConverter.java:334-463
+        note: ""
+      - key: "uniprot/entry/comment/experiments"
+        name: experiments
+        description: number of experiments supporting the interaction
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: UniprotConverter.java:334-463
+        note: ""
+      - key: "uniprot/entry/comment/subcellularLocation"
+        name: subcellular location
+        description: location and topology of the protein in the cell
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: UniprotConverter.java:415-420
+        note: "Only a direct comment/text is stored; the location terms themselves are not."
+      - key: "uniprot/entry/comment/reaction"
+        name: catalytic reaction
+        description: reaction text and Rhea/ChEBI xrefs (catalytic activity comments)
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: UniprotConverter.java:415-420, 498
+        note: "reaction/text is not a direct child of comment, so it is not stored."
+      - key: "uniprot/entry/comment/physiologicalReaction"
+        name: physiological reaction
+        description: direction of the reaction in vivo
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: UniprotConverter.java:334-463
+        note: ""
+      - key: "uniprot/entry/comment/cofactor"
+        name: cofactor
+        description: cofactor name and ChEBI xref
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: UniprotConverter.java:334-463
+        note: ""
+      - key: "uniprot/entry/comment/link"
+        name: online information link
+        description: URL of an online resource
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: UniprotConverter.java:334-463
+        note: "The comment's own text is stored."
+      - key: "uniprot/entry/comment/@evidence"
+        name: comment evidence
+        description: evidence keys on the comment element itself
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: UniprotConverter.java:412-414
+        note: ""
+      # ---------------- cross-references ----------------
+      - key: "uniprot/entry/dbReference/@type"
+        name: database
+        description: name of the cross-referenced database (RefSeq, GeneID, Ensembl, GO, PDB, ...)
+        maps_to: [CrossReference.source, DataSource.name]
+        status: loaded
+        reason: "only RefSeq and UniGene as CrossReference"
+        code: UniprotConverter.java:423-424, 934-958; UniprotConfig.java:107-111; uniprot_config.properties:187
+        note: "Every entry-level dbReference is collected; only types listed in crossReference.dbs (RefSeq, UniGene) become CrossReferences, with a DataSource named after the type. UniProt no longer has UniGene xrefs (none in the sample), so in practice only RefSeq. Type GeneID gives the Gene (see @id). Type GO would make GOAnnotations only with creatego, which is off."
+      - key: "uniprot/entry/dbReference/@id"
+        name: database identifier
+        description: identifier in the cross-referenced database
+        maps_to: [CrossReference.identifier, Gene.primaryIdentifier, Protein.genes]
+        status: loaded
+        reason: "RefSeq/UniGene ids as CrossReference; GeneID ids as Gene"
+        code: UniprotConverter.java:423-424, 934-958, 990-1051, 1067-1093, 1152-1174
+        note: "How the gene is found for 9606: uniprot_config.properties:66-67 says primaryIdentifier from dbref GeneID, so the id of each dbReference type='GeneID' (the NCBI Gene id) is set as Gene.primaryIdentifier, with organism 9606. No ID resolver is used for human: resolveGene only calls the resolver for 7227 (UniprotConverter.java:1194-1199). An entry with no GeneID gets no Gene (logged). Isoform Proteins link to the same Gene."
+      - key: "uniprot/entry/dbReference/property"
+        name: dbReference property
+        description: extra values of a cross-reference (protein sequence ID, gene ID, entry name, ...)
+        maps_to: []
+        status: not loaded
+        reason: "read: type 'evidence' feeds GO evidence (unused, creatego off); gene designation unused for 9606"
+        code: UniprotConverter.java:425-432; UniprotConfig.java:183-189
+        note: "9606 has no gene-designation line in uniprot_config.properties, so the 'gene ID' property of Ensembl xrefs is not used."
+      - key: "uniprot/entry/dbReference/molecule"
+        name: dbReference molecule
+        description: isoform the cross-reference belongs to
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: UniprotConverter.java:334-463
+        note: "RefSeq CrossReferences are attached to the canonical Protein (and again to each isoform Protein), not to the isoform named here."
+      - key: "uniprot/entry/proteinExistence"
+        name: protein existence
+        description: level of evidence that the protein exists
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: UniprotConverter.java:334-463
+        note: "No test for proteinExistence in the handler."
+      # ---------------- keywords ----------------
+      - key: "uniprot/entry/keyword"
+        name: keyword
+        description: UniProt keyword name
+        maps_to: [OntologyTerm.name, OntologyTerm.ontology, Ontology.name, Protein.keywords]
+        status: loaded
+        reason: ""
+        code: UniprotConverter.java:421-422, 530-531, 708-711, 1237-1253, 1333-1347
+        note: "One OntologyTerm per keyword name, in the Ontology 'UniProtKeyword'. The term gets only its name here (the KW id is not set)."
+      - key: "uniprot/entry/keyword/@id"
+        name: keyword id
+        description: UniProt keyword accession (KW-nnnn)
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: UniprotConverter.java:421-422
+        note: "The uniprot-keywords source is the one that gives keyword ids."
+      # ---------------- features ----------------
+      - key: "uniprot/entry/feature/@type"
+        name: feature type
+        description: kind of sequence feature (chain, domain, helix, sequence variant, ...)
+        maps_to: [UniProtFeature.type, UniProtFeature.feature, OntologyTerm.name, Protein.features]
+        status: loaded
+        reason: "only the configured feature types"
+        code: UniprotConverter.java:397-400, 878-893, 1349-1368; UniprotConfig.java:101-105; uniprot_config.properties:181
+        note: "Kept types (feature.types): initiator methionine, signal peptide, propeptide, short sequence motif, transit peptide, chain, peptide, topological domain, transmembrane region, active site, metal ion-binding site, binding site, site, modified residue, lipid moiety-binding region, glycosylation site, splice variant, sequence variant, unsure residue, strand, turn, helix. Dropped types include domain, region of interest, compositionally biased region, coiled-coil region, repeat, zinc finger region, DNA-binding region, disulfide bond, cross-link, mutagenesis site, sequence conflict, non-standard amino acid, non-terminal residue, intramembrane region. UniProtFeature.feature points to an OntologyTerm named after the type in the UniProtKeyword ontology; that term is made for every feature type seen, kept or not (UniprotConverter.java:1355). Canonical entries only."
+      - key: "uniprot/entry/feature/@description"
+        name: feature description
+        description: free-text description of the feature
+        maps_to: [UniProtFeature.description]
+        status: loaded
+        reason: ""
+        code: UniprotConverter.java:397-400, 1357-1364
+        note: "If the feature has @status, it is appended as ' (<status>)'."
+      - key: "uniprot/entry/feature/@status"
+        name: feature status
+        description: e.g. probable, potential
+        maps_to: [UniProtFeature.description]
+        status: loaded
+        reason: "appended to the description"
+        code: UniprotConverter.java:1358-1361
+        note: ""
+      - key: "uniprot/entry/feature/location/begin/@position"
+        name: begin position
+        description: first residue of the feature
+        maps_to: [UniProtFeature.begin]
+        status: loaded
+        reason: ""
+        code: UniprotConverter.java:401-404; UniprotEntry.java:232-234
+        note: "A begin with @status (unknown) and no position sets nothing."
+      - key: "uniprot/entry/feature/location/end/@position"
+        name: end position
+        description: last residue of the feature
+        maps_to: [UniProtFeature.end]
+        status: loaded
+        reason: ""
+        code: UniprotConverter.java:401-404
+        note: ""
+      - key: "uniprot/entry/feature/location/position/@position"
+        name: single position
+        description: position of a one-residue feature
+        maps_to: [UniProtFeature.begin, UniProtFeature.end]
+        status: loaded
+        reason: ""
+        code: UniprotConverter.java:405-408
+        note: "Sets begin and end to the same value."
+      - key: "uniprot/entry/feature/location/begin/@status"
+        name: begin status
+        description: certainty of the begin position (unknown, less than, ...)
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: UniprotConverter.java:401-404
+        note: "The same holds for end/@status."
+      - key: "uniprot/entry/feature/@id"
+        name: feature id
+        description: stable feature id (PRO_, VAR_, VSP_ ...)
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: UniprotConverter.java:397-400
+        note: ""
+      - key: "uniprot/entry/feature/@evidence"
+        name: feature evidence
+        description: evidence keys for the feature
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: UniprotConverter.java:397-400
+        note: ""
+      - key: "uniprot/entry/feature/original"
+        name: original residue
+        description: original sequence of a variant or conflict
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: UniprotConverter.java:334-463
+        note: "Variant residues are lost; only type, description and position are kept."
+      - key: "uniprot/entry/feature/variation"
+        name: variant residue
+        description: changed sequence of a variant or conflict
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: UniprotConverter.java:334-463
+        note: ""
+      - key: "uniprot/entry/feature/ligand"
+        name: ligand
+        description: ligand name and ChEBI xref of a binding site
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: UniprotConverter.java:334-463
+        note: ""
+      # ---------------- evidence ----------------
+      - key: "uniprot/entry/evidence"
+        name: evidence
+        description: evidence record (@key, @type ECO code, source/dbReference such as PubMed)
+        maps_to: []
+        status: not loaded
+        reason: "read: the code wants an @attribute that the current XML does not have"
+        code: UniprotConverter.java:435-441, 1258-1269
+        note: "The handler needs both @key and @attribute ('PubMed=nnn', an old format). Current entries carry the PubMed id in evidence/source/dbReference, which is not read, so no evidence-to-publication map is built and Comment.publications stays empty."
+      # ---------------- sequence ----------------
+      - key: "uniprot/entry/sequence"
+        name: sequence
+        description: canonical amino-acid sequence
+        maps_to: [Sequence.residues, Sequence.md5checksum, Protein.sequence, Protein.md5checksum]
+        status: loaded
+        reason: ""
+        code: UniprotConverter.java:382-388, 490-491, 788-811; UniprotEntry.java:431-434
+        note: "Newlines removed; the MD5 checksum is computed from the residues (the file's @checksum is not used). One Sequence per distinct checksum. Isoform Proteins get no sequence here."
+      - key: "uniprot/entry/sequence/@length"
+        name: sequence length
+        description: number of residues
+        maps_to: [Protein.length, Sequence.length]
+        status: loaded
+        reason: ""
+        code: UniprotConverter.java:383-388, 791, 801
+        note: ""
+      - key: "uniprot/entry/sequence/@mass"
+        name: mass
+        description: molecular mass in daltons
+        maps_to: [Protein.molecularWeight]
+        status: loaded
+        reason: ""
+        code: UniprotConverter.java:384-391, 793
+        note: ""
+      - key: "uniprot/entry/sequence/@fragment"
+        name: fragment
+        description: set when the sequence is a fragment (single or multiple)
+        maps_to: [Protein.isFragment]
+        status: loaded
+        reason: "always false for stored proteins"
+        code: UniprotConverter.java:392-396, 671-673, 815
+        note: "With loadfragments false, an entry with @fragment is not stored at all, so Protein.isFragment is false on every Protein. The sample has no fragment entries."
+      - key: "uniprot/entry/sequence/@checksum"
+        name: CRC64 checksum
+        description: CRC64 checksum of the sequence
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: UniprotConverter.java:382-396
+        note: "The converter computes its own MD5."
+      - key: "uniprot/entry/sequence/@modified"
+        name: sequence modified
+        description: date the sequence last changed
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: UniprotConverter.java:382-396
+        note: ""
+      - key: "uniprot/entry/sequence/@version"
+        name: sequence version
+        description: version of the sequence
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: UniprotConverter.java:382-396
+        note: ""

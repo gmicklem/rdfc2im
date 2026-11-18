@@ -1,0 +1,90 @@
+# PANTHER reference-genome orthologues and paralogues (RefGenomeOrthologs, PANTHER 19), loaded by
+# InterMine's panther source as Homologue pairs between human genes and the genes of six model organisms.
+source: panther
+loader:
+  repository: intermine
+  path: bio/sources/panther
+  classes: [org.intermine.bio.dataconversion.PantherConverter]
+  commit: 5351d0c301
+basis: read from code at intermine 5351d0c301 (PantherConverter.java, panther_config.properties)
+data_source: Panther
+data_sets: [Panther orthologue and paralogue predictions]
+home: http://pantherdb.org/
+writes: [DataSource, DataSet, Organism, Gene, Homologue, OrthologueEvidenceCode, OrthologueEvidence,
+         CrossReference, SOTerm, Ontology]
+# SOTerm and Ontology: BioFileConverter's store hook gives every Gene a sequenceOntologyTerm (SO 'gene')
+# (BioFileConverter.java:69-80, BioStoreHook.java:115-157).
+files:
+  - id: orthologs
+    format: tab
+    comment: "#"
+    skip_lines: 0
+    header_line: null
+    record: one row = one pair of genes in a PANTHER family with their relation (no header)
+    record_key: null
+    unlisted: not loaded
+    unlisted_reason: the file has 5 columns and PantherConverter reads bits[0], [1], [2] and [4] (PantherConverter.java:221-261)
+    fields:
+      - key: "col:1"
+        name: Gene 1
+        description: >-
+          first gene, pipe-separated: species code | gene id as DB=id | UniProtKB=accession,
+          e.g. HUMAN|HGNC=12405|UniProtKB=P02766
+        maps_to: [Gene.primaryIdentifier, Gene.organism, Organism.taxonId, Homologue.gene, Homologue.homologue]
+        status: loaded
+        reason: "partly: the UniProtKB part is not read"
+        code: PantherConverter.java:228, 238, 252, 133-193, 312-318
+        note: >-
+          The cell is split on '|'. Part 1, the UniProt species code (HUMAN, MOUSE, RAT, ...), is turned
+          into a taxon id through OrganismRepository (an unknown code stops the load with a
+          BuildException); the row is kept only when one gene is of panther.organisms (9606) and the
+          other of panther.organisms or panther.homologues (7227 10090 6239 10116 7955 4932 in
+          HumanMine's project.xml). Part 2, the gene id, is split on '=' and the last piece is kept
+          (MGI=MGI=98865 gives 98865); for the databases in prependDBName (MGI, RGD, HGNC) the database
+          name is put back in front (MGI:98865, RGD:3916, HGNC:12405); a 'Gene=' id is skipped (issue
+          1995). Human, rat and zebrafish ids then go through the ID resolver (human HGNC:n to the
+          Entrez id; an id that does not resolve to exactly one gene drops the row; with no resolver
+          file for the taxon the id is kept as it is). The result is Gene.primaryIdentifier (no
+          per-taxon override is active in panther_config.properties). Part 3, UniProtKB=accession, is
+          never read. Each kept row makes two Homologue objects (gene 1 -> gene 2 and gene 2 -> gene 1,
+          one if both are the same gene).
+      - key: "col:2"
+        name: Gene 2
+        description: second gene, same layout as Gene 1 (e.g. MOUSE|MGI=MGI=98865|UniProtKB=P07309)
+        maps_to: [Gene.primaryIdentifier, Gene.organism, Organism.taxonId, Homologue.gene, Homologue.homologue]
+        status: loaded
+        reason: "partly: the UniProtKB part is not read"
+        code: PantherConverter.java:229, 239, 253, 133-193
+        note: Read exactly as Gene 1.
+      - key: "col:3"
+        name: Orthology type
+        description: LDO (least diverged orthologue), O (orthologue), P (paralogue), X or LDX (horizontal gene transfer)
+        maps_to: [Homologue.type]
+        status: loaded
+        reason: ""
+        code: PantherConverter.java:76-80, 244-248, 278-282
+        note: >-
+          Stored as the spelled-out name ('least diverged orthologue', 'orthologue', 'paralogue',
+          'horizontal gene transfer', 'least diverged horizontal gene transfer'); a row with any
+          other code is skipped.
+      - key: "col:4"
+        name: Common ancestor
+        description: taxon of the last common ancestor of the two genes (Euarchontoglires, Bilateria, ...)
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: PantherConverter.java:244-250
+      - key: "col:5"
+        name: PANTHER family
+        description: PANTHER family id (PTHR10395)
+        maps_to: [CrossReference.identifier, Homologue.crossReferences]
+        status: loaded
+        reason: ""
+        code: PantherConverter.java:250, 283-285
+        note: >-
+          One CrossReference per Homologue (identifier = the family id, source = DataSource Panther).
+          The helper also sets CrossReference.subject to the Homologue, but the model types
+          CrossReference.subject as BioEntity and Homologue is not one (BioFileConverter.java:247-258).
+          Not from any column: every Homologue gets the same Homologue.evidence, one
+          OrthologueEvidence whose OrthologueEvidenceCode is AA, 'Amino acid sequence comparison'
+          (PantherConverter.java:277, 320-343).

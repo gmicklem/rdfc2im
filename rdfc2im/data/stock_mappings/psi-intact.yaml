@@ -1,0 +1,467 @@
+# IntAct molecular interactions for human, PSI-MI 2.5 XML in the compact form (human_NN.xml and per-dataset
+# files from human.zip), cut to interactions with a panel participant.
+source: psi-intact
+loader:
+  repository: intermine
+  path: bio/sources/psi
+  classes: [org.intermine.bio.dataconversion.PsiConverter]
+  commit: 5351d0c301
+basis: >-
+  read from code at intermine 5351d0c301 (PsiConverter.java, src/main/resources/psi-intact_config.properties,
+  psi_additions.xml; bio/core BioFileConverter/BioStoreHook for DataSet attachment). Setting assumed:
+  intact.organisms = 9606 (stock_sources.yaml).
+data_source: IntAct
+data_sets: [IntAct molecular interactions]
+home: https://www.ebi.ac.uk/intact/
+writes: [DataSource, DataSet, InteractionTerm, Organism, Gene, Publication, InteractionExperiment, Comment,
+         Interaction, InteractionDetail, InteractionRegion, Location]
+# Notes:
+# - DataSource and DataSet come from the constructor (PsiConverter.java:80-81). The DataSet licence written is
+#   https://www.apache.org/licenses/LICENSE-2.0, not CC BY 4.0 as stock_sources.yaml says.
+# - An InteractionTerm MI:0117 (binding site) is always made (PsiConverter.java:84).
+# - Gene: for 9606 the config says identifier = primaryIdentifier, datasource = ensembl
+#   (psi-intact_config.properties:23-24). See interactor/xref below.
+# - An interaction is dropped whole if any participant's interactor has no Gene (PsiConverter.java:424-428).
+# - Model checks: InteractionDetail.allInteractors is typed Interactor in the demo model, and Gene does not extend
+#   Interactor there, yet the converter puts Gene refs in it (PsiConverter.java:535-544, 582). Location.feature is
+#   typed BioEntity but is given an InteractionRegion (PsiConverter.java:773); InteractionRegion.locations is never
+#   set. How the build treats these is not established here.
+files:
+  - id: human
+    format: xml
+    release: [{"from": "line", "pattern": "<source releaseDate=\"([^\"]+)\"", "label": "releaseDate", "lines": 40}]
+    record: one interaction (an IntAct interaction with its participants, linked to experiments and interactors by id)
+    record_key: entrySet/entry/interactionList/interaction
+    unlisted: not loaded
+    unlisted_reason: >-
+      PsiHandler only acts on the element paths it tests for (PsiConverter.java:206-351, 357-491); every path in
+      the file that matches one of those tests is listed below.
+    fields:
+      # ---------------- source ----------------
+      - key: "entrySet/entry/source"
+        name: source
+        description: database that supplied the entry (IntAct, MINT, DIP, ...)
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: PsiConverter.java:206-351
+        note: ""
+      # ---------------- experiments ----------------
+      - key: "entrySet/entry/experimentList/experimentDescription/@id"
+        name: experiment id
+        description: id that interactions use in experimentRef
+        maps_to: []
+        status: not loaded
+        reason: "read: links interactions to the experiment"
+        code: PsiConverter.java:213-214, 379, 434-441
+        note: ""
+      - key: "entrySet/entry/experimentList/experimentDescription/names/shortLabel"
+        name: experiment short label
+        description: short name of the experiment, e.g. jin-2004-1
+        maps_to: [InteractionExperiment.name]
+        status: loaded
+        reason: ""
+        code: PsiConverter.java:216-218, 374-383, 743-750, 1069-1072
+        note: "Experiments are merged by shortLabel across all files."
+      - key: "entrySet/entry/experimentList/experimentDescription/names/fullName"
+        name: experiment full name
+        description: full name of the experiment (often the paper title)
+        maps_to: [InteractionExperiment.description]
+        status: loaded
+        reason: ""
+        code: PsiConverter.java:220-222, 386-391, 1077-1079
+        note: ""
+      - key: "entrySet/entry/experimentList/experimentDescription/bibref/xref/primaryRef/@id"
+        name: publication id
+        description: PubMed id of the experiment's paper
+        maps_to: [Publication.pubMedId, InteractionExperiment.publication]
+        status: loaded
+        reason: "only all-digit ids"
+        code: PsiConverter.java:224-227, 726-741, 1085-1091
+        note: "@db is not checked; a non-numeric id (DOI, IMEx) is skipped."
+      - key: "entrySet/entry/experimentList/experimentDescription/bibref/xref/secondaryRef"
+        name: other publication refs
+        description: further references of the experiment
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: PsiConverter.java:224-227
+        note: ""
+      - key: "entrySet/entry/experimentList/experimentDescription/xref"
+        name: experiment xref
+        description: IntAct/MINT/IMEx ids of the experiment
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: PsiConverter.java:206-351
+        note: ""
+      - key: "entrySet/entry/experimentList/experimentDescription/hostOrganismList/hostOrganism"
+        name: host organism
+        description: organism or system the experiment was done in (in vivo, in vitro, cell line)
+        maps_to: []
+        status: not loaded
+        reason: "code bug: meant for InteractionExperiment.hostOrganism, never set"
+        code: PsiConverter.java:239-240, 393-400
+        note: "startElement sets attName 'hostOrganism' on hostOrganism, but every child element resets attName to null (PsiConverter.java:208), so the fullName end test never matches. The converter's own test target has no hostOrganism either."
+      - key: "entrySet/entry/experimentList/experimentDescription/interactionDetectionMethod/xref/primaryRef/@id"
+        name: interaction detection method
+        description: PSI-MI term of the detection method, e.g. MI:0019
+        maps_to: [InteractionTerm.identifier, InteractionExperiment.interactionDetectionMethods]
+        status: loaded
+        reason: ""
+        code: PsiConverter.java:242-245, 1117-1131
+        note: "Only the MI id; term names come from the psi-mi-ontology source."
+      - key: "entrySet/entry/experimentList/experimentDescription/interactionDetectionMethod/names"
+        name: detection method names
+        description: label and synonyms of the method
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: PsiConverter.java:242-245
+        note: ""
+      - key: "entrySet/entry/experimentList/experimentDescription/participantIdentificationMethod/xref/primaryRef/@id"
+        name: participant identification method
+        description: PSI-MI term of how participants were identified
+        maps_to: [InteractionTerm.identifier, InteractionExperiment.participantIdentificationMethods]
+        status: loaded
+        reason: ""
+        code: PsiConverter.java:247-250
+        note: "The test also matches participant-level methods (see participant/participantIdentificationMethodList)."
+      - key: "entrySet/entry/experimentList/experimentDescription/participantIdentificationMethod/names"
+        name: identification method names
+        description: label and synonyms of the method
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: PsiConverter.java:247-250
+        note: ""
+      - key: "entrySet/entry/experimentList/experimentDescription/attributeList/attribute"
+        name: experiment attribute
+        description: free-text attribute of the experiment (author-list, journal, curation depth, ...)
+        maps_to: [Comment.type, Comment.description, InteractionExperiment.comments]
+        status: loaded
+        reason: "only some attribute names"
+        code: PsiConverter.java:69-100, 229-237, 366-372, 781-789, 525-527
+        note: "Kept when @name is one of: exp-modification, curation depth, library used, data-processing, comment, caution, last-imex assigned, imex-range assigned, imex-range requested. @name goes to Comment.type, the text to Comment.description. Others (author-list, journal, publication year, dataset, url, ...) are dropped."
+      # ---------------- interactors ----------------
+      - key: "entrySet/entry/interactorList/interactor/@id"
+        name: interactor id
+        description: id that participants use in interactorRef
+        maps_to: []
+        status: not loaded
+        reason: "read: links participants to the interactor's Gene"
+        code: PsiConverter.java:256-257, 676-683
+        note: "The same id twice in one file stops the load (RuntimeException)."
+      - key: "entrySet/entry/interactorList/interactor/xref/primaryRef"
+        name: interactor primary xref
+        description: main identifier of the interactor (db, id), usually uniprotkb
+        maps_to: [Gene.primaryIdentifier]
+        status: loaded
+        reason: "only db ensembl, through the ID resolver"
+        code: PsiConverter.java:264-267, 640-684, 686-706, 708-724
+        note: "Same handling as secondaryRef; see there."
+      - key: "entrySet/entry/interactorList/interactor/xref/secondaryRef"
+        name: interactor secondary xrefs
+        description: further identifiers (ensembl, refseq, go, reactome, interpro, intact, ...)
+        maps_to: [Gene.primaryIdentifier, Gene.organism]
+        status: loaded
+        reason: "only db ensembl, through the ID resolver"
+        code: PsiConverter.java:264-267, 640-684, 686-706, 708-724; psi-intact_config.properties:23-24
+        note: "How the gene is found: all xref ids (primaryRef and secondaryRef) are collected by lower-cased @db. For 9606 the ids with db 'ensembl' (ENSG, ENST and ENSP alike) are each passed to the ID resolver built by IdResolverService.getIdResolverByOrganism(9606). An id that resolves to exactly one gene gives a Gene whose primaryIdentifier is the resolved id; ids that do not resolve are skipped. If none resolves, the interactor has no Gene and every interaction it is in is dropped. The uniprotkb accession is not used. Other dbs are not stored."
+      - key: "entrySet/entry/interactorList/interactor/organism/@ncbiTaxId"
+        name: interactor organism
+        description: NCBI taxon of the interactor
+        maps_to: [Organism.taxonId, Gene.organism]
+        status: loaded
+        reason: "read: only interactors of taxa in intact.organisms get a Gene"
+        code: PsiConverter.java:269-280
+        note: "A non-human interactor (virus, mouse, ...) gets no Gene, so its interactions are dropped. The organism element must come after xref, as in PSI-MI 2.5."
+      - key: "entrySet/entry/interactorList/interactor/organism/names"
+        name: organism names
+        description: label and full name of the organism
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: PsiConverter.java:269-280
+        note: ""
+      - key: "entrySet/entry/interactorList/interactor/names/shortLabel"
+        name: interactor short label
+        description: e.g. 1433g_human
+        maps_to: []
+        status: not loaded
+        reason: "read: a gene identifier source only for taxa configured to use it (not 9606)"
+        code: PsiConverter.java:259-261, 405-410
+        note: ""
+      - key: "entrySet/entry/interactorList/interactor/names/fullName"
+        name: interactor full name
+        description: e.g. 14-3-3 protein gamma
+        maps_to: []
+        status: not loaded
+        reason: "read: a gene identifier source only for taxa configured to use it (not 9606)"
+        code: PsiConverter.java:259-261, 405-410
+        note: ""
+      - key: "entrySet/entry/interactorList/interactor/names/alias"
+        name: interactor alias
+        description: gene name, gene name synonym, orf name, ...
+        maps_to: []
+        status: not loaded
+        reason: "read: aliases of type 'gene name' are collected but unused for 9606"
+        code: PsiConverter.java:283-288, 412-416
+        note: "No gene symbol is set on Gene by this converter."
+      - key: "entrySet/entry/interactorList/interactor/interactorType"
+        name: interactor type
+        description: protein, small molecule, nucleic acid, ...
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: PsiConverter.java:206-351
+        note: "Any interactor type with a resolvable ensembl xref is treated as a gene."
+      - key: "entrySet/entry/interactorList/interactor/sequence"
+        name: interactor sequence
+        description: amino-acid sequence of the interactor
+        maps_to: []
+        status: not loaded
+        reason: "read into a buffer but never stored"
+        code: PsiConverter.java:290-291
+        note: "There is no endElement branch for it."
+      - key: "entrySet/entry/interactorList/interactor/attributeList"
+        name: interactor attributes
+        description: free-text attributes of the interactor
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: PsiConverter.java:206-351
+        note: ""
+      # ---------------- interactions ----------------
+      - key: "entrySet/entry/interactionList/interaction/names/shortLabel"
+        name: interaction short label
+        description: e.g. ywhag-q8iuk7
+        maps_to: [InteractionDetail.name]
+        status: loaded
+        reason: ""
+        code: PsiConverter.java:296-298, 430-432, 565-566
+        note: "Opens the interaction holder; an interaction without names/shortLabel is not processed."
+      - key: "entrySet/entry/interactionList/interaction/names/fullName"
+        name: interaction full name
+        description: longer name of the interaction
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: PsiConverter.java:296-298
+        note: ""
+      - key: "entrySet/entry/interactionList/interaction/xref"
+        name: interaction xref
+        description: IntAct, MINT, IMEx ids of the interaction
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: PsiConverter.java:206-351
+        note: ""
+      - key: "entrySet/entry/interactionList/interaction/experimentList/experimentRef"
+        name: experiment ref
+        description: id of the experiment the interaction was seen in
+        maps_to: [InteractionDetail.experiment]
+        status: loaded
+        reason: ""
+        code: PsiConverter.java:314-315, 434-441, 579
+        note: "If there are several, the last one wins. The experiment is stored when its first interaction is stored."
+      - key: "entrySet/entry/interactionList/interaction/participantList/participant/interactorRef"
+        name: interactor ref
+        description: id of the participating interactor
+        maps_to: [Interaction.participant1, Interaction.participant2, InteractionDetail.interaction, InteractionDetail.allInteractors]
+        status: loaded
+        reason: ""
+        code: PsiConverter.java:308-309, 421-428, 493-504, 506-586
+        note: "For each ordered pair of participant Genes an Interaction (participant1, participant2) and an InteractionDetail are made; both directions are stored. Pairs where both roles are prey are skipped (spoke model). An unknown or gene-less interactor drops the whole interaction."
+      - key: "entrySet/entry/interactionList/interaction/participantList/participant/experimentalRoleList/experimentalRole/names/shortLabel"
+        name: experimental role
+        description: bait, prey, neutral component, ...
+        maps_to: [InteractionDetail.role1, InteractionDetail.role2]
+        status: loaded
+        reason: ""
+        code: PsiConverter.java:311-312, 457-459, 556-568
+        note: "The role is kept on the shared interactor holder, so it is the role in the interaction being read."
+      - key: "entrySet/entry/interactionList/interaction/participantList/participant/experimentalRoleList/experimentalRole/xref"
+        name: experimental role term
+        description: PSI-MI id of the role
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: PsiConverter.java:311-312
+        note: ""
+      - key: "entrySet/entry/interactionList/interaction/participantList/participant/biologicalRole"
+        name: biological role
+        description: enzyme, substrate, unspecified role, ...
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: PsiConverter.java:206-351
+        note: ""
+      - key: "entrySet/entry/interactionList/interaction/participantList/participant/participantIdentificationMethodList"
+        name: participant identification method
+        description: per-participant identification method
+        maps_to: [InteractionExperiment.participantIdentificationMethods]
+        status: loaded
+        reason: "by accident, on the last experiment read"
+        code: PsiConverter.java:247-250
+        note: "The primaryRef test matches here too and adds the term to experimentHolder, which at that point is the last experimentDescription parsed in the entry, not necessarily this interaction's experiment."
+      - key: "entrySet/entry/interactionList/interaction/participantList/participant/names"
+        name: participant names
+        description: label of the participant
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: PsiConverter.java:206-351
+        note: ""
+      - key: "entrySet/entry/interactionList/interaction/participantList/participant/xref"
+        name: participant xref
+        description: ids of the participant
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: PsiConverter.java:206-351
+        note: ""
+      - key: "entrySet/entry/interactionList/interaction/participantList/participant/experimentalPreparationList"
+        name: experimental preparation
+        description: over-expressed, physiological level, ...
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: PsiConverter.java:206-351
+        note: ""
+      - key: "entrySet/entry/interactionList/interaction/participantList/participant/attributeList"
+        name: participant attributes
+        description: e.g. Stoichiometry
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: PsiConverter.java:229-237
+        note: "The attribute test requires experimentDescription two levels up."
+      - key: "entrySet/entry/interactionList/interaction/participantList/participant/featureList/feature/featureType/xref/primaryRef/@id"
+        name: feature type
+        description: PSI-MI term of the feature, e.g. MI:0117 binding site
+        maps_to: [InteractionRegion.ontologyTerm, InteractionDetail.interactingRegions]
+        status: loaded
+        reason: "read: only binding-site features (MI:0117) become regions"
+        code: PsiConverter.java:329-333, 588-596, 752-779
+        note: "InteractionRegion.ontologyTerm is always the MI:0117 term. The binding-site flag is set on the interactor holder, which is shared by all interactions of that interactor in the file, and is never reset."
+      - key: "entrySet/entry/interactionList/interaction/participantList/participant/featureList/feature/names/shortLabel"
+        name: feature short label
+        description: name of the feature
+        maps_to: []
+        status: not loaded
+        reason: "read: used only as the key that de-duplicates regions"
+        code: PsiConverter.java:325-326, 471-473, 755-767
+        note: ""
+      - key: "entrySet/entry/interactionList/interaction/participantList/participant/featureList/feature/featureRangeList/featureRange/startStatus/names/shortLabel"
+        name: range start status
+        description: certain, undetermined, ...
+        maps_to: [InteractionRegion.startStatus]
+        status: loaded
+        reason: "binding-site features only"
+        code: PsiConverter.java:318-319, 462-464, 760-762
+        note: ""
+      - key: "entrySet/entry/interactionList/interaction/participantList/participant/featureList/feature/featureRangeList/featureRange/endStatus/names/shortLabel"
+        name: range end status
+        description: certain, undetermined, ...
+        maps_to: [InteractionRegion.endStatus]
+        status: loaded
+        reason: "binding-site features only"
+        code: PsiConverter.java:322-323, 467-469, 763-765
+        note: ""
+      - key: "entrySet/entry/interactionList/interaction/participantList/participant/featureList/feature/featureRangeList/featureRange/begin/@position"
+        name: range begin
+        description: first residue of the feature range
+        maps_to: [Location.start, Location.locatedOn, Location.feature]
+        status: loaded
+        reason: "binding-site features with a valid range"
+        code: PsiConverter.java:336-338, 598-638, 768-775
+        note: "Location is made only if begin and end are numbers and differ; start and end are swapped if reversed, a start of 0 becomes 1. locatedOn is the Gene, feature is the InteractionRegion."
+      - key: "entrySet/entry/interactionList/interaction/participantList/participant/featureList/feature/featureRangeList/featureRange/end/@position"
+        name: range end
+        description: last residue of the feature range
+        maps_to: [Location.end]
+        status: loaded
+        reason: "binding-site features with a valid range"
+        code: PsiConverter.java:341-343, 598-638, 768-775
+        note: ""
+      - key: "entrySet/entry/interactionList/interaction/participantList/participant/featureList/feature/xref"
+        name: feature xref
+        description: ids of the feature (intact, interpro, ...)
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: PsiConverter.java:206-351
+        note: ""
+      - key: "entrySet/entry/interactionList/interaction/participantList/participant/featureList/feature/featureRangeList/featureRange/isLink"
+        name: is link
+        description: whether the range is a link
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: PsiConverter.java:206-351
+        note: ""
+      - key: "entrySet/entry/interactionList/interaction/interactionType/names/shortLabel"
+        name: interaction type
+        description: physical association, direct interaction, association, ...
+        maps_to: [InteractionDetail.relationshipType]
+        status: loaded
+        reason: ""
+        code: PsiConverter.java:345-346, 476-478, 576-578
+        note: "InteractionDetail.type is always the constant 'physical' (PsiConverter.java:59, 569), not read from the file."
+      - key: "entrySet/entry/interactionList/interaction/interactionType/xref"
+        name: interaction type term
+        description: PSI-MI id of the interaction type
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: PsiConverter.java:345-346
+        note: ""
+      - key: "entrySet/entry/interactionList/interaction/confidenceList/confidence/unit/names/shortLabel"
+        name: confidence unit
+        description: kind of score (author score, intact-miscore, ...)
+        maps_to: []
+        status: not loaded
+        reason: "read: only unit 'author-confidence' is kept"
+        code: PsiConverter.java:300-302, 443-448
+        note: ""
+      - key: "entrySet/entry/interactionList/interaction/confidenceList/confidence/value"
+        name: confidence value
+        description: the score
+        maps_to: [InteractionDetail.confidence, InteractionDetail.confidenceText]
+        status: loaded
+        reason: "only when the unit is 'author-confidence'; none in the sample"
+        code: PsiConverter.java:304-305, 450-454, 867-874, 570-575
+        note: "Numeric values go to confidence, others to confidenceText. The sample's units are labelled 'author score' (no file has 'author-confidence'), so in practice no confidence is stored."
+      - key: "entrySet/entry/interactionList/interaction/negative"
+        name: negative
+        description: true if the interaction was shown not to happen
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: PsiConverter.java:206-351
+        note: "A negative interaction would load like a positive one. The sample has no negative=true."
+      - key: "entrySet/entry/interactionList/interaction/modelled"
+        name: modelled
+        description: whether the interaction is modelled
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: PsiConverter.java:206-351
+        note: ""
+      - key: "entrySet/entry/interactionList/interaction/intraMolecular"
+        name: intra-molecular
+        description: whether the interaction is within one molecule
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: PsiConverter.java:206-351
+        note: ""
+      - key: "entrySet/entry/interactionList/interaction/attributeList"
+        name: interaction attributes
+        description: free-text attributes (comment, figure legend, ...)
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: PsiConverter.java:229-237
+        note: "The attribute test requires experimentDescription two levels up."

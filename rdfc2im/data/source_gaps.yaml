@@ -1,0 +1,40 @@
+# Known gaps per source, shown on the data-source status pages (tools/source_pages.py) [im-9n4.42].
+# Only what BUILD.md or the planning repository's docs/EXPERT_TO_CHECK.md records: nothing is added here
+# that those do not say. Keys: stock:<stock_sources.yaml name> or rdf:<sources.yaml name>.
+# Each gap: text (one or two plain sentences) and from (where it is recorded).
+gaps:
+  stock:ncbi-gff:
+    - text: "No CDS or UTR links: CDS objects exist (one per protein) but Transcript.CDSs and Transcript.UTRs are empty, and the converter makes no UTRs. The mitochondrial chromosome (NC_012920.1) is not mapped, so its genes get no location."
+      from: BUILD.md, "Locations and gene models" and "Known gaps"
+    - text: "Only the panel genes and their transcripts, exons and CDS are kept; the other genes of the genome are not loaded from this file (BUILD.md measures the cost of keep_types: [gene])."
+      from: stock_sources.yaml notes; BUILD.md
+  stock:psi-intact:
+    - text: "Negative interactions (records shown NOT to interact, IntAct's *_negative.xml files) are dropped by the filter, because the converter does not read the negative flag. Records with more than two participants are trimmed to the panel participants and their partners."
+      from: EXPERT_TO_CHECK.md 10
+  stock:biogrid:
+    - text: "Records with more than two participants are trimmed to the panel participants and their partners (a subset-build device)."
+      from: EXPERT_TO_CHECK.md 10
+  stock:hpo-annotation:
+    - text: "DECIPHER rows are skipped; only OMIM and Orphanet diseases are loaded. disease_name, onset, sex, modifier and aspect are ignored, and the converter sets no Disease.name (names come from orphanet and omim; OMIM is licensed and not loaded)."
+      from: EXPERT_TO_CHECK.md 9; BUILD.md "Known gaps"
+  stock:protein-atlas:
+    - text: "The tissue grouping file (tissue_to_organ.tsv) is not published by HPA: rdfc2im ships one written by hand. Levels and reliabilities load verbatim (Not detected/Low/Medium/High)."
+      from: stock_sources.yaml notes; EXPERT_TO_CHECK.md 8
+  stock:protein-atlas-rna:
+    - text: "expressionType stays \"TPM\" although the values are nTPM."
+      from: EXPERT_TO_CHECK.md 8
+  stock:gtex:
+    - text: "Only the median-TPM file is loaded; the eQTL file (1.5 GB) is left out, so Gene_SigSNP is dropped from the layout."
+      from: BUILD.md "Known gaps"; stock_sources.yaml notes
+  stock:atlas-express:
+    - text: "Only E-MTAB-513 (FPKM) is loaded; HumanMine's frozen E-MTAB-62 (arrayexpress-atlas) is the owner's local copy and is not available here."
+      from: stock_sources.yaml notes; BUILD.md "Known gaps"
+  rdf:uniprot:
+    - text: "TrEMBL protein sequences are not loaded: the RDF uniprot source does not map core:sequence; only Swiss-Prot canonical proteins and isoforms (stock uniprot and uniprot-fasta) have one."
+      from: BUILD.md "Known gaps"
+  rdf:hgnc:
+    - text: "Where NCBI and HGNC disagree on a symbol or an Ensembl id, HGNC gives way to NCBI; at full scope hgnc brings 25,899 Publication stubs without titles."
+      from: EXPERT_TO_CHECK.md 11
+  rdf:ncbigene:
+    - text: "NCBI records of type biological-region, other and unknown are dropped (130,304 of 194,018), as the stock loader does; ten tRNA symbols shared by several records are dropped from every holder."
+      from: EXPERT_TO_CHECK.md 11

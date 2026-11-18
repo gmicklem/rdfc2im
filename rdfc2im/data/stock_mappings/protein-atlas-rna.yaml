@@ -1,0 +1,67 @@
+# The Human Protein Atlas: consensus RNA expression (nTPM) per gene and tissue
+# (rna_tissue_consensus.tsv), loaded as RNASeqResult.
+source: protein-atlas-rna
+loader:
+  repository: humanmine-bio-sources
+  path: protein-atlas-rna
+  classes: [org.intermine.bio.dataconversion.ProteinAtlasRNAConverter]
+  commit: d67fc5d
+basis: read from code at humanmine-bio-sources d67fc5d (ProteinAtlasRNAConverter.java, BioFileConverter.java, BioStoreHook.java)
+data_source: The Human Protein Atlas          # ProteinAtlasRNAConverter.java:39
+data_sets: [Protein Atlas RNA Gene data]      # ProteinAtlasRNAConverter.java:38 (licence CC BY-SA 3.0, :40)
+home: https://www.proteinatlas.org/
+writes: [RNASeqResult, Gene, Organism, DataSet, DataSource, Ontology, SOTerm]
+# No Tissue items: getTissue (:114-121) is never called. Ontology and SOTerm (gene) come from
+# BioFileConverter/BioStoreHook.
+files:
+  - id: consensus
+    format: tab
+    comment: "#"
+    skip_lines: 0
+    header_line: "match:Gene	"   # the header line, wherever it is: a filtered copy may lack it [im-9n4.42]
+    record: one row (the consensus expression of one gene in one tissue)
+    record_key: null
+    unlisted: not loaded
+    unlisted_reason: processTissue reads only columns 1, 3 and 4 by position (ProteinAtlasRNAConverter.java:91-98)
+    fields:
+      - key: "col:1"
+        name: Gene
+        description: Ensembl gene id
+        maps_to: [Gene.primaryIdentifier, RNASeqResult.gene]
+        status: loaded
+        reason: "resolved through the ID resolver"
+        code: ProteinAtlasRNAConverter.java:91
+        note: >-
+          Resolved through the human ID resolver (IdResolverService.getIdResolverByOrganism,
+          taxon 9606, :56, :139-152); the row is dropped unless the id resolves to exactly one gene,
+          whose resolved id (the NCBI Gene id with HumanMine's entrez resolver) becomes
+          Gene.primaryIdentifier (:123-137). Without a human resolver the raw Ensembl id is used.
+          Gene.organism is taxon 9606. The gene is stored before gene.addToCollection("rnaSeqResults")
+          (:109), so that call has no effect; Gene.rnaSeqResults is filled through the reverse
+          reference RNASeqResult.gene.
+      - key: "col:2"
+        name: Gene name
+        description: gene symbol
+        maps_to: []
+        status: not loaded
+        reason: "not read by the converter"
+        code: ProteinAtlasRNAConverter.java:91-98
+        note: ""
+      - key: "col:3"
+        name: Tissue
+        description: tissue name
+        maps_to: [RNASeqResult.tissue]
+        status: loaded
+        reason: ""
+        code: ProteinAtlasRNAConverter.java:97
+        note: "Stored as it is (lower case in the current file, e.g. 'adipose tissue'), as a string, not a Tissue object (:102)."
+      - key: "col:4"
+        name: nTPM
+        description: normalised transcripts per million (consensus of HPA and GTEx)
+        maps_to: [RNASeqResult.expressionScore]
+        status: loaded
+        reason: ""
+        code: ProteinAtlasRNAConverter.java:98
+        note: >-
+          Set only when not empty (:105-107). RNASeqResult.expressionType is the constant "TPM"
+          (:103), although the value is nTPM.
