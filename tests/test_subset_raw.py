@@ -230,7 +230,7 @@ def test_unknown_format_exits_nonzero(tmp_path):
     assert p.returncode != 0 and "unknown format" in p.stderr
 
 
-@pytest.mark.parametrize("fmt", ["gaf", "gff3", "uniprot-xml", "fasta", "tab"])
+@pytest.mark.parametrize("fmt", ["gaf", "gff3", "uniprot-xml", "fasta", "tab", "psi-xml"])
 def test_format_needing_ids_without_ids_exits_nonzero(tmp_path, fmt):
     p = run_cli("filter", "--format", fmt, "--in", fx("gaf_in.gaf"), "--out", str(tmp_path / "o"), "--column", "1")
     assert p.returncode != 0 and "--ids" in p.stderr
@@ -439,3 +439,220 @@ def test_partner_ids_are_the_mgi_and_rgd_ids_of_rows_with_a_panel_gene(tmp_path,
     assert (out / "mgi.txt").read_text() == "MGI:97490\n"          # col 1 of MRK_List2.rpt
     assert (out / "rgd.txt").read_text() == "3258\n"               # the bare number of GENES_RAT.txt
     assert '"mgi": 1' in capsys.readouterr().out
+
+
+# ------------------------------------------------------------------ PSI-MI 2.5 XML (IntAct, BioGRID) [im-9n4.13]
+
+def _psi_interactor(iid, xrefs, label):
+    refs = "".join(f'<{"primaryRef" if i == 0 else "secondaryRef"} db="{db}" id="{ident}"/>'
+                   for i, (db, ident) in enumerate(xrefs))
+    return (f'      <interactor id="{iid}">\n        <names><shortLabel>{label}</shortLabel></names>\n'
+            f'        <xref>{refs}</xref>\n        <organism ncbiTaxId="9606"/>\n      </interactor>\n')
+
+
+def _psi_interaction(iid, exp, refs, label):
+    parts = "".join(f'<participant id="p{iid}{r}"><interactorRef>{r}</interactorRef></participant>' for r in refs)
+    return (f'      <interaction id="{iid}">\n        <names><shortLabel>{label}</shortLabel></names>\n'
+            f'        <experimentList><experimentRef>{exp}</experimentRef></experimentList>\n'
+            f'        <participantList>{parts}</participantList>\n      </interaction>\n')
+
+
+def _psi_entry(exps, interactors, interactions):
+    return ('  <entry>\n    <source releaseDate="2026-10-24"><names><shortLabel>test</shortLabel></names></source>\n'
+            '    <experimentList>\n'
+            + "".join(f'      <experimentDescription id="{e}"><names><shortLabel>exp-{e}</shortLabel></names>'
+                      f'</experimentDescription>\n' for e in exps)
+            + '    </experimentList>\n    <interactorList>\n' + "".join(interactors)
+            + '    </interactorList>\n    <interactionList>\n' + "".join(interactions)
+            + '    </interactionList>\n  </entry>\n')
+
+
+def _psi_doc(*entries):
+    return ('<?xml version="1.0" encoding="UTF-8"?>\n<entrySet level="2" version="5" '
+            'xmlns="http://psi.hupo.org/mi/mif">\n' + "".join(entries) + '</entrySet>\n')
+
+
+PSI_ENTRY_1 = _psi_entry(
+    ["e1", "e2", "e3"],
+    [_psi_interactor("1", [("uniprotkb", "P26367-2"), ("ensembl", "ENSG00000007372.27")], "pax6"),
+     _psi_interactor("2", [("uniprotkb", "Q9ULX9"), ("ensembl", "ENSG00000185022.14"),
+                           ("ensembl", "ENSP00000384094.1")], "maff"),
+     _psi_interactor("3", [("uniprotkb", "P04637")], "p53"),
+     _psi_interactor("4", [("uniprotkb", "P38398")], "brca1")],
+    [_psi_interaction("10", "e1", ["1", "2"], "pax6-maff"),     # kept: PAX6 (isoform) with a partner
+     _psi_interaction("11", "e2", ["3", "4"], "p53-brca1"),     # dropped: no panel participant
+     _psi_interaction("12", "e1", ["2", "1", "3"], "three")])  # kept: three participants
+PSI_ENTRY_2 = _psi_entry(
+    ["e9"],
+    [_psi_interactor("2", [("uniprotkb", "Q9ULX9")], "maff"), _psi_interactor("5", [("uniprotkb", "P10635")], "cyp2d6")],
+    [_psi_interaction("20", "e9", ["5", "2"], "cyp2d6-maff")])
+
+
+def _psi_ids(tmp_path, *ids):
+    p = tmp_path / "ids.txt"
+    p.write_text("".join(i + "\n" for i in ids))
+    return str(p)
+
+
+def test_psi_xml_keeps_interactions_with_a_panel_participant_and_what_they_reference(tmp_path):
+    src = tmp_path / "human_01.xml"
+    src.write_text(_psi_doc(PSI_ENTRY_1, PSI_ENTRY_2))
+    out, res = filt(tmp_path, "psi-xml", str(src), _psi_ids(tmp_path, "P26367", "P10635", "O00000"),
+                    "out.xml", "--xref-db", "uniprotkb")
+    root = ET.parse(out).getroot()
+    ns = "{http://psi.hupo.org/mi/mif}"
+    e1, e2 = root.findall(ns + "entry")
+    assert [i.get("id") for i in e1.iter(ns + "interaction")] == ["10", "12"]
+    assert [i.get("id") for i in e1.iter(ns + "interactor")] == ["1", "2", "3"]     # 4 is only in the dropped one
+    assert [i.get("id") for i in e1.iter(ns + "experimentDescription")] == ["e1"]
+    assert [i.get("id") for i in e2.iter(ns + "interaction")] == ["20"]
+    # interactor 2 is written once per file: PsiConverter throws on an id seen twice in a file
+    assert [i.get("id") for i in e2.iter(ns + "interactor")] == ["5"]
+    assert e1.find(ns + "source") is not None
+    assert res["records_in"] == 4 and res["records_out"] == 3
+    assert res["interactors_in"] == 6 and res["interactors_out"] == 4 and res["repeated_interactors_dropped"] == 1
+    assert res["experiments_in"] == 4 and res["experiments_out"] == 2
+    assert res["ids_given"] == 3 and res["ids_matched"] == 2
+
+
+def test_psi_xml_drops_ensembl_versions_so_the_resolver_knows_the_genes(tmp_path):
+    src = tmp_path / "h.xml"
+    src.write_text(_psi_doc(PSI_ENTRY_1))
+    out, res = filt(tmp_path, "psi-xml", str(src), _psi_ids(tmp_path, "P26367"), "o.xml", "--xref-db", "uniprotkb")
+    text = read(out).decode()
+    assert 'id="ENSG00000007372"' in text and 'id="ENSG00000185022"' in text and 'id="ENSP00000384094"' in text
+    assert ".27\"" not in text and res["ensembl_unversioned"] == 3
+
+
+def test_psi_xml_xref_db_restricts_which_ids_count(tmp_path):
+    src = tmp_path / "h.xml"
+    src.write_text(_psi_doc(PSI_ENTRY_1))
+    # the panel id as an ensembl xref only: matched with any db, not with --xref-db uniprotkb
+    _, any_db = filt(tmp_path, "psi-xml", str(src), _psi_ids(tmp_path, "ENSG00000185022.14"), "a.xml")
+    _, uni = filt(tmp_path, "psi-xml", str(src), _psi_ids(tmp_path, "ENSG00000185022.14"), "b.xml",
+                  "--xref-db", "UniProtKB")
+    assert any_db["records_out"] == 2 and uni["records_out"] == 0
+
+
+def test_psi_xml_is_byte_faithful_and_split_across_read_chunks(tmp_path, monkeypatch):
+    src, a, b = tmp_path / "h.xml", str(tmp_path / "a.xml"), str(tmp_path / "b.xml")
+    src.write_text(_psi_doc(PSI_ENTRY_1, PSI_ENTRY_2))
+    ids = {"P26367", "P10635"}
+    subset_raw.filter_psi_xml(str(src), a, ids, ["uniprotkb"])
+    monkeypatch.setattr(subset_raw, "_CHUNK", 7)
+    subset_raw.filter_psi_xml(str(src), b, ids, ["uniprotkb"])
+    assert read(a) == read(b)
+    kept = read(a).decode()
+    assert kept.startswith('<?xml version="1.0" encoding="UTF-8"?>\n<entrySet level="2"')
+    assert '      <interaction id="10">\n        <names><shortLabel>pax6-maff</shortLabel></names>' in kept
+    assert "\n\n" not in kept                         # a dropped block takes its indentation with it
+
+
+def test_psi_xml_refuses_the_expanded_form(tmp_path):
+    src = tmp_path / "h.xml"
+    src.write_text(_psi_doc('  <entry>\n    <interactionList><interaction id="1"><participantList><participant id="2">'
+                            '<interactor id="3"><xref><primaryRef db="uniprotkb" id="P26367"/></xref></interactor>'
+                            '</participant></participantList></interaction></interactionList>\n  </entry>\n'))
+    p = run_cli("filter", "--format", "psi-xml", "--in", str(src), "--out", str(tmp_path / "o.xml"),
+                "--ids", _psi_ids(tmp_path, "P26367"))
+    assert p.returncode == 2 and "expanded" in p.stderr and not (tmp_path / "o.xml").exists()
+
+
+def test_psi_xml_from_a_zip_writes_matching_members_under_their_names(tmp_path):
+    import zipfile
+    z = tmp_path / "human.zip"
+    with zipfile.ZipFile(z, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("human_01.xml", _psi_doc(PSI_ENTRY_1))
+        zf.writestr("human_02.xml", _psi_doc(PSI_ENTRY_2))
+        zf.writestr("README.txt", "not xml")
+    out = tmp_path / "work"
+    out.mkdir()
+    (out / "stale.xml").write_text("from an earlier run")
+    p = run_cli("filter", "--format", "psi-xml", "--in", str(z), "--member", "*.xml", "--out", str(out),
+                "--ids", _psi_ids(tmp_path, "P26367"), "--xref-db", "uniprotkb")
+    assert p.returncode == 0, p.stderr
+    res = json.loads(p.stdout)
+    assert sorted(os.listdir(out)) == ["human_01.xml"]          # human_02 has no PAX6 interaction
+    assert res["files_in"] == 2 and res["files_out"] == 1 and res["files"] == ["human_01.xml"]
+    assert res["records_in"] == 4 and res["records_out"] == 2
+
+
+def test_psi_xml_member_glob_matches_a_biogrid_name_inside_a_folder(tmp_path):
+    import zipfile
+    z = tmp_path / "BIOGRID-ORGANISM-LATEST.psi25.zip"
+    name = "BIOGRID-ORGANISM-Homo_sapiens-4.4.250.psi25.xml"
+    with zipfile.ZipFile(z, "w") as zf:
+        zf.writestr("BIOGRID-ORGANISM-Mus_musculus-4.4.250.psi25.xml", _psi_doc(PSI_ENTRY_1))
+        zf.writestr("sub/" + name, _psi_doc(PSI_ENTRY_1))
+    out = tmp_path / "w"
+    subset_raw.filter_psi_xml(str(z), str(out), {"P26367"}, ["uniprotkb"], "BIOGRID-ORGANISM-Homo_sapiens-*.psi25.xml")
+    assert os.listdir(out) == [name]
+
+
+def test_psi_xml_member_and_xref_db_are_for_psi_xml_only(tmp_path):
+    p = run_cli("filter", "--format", "gaf", "--in", fx("gaf_in.gaf"), "--out", str(tmp_path / "o"),
+                "--ids", fx("gaf_ids.txt"), "--member", "*.xml")
+    assert p.returncode == 2 and "psi-xml" in p.stderr
+
+
+def test_psi_xml_drops_negative_interactions(tmp_path):
+    """IntAct's human_NN_negative.xml hold interactions shown NOT to happen; the converters ignore the flag."""
+    neg = _psi_interaction("13", "e3", ["1", "4"], "pax6-brca1-negative").replace(
+        "        <participantList>", "        <negative>true</negative>\n        <participantList>")
+    entry = PSI_ENTRY_1.replace("    </interactionList>", neg + "    </interactionList>")
+    src = tmp_path / "human_01_negative.xml"
+    src.write_text(_psi_doc(entry))
+    out, res = filt(tmp_path, "psi-xml", str(src), _psi_ids(tmp_path, "P26367"), "o.xml", "--xref-db", "uniprotkb")
+    assert res["negative_dropped"] == 1 and res["records_in"] == 4 and res["records_out"] == 2
+    text = read(out).decode()
+    assert "pax6-brca1-negative" not in text and 'id="e3"' not in text and 'interactor id="4"' not in text
+
+
+def _psi_roled_interaction(iid, parts):
+    """An interaction whose participants (interactor id, experimental role) carry roles, as IntAct writes them."""
+    ps = "".join(f'\n          <participant id="p{iid}_{r}">\n            <interactorRef>{r}</interactorRef>\n'
+                 f'            <experimentalRoleList><experimentalRole><names><shortLabel>{role}</shortLabel>'
+                 f'</names></experimentalRole></experimentalRoleList>\n          </participant>' for r, role in parts)
+    return (f'      <interaction id="{iid}">\n        <names><shortLabel>i{iid}</shortLabel></names>\n'
+            f'        <experimentList><experimentRef>e1</experimentRef></experimentList>\n'
+            f'        <participantList>{ps}\n        </participantList>\n      </interaction>\n')
+
+
+def test_psi_xml_trims_nary_interactions_to_the_participants_that_pair_with_a_panel_gene(tmp_path):
+    """Both converters make every pair of an interaction's participants except prey-prey; a bait with many preys
+    where the panel gene is one prey would load bait-prey pairs for every other prey too."""
+    interactors = [_psi_interactor(i, [("uniprotkb", acc)], i) for i, acc in
+                   (("1", "P26367"), ("2", "Q00001"), ("3", "Q00002"), ("4", "Q00003"), ("5", "Q00004"))]
+    entry = _psi_entry(["e1"], interactors, [
+        _psi_roled_interaction("30", [("2", "bait"), ("1", "prey"), ("3", "prey"), ("4", "prey")]),   # PAX6 a prey
+        _psi_roled_interaction("31", [("1", "bait"), ("3", "prey"), ("4", "prey")]),                 # PAX6 the bait
+        _psi_roled_interaction("32", [("1", "neutral component"), ("3", "neutral component"),
+                                      ("5", "neutral component")]),                                  # a complex
+        _psi_roled_interaction("33", [("3", "bait"), ("4", "prey"), ("5", "prey")])])                # no PAX6
+    src = tmp_path / "h.xml"
+    src.write_text(_psi_doc(entry))
+    out, res = filt(tmp_path, "psi-xml", str(src), _psi_ids(tmp_path, "P26367"), "o.xml", "--xref-db", "uniprotkb")
+    root = ET.parse(out).getroot()
+    ns = "{http://psi.hupo.org/mi/mif}"
+    kept = {i.get("id"): [r.text for r in i.iter(ns + "interactorRef")] for i in root.iter(ns + "interaction")}
+    assert kept == {"30": ["2", "1"], "31": ["1", "3", "4"], "32": ["1", "3", "5"]}
+    assert [i.get("id") for i in root.iter(ns + "interactor")] == ["1", "2", "3", "4", "5"]
+    assert res["trimmed"] == 1 and res["participants_dropped"] == 2
+    assert "\n          <participant id=\"p30_1\">" in read(out).decode()     # kept ones keep their layout
+
+
+def test_real_intact_sample(tmp_path):
+    """One entry of IntAct's human_10.xml (Oct 2026): two PAX6 (P26367) interactions, two without it."""
+    out, res = filt(tmp_path, "psi-xml", os.path.join(REAL, "intact_human_sample.xml.gz"),
+                    os.path.join(REAL, "intact_ids.txt"), "o.xml", "--xref-db", "uniprotkb")
+    assert read(out) == read(os.path.join(REAL, "intact_expected.xml"))
+    assert (res["records_in"], res["records_out"], res["interactors_out"], res["experiments_out"]) == (4, 2, 3, 1)
+    assert res["ensembl_unversioned"] == 37 and 'id="ENSG00000007372"' in read(out).decode()   # PAX6's gene
+
+
+def test_real_biogrid_sample(tmp_path):
+    """BioGRID 5.0.263 human: three PAX6 (Entrez 5080) - IPO13 interactions, three without PAX6."""
+    out, res = filt(tmp_path, "psi-xml", os.path.join(REAL, "biogrid_human_sample.psi25.xml"),
+                    os.path.join(REAL, "biogrid_ids.txt"), "o.xml", "--xref-db", "entrez gene/locuslink")
+    assert read(out) == read(os.path.join(REAL, "biogrid_expected.psi25.xml"))
+    assert (res["records_in"], res["records_out"], res["interactors_out"], res["experiments_out"]) == (6, 3, 2, 3)
