@@ -11,7 +11,11 @@ written transparently by file suffix.
 
   subset_raw.py filter --format gaf|gff3|uniprot-xml|fasta|tab|gene_info --in PATH --out PATH
                        [--ids FILE] [--column N[,N...]] [--taxon ID] [--keep-comments]
-      Filter one raw file; prints one JSON line with the record counts.
+      Filter one raw file; prints one JSON line with the record counts. gff3 also takes
+      --keep-types gene (rows of that type kept for every id, without descendants).
+
+  subset_raw.py chromosome-lengths --in GFF --out ITEMS.xml [--taxon ID] [--data-set NAME]
+      Chromosome lengths from the ##sequence-region lines, as Items XML (see chromosome_lengths).
 
 Per-format rules are in each filter function's docstring and in USAGE.md.
 """
@@ -153,7 +157,13 @@ def _gff_geneids(attrs):
     return out
 
 
-def filter_gff3(src, dst, ids):
+def _gff_type(line):
+    """The type (column 3) of a feature line, or None."""
+    cols = line.split("\t", 3)
+    return cols[2] if len(cols) > 3 else None
+
+
+def filter_gff3(src, dst, ids, keep_types=()):
     """Keep every directive/comment line ('#...', so each ##sequence-region), features whose Dbxref
     has GeneID:<id> with <id> in ids, and the Parent closure of those: all descendants (exons, CDS,
     transcripts, grandchildren) and, so that no kept feature has a dangling Parent, its ancestors.
@@ -161,8 +171,16 @@ def filter_gff3(src, dst, ids):
     finds the matching features and the ID/Parent links, the second writes. A '##FASTA' section
     (embedded sequence) ends the features and is not copied.
 
-    Memory: the first pass keeps one small dict entry per feature that has both ID and Parent."""
-    parents = {}      # child ID -> set of parent IDs
+    keep_types: feature types (column 3, e.g. 'gene') kept for every id, without their descendants -
+    the genes outside the panel, so a genome browser shows the panel gene's neighbours (D-1). A
+    kept feature of such a type that has a Parent outside the kept set would dangle, so only types
+    of top-level features make sense here; a row of a kept type that has a Parent is kept only when
+    the parent is kept anyway.
+
+    Memory: the first pass keeps one dict entry (two strings) per feature that has both ID and
+    Parent: about 4.6 million for the RefSeq GRCh38 file (measured: about 0.9 GB, 40 s)."""
+    keep_types = set(keep_types or ())
+    parents = {}      # child ID -> its Parent attribute value (comma-separated IDs)
     seeds = set()     # IDs of matching features
     matched = set()
     n_in = 0
@@ -180,29 +198,38 @@ def filter_gff3(src, dst, ids):
             m_par = _PARENT_RE.search(attrs)
             fid = m_id.group(1) if m_id else None
             if fid and m_par:
-                parents.setdefault(fid, set()).update(m_par.group(1).split(","))
+                old = parents.get(fid)
+                parents[fid] = m_par.group(1) if old is None else old + "," + m_par.group(1)
             hits = [g for g in _gff_geneids(attrs) if g in ids]
             if hits:
                 matched.update(hits)
                 if fid:
                     seeds.add(fid)
-    children = {}
-    for child, pars in parents.items():
-        for p in pars:
-            children.setdefault(p, set()).add(child)
+    def has_seed_ancestor(fid):
+        # walks up the Parent links (no children map: that would double the memory)
+        todo, seen = parents[fid].split(","), set()
+        while todo:
+            p = todo.pop()
+            if p in seeds:
+                return True
+            if p not in seen:
+                seen.add(p)
+                if p in parents:
+                    todo.extend(parents[p].split(","))
+        return False
+
     keep = set(seeds)
-    stack = list(seeds)
-    while stack:                              # descendants
-        for c in children.get(stack.pop(), ()):
-            if c not in keep:
-                keep.add(c)
-                stack.append(c)
+    for fid in parents:                       # descendants
+        if fid not in keep and has_seed_ancestor(fid):
+            keep.add(fid)
     stack = list(seeds)
     while stack:                              # ancestors (of the matching features only)
-        for p in parents.get(stack.pop(), ()):
+        fid = stack.pop()
+        for p in (parents[fid].split(",") if fid in parents else ()):
             if p not in keep:
                 keep.add(p)
                 stack.append(p)
+    del parents
     n_out = 0
     with open_text(src) as fin, open_text(dst, "w") as fout:
         for line in fin:
@@ -218,11 +245,14 @@ def filter_gff3(src, dst, ids):
                 continue
             m_id = _ID_RE.search(attrs)
             m_par = _PARENT_RE.search(attrs)
+            par_kept = bool(m_par) and any(p in keep for p in m_par.group(1).split(","))
             ok = bool(m_id and m_id.group(1) in keep)
-            if not ok and m_par and any(p in keep for p in m_par.group(1).split(",")):
+            if not ok and not m_id and par_kept:
                 ok = True                     # child without an ID of its own
             if not ok and any(g in ids for g in _gff_geneids(attrs)):
                 ok = True
+            if not ok and keep_types and _gff_type(line) in keep_types and (not m_par or par_kept):
+                ok = True                     # a neighbour: the row only, no descendants
             if ok:
                 n_out += 1
                 fout.write(line)
@@ -354,6 +384,11 @@ def _cell_hit(cell, ids):
     return None
 
 
+def parse_types(spec):
+    """'gene,pseudogene' -> {'gene', 'pseudogene'}; None or '' -> empty set."""
+    return {t.strip() for t in (spec or "").split(",") if t.strip()}
+
+
 def parse_columns(spec):
     cols = []
     for part in spec.split(","):
@@ -423,6 +458,80 @@ def filter_gene_info(src, dst, ids=None, taxon=None):
             n_out += 1
             fout.write(line)
     return _summary("gene_info", n_in, n_out, ids, matched)
+
+
+# ---------------------------------------------------------------- chromosome lengths
+
+# The GRCh38 RefSeq chromosome accessions and the Chromosome names InterMine's ncbi-gff loader gives
+# them: a copy of NcbiGffGFF3SeqHandler.CHROMOSOMES (bio/sources/ncbi-gff). That map has no
+# NC_012920.1, so the loader stores no mitochondrial locations and no MT Chromosome; this one leaves
+# it out too, or the mine would list an MT chromosome with nothing on it.
+REFSEQ_GRCH38_CHROMOSOMES = {
+    "NC_000001.11": "1", "NC_000002.12": "2", "NC_000003.12": "3", "NC_000004.12": "4",
+    "NC_000005.10": "5", "NC_000006.12": "6", "NC_000007.14": "7", "NC_000008.11": "8",
+    "NC_000009.12": "9", "NC_000010.11": "10", "NC_000011.10": "11", "NC_000012.12": "12",
+    "NC_000013.11": "13", "NC_000014.9": "14", "NC_000015.10": "15", "NC_000016.10": "16",
+    "NC_000017.11": "17", "NC_000018.10": "18", "NC_000019.10": "19", "NC_000020.11": "20",
+    "NC_000021.9": "21", "NC_000022.11": "22", "NC_000023.11": "X", "NC_000024.10": "Y",
+}
+
+
+def _xml_attr(s):
+    return (str(s).replace("&", "&amp;").replace('"', "&quot;").replace("<", "&lt;")
+            .replace(">", "&gt;"))
+
+
+def chromosome_lengths(src, dst, taxon="9606", data_set="ncbi-gff", data_source="NCBI",
+                       chromosomes=None):
+    """Chromosome lengths from a GFF3 file's '##sequence-region <seqid> <start> <end>' directives,
+    written as InterMine Items XML for the intermine-items-xml-file loader (rdfc2im's humanmine-items
+    type): one Organism (taxonId), one DataSource and DataSet (by name), and per sequence-region whose
+    seqid the map knows a Chromosome with primaryIdentifier (the loader's name for it), length
+    (end - start + 1), organism and dataSets. Nothing in InterMine sets Chromosome.length from a GFF:
+    the GFF3 parser skips directives, gff_config.properties excludes 9606 `region` features, and
+    create-chromosome-locations-and-lengths sets feature locations and lengths only; only the genome
+    FASTA (ncbi-fasta) sets it. Directives only are read (they precede the features in a RefSeq file;
+    the whole file is still scanned, since GFF3 allows them anywhere). A seqid given twice with
+    different lengths is an error."""
+    chromosomes = REFSEQ_GRCH38_CHROMOSOMES if chromosomes is None else chromosomes
+    lengths = {}
+    n_in = 0
+    with open_text(src) as fin:
+        for line in fin:
+            if line.startswith("##FASTA"):
+                break
+            if not line.startswith("##sequence-region"):
+                continue
+            n_in += 1
+            parts = line.split()
+            if len(parts) != 4 or not parts[2].isdigit() or not parts[3].isdigit():
+                raise SubsetError(f"malformed directive: {line.strip()}")
+            name = chromosomes.get(parts[1])
+            if name is None:
+                continue
+            n = int(parts[3]) - int(parts[2]) + 1
+            if lengths.setdefault(name, n) != n:
+                raise SubsetError(f"{parts[1]}: two sequence-region lengths, {lengths[name]} and {n}")
+    order = {v: i for i, v in enumerate(chromosomes.values())}
+    with open_text(dst, "w") as fout:
+        fout.write('<?xml version="1.0" encoding="UTF-8"?>\n<items>\n')
+        fout.write(f'  <item id="0_1" class="Organism" implements="">\n'
+                   f'    <attribute name="taxonId" value="{_xml_attr(taxon)}"/>\n  </item>\n')
+        fout.write(f'  <item id="0_2" class="DataSource" implements="">\n'
+                   f'    <attribute name="name" value="{_xml_attr(data_source)}"/>\n  </item>\n')
+        fout.write(f'  <item id="0_3" class="DataSet" implements="">\n'
+                   f'    <attribute name="name" value="{_xml_attr(data_set)}"/>\n'
+                   f'    <reference name="dataSource" ref_id="0_2"/>\n  </item>\n')
+        for i, name in enumerate(sorted(lengths, key=lambda c: order.get(c, len(order)))):
+            fout.write(f'  <item id="0_{i + 4}" class="Chromosome" implements="">\n'
+                       f'    <attribute name="primaryIdentifier" value="{_xml_attr(name)}"/>\n'
+                       f'    <attribute name="length" value="{lengths[name]}"/>\n'
+                       f'    <reference name="organism" ref_id="0_1"/>\n'
+                       f'    <collection name="dataSets"><reference ref_id="0_3"/></collection>\n'
+                       f'  </item>\n')
+        fout.write("</items>\n")
+    return {"format": "chromosome-lengths", "records_in": n_in, "records_out": len(lengths),
+            "chromosomes": {c: lengths[c] for c in sorted(lengths, key=lambda c: order.get(c, len(order)))}}
 
 
 # ---------------------------------------------------------------- idsets
@@ -540,6 +649,11 @@ def run_idsets(a):
         with open(os.path.join(a.out, fname), "w", encoding="utf-8", newline="\n") as fh:
             for x in sorted(sets[kind]):
                 fh.write(x + "\n")
+    # not a panel set: the RefSeq accessions of the GRCh38 chromosomes the ncbi-gff loader maps,
+    # which cut the genome FASTA (ncbi-fasta) down to them (ids: chromosomes in stock_sources.yaml)
+    with open(os.path.join(a.out, "chromosomes.txt"), "w", encoding="utf-8", newline="\n") as fh:
+        for acc in REFSEQ_GRCH38_CHROMOSOMES:
+            fh.write(acc + "\n")
     with open(a.genes, "rb") as fh:
         md5 = hashlib.md5(fh.read()).hexdigest()
     meta = {
@@ -576,6 +690,8 @@ def run_filter(a):
         raise SubsetError(f"format {fmt} needs --ids FILE")
     if fmt == "tab" and not a.column:
         raise SubsetError("format tab needs --column N[,N...]")
+    if a.keep_types and fmt != "gff3":
+        raise SubsetError("--keep-types is for format gff3 only")
     if os.path.abspath(a.infile) == os.path.abspath(a.outfile):
         raise SubsetError("--in and --out are the same file")
     out_dir = os.path.dirname(os.path.abspath(a.outfile))
@@ -587,7 +703,7 @@ def run_filter(a):
         if fmt == "gaf":
             res = filter_gaf(a.infile, tmp, ids)
         elif fmt == "gff3":
-            res = filter_gff3(a.infile, tmp, ids)
+            res = filter_gff3(a.infile, tmp, ids, parse_types(a.keep_types))
         elif fmt == "uniprot-xml":
             res = filter_uniprot_xml(a.infile, tmp, ids)
         elif fmt == "fasta":
@@ -622,7 +738,34 @@ def build_parser():
     f.add_argument("--column", help="tab: 1-based column number(s), comma separated")
     f.add_argument("--taxon", help="gene_info: keep this tax_id")
     f.add_argument("--keep-comments", action="store_true", help="tab: also keep the first line (a header without '#')")
+    f.add_argument("--keep-types", help="gff3: feature types kept for every id, without descendants (e.g. gene)")
+    c = sub.add_parser("chromosome-lengths",
+                       help="Items XML of Chromosome lengths from a GFF3 file's ##sequence-region lines")
+    c.add_argument("--in", dest="infile", required=True)
+    c.add_argument("--out", dest="outfile", required=True)
+    c.add_argument("--taxon", default="9606")
+    c.add_argument("--data-set", default="ncbi-gff", help="DataSet name (default ncbi-gff, the loader's own)")
+    c.add_argument("--data-source", default="NCBI", help="DataSource name (default NCBI)")
     return p
+
+
+def run_chromosome_lengths(a):
+    if not os.path.isfile(a.infile):
+        raise SubsetError(f"input not found: {a.infile}")
+    if os.path.abspath(a.infile) == os.path.abspath(a.outfile):
+        raise SubsetError("--in and --out are the same file")
+    os.makedirs(os.path.dirname(os.path.abspath(a.outfile)), exist_ok=True)
+    tmp = a.outfile + ".part"
+    try:
+        res = chromosome_lengths(a.infile, tmp, a.taxon, a.data_set, a.data_source)
+        if not res["records_out"]:
+            raise SubsetError(f"{a.infile}: no ##sequence-region line names a known chromosome")
+        os.replace(tmp, a.outfile)
+    except BaseException:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+        raise
+    print(json.dumps(res))
 
 
 def main(argv=None):
@@ -630,6 +773,8 @@ def main(argv=None):
     try:
         if a.cmd == "idsets":
             run_idsets(a)
+        elif a.cmd == "chromosome-lengths":
+            run_chromosome_lengths(a)
         else:
             run_filter(a)
     except SubsetError as e:
