@@ -2039,6 +2039,15 @@ phase_postprocess() {
   for task in create-autocomplete-index summarise-objectstore; do
     run_in "$mine" "${GRADLE_ENV[@]}" ./gradlew "${IM_GRADLE_ARGS[@]}" :dbmodel:postProcess -Pprocess="$task"
   done
+  # PostProcessPlugin prints "POSTPROCESS <task> FAILED." and still exits 0, so a failed
+  # create-autocomplete-index (ProteinDomain.shortName, im-9n4.19) passed the phase with an empty core: check it
+  if [ "$DRY_RUN" -eq 0 ]; then
+    local n
+    n=$(curl -sf "http://localhost:$SOLR_PORT/solr/humanmine-autocomplete/select?q=*:*&rows=0&wt=json" |
+        python3 -c 'import json,sys; print(json.load(sys.stdin)["response"]["numFound"])') || n=0
+    [ "${n:-0}" -gt 0 ] || die "create-autocomplete-index left the humanmine-autocomplete core empty (look for 'POSTPROCESS create-autocomplete-index FAILED' in the log)"
+    log "autocomplete core: $n documents"
+  fi
 }
 
 phase_build_webapp() {

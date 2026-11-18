@@ -1658,6 +1658,150 @@ Checked on the maint-2026 (6.0 line) testbed stack, 16 Nov 2026.
   postprocesses need both. A contained change it is not: it is a new data source, a regenerated
   cache and an `items.py` feature, so it is left as a follow-up.
 
+## The hybrid testbed in one command [im-9n4.19]
+
+Two templates in `trial/` hold the recipe that built the milestone 1 hybrid mine ("ut" stack: stock HumanMine sources
+plus the rdfc2im RDF sources, every human gene) so that it does not live only on one machine's scratch disk:
+
+* `trial/fb-env-ut-hybrid.sh.example`: the environment (private `HOME`, `TRIAL_HOME`, JDK 8, Gradle 4.9, stock-data
+  directories, the InterMine checkout, the RDF cache). The four lines under "Paths" are the only ones to edit.
+* `trial/drive-ut-hybrid.sh.example`: the driver. It runs `tools/full-build.sh --only PHASE` for each phase in turn,
+  with a memory gate (6 GB available) in front of the heavy ones, a disk check after each, a 15-second memory sampler
+  and per-phase logs. Its header comment says what it builds and how to resume.
+
+```sh
+cp trial/fb-env-ut-hybrid.sh.example $D/fb-env-ut-hybrid.sh     # edit WORKTREE, D, INTERMINE_SRC and the cache path
+cp trial/drive-ut-hybrid.sh.example  $D/drive-ut-hybrid.sh
+bash $D/drive-ut-hybrid.sh                     # check_prereqs to verify, about 24 minutes warm
+bash $D/drive-ut-hybrid.sh integrate_sources   # resume from a phase (earlier phases must have passed)
+```
+
+The driver finds its environment file by its own name (`drive-ut-NAME.sh` reads `fb-env-ut-NAME.sh`), so a copy for
+another worktree is two `cp` commands and a different `NAME`/`WORKTREE`. What it passes to `full-build.sh` (without the
+phase selection) is the one command:
+
+```sh
+tools/full-build.sh --offline --intermine-src $INTERMINE_SRC --stack-name ut \
+  --stock-sources "uniprot uniprot-fasta uniprot-keywords ncbi-gff go-annotation interpro-go panther mgi-identifiers \
+                   psi-mi-ontology psi-intact biogrid protein-atlas protein-atlas-rna gtex atlas-express \
+                   hpo-annotation orphanet" \
+  --report-layout curation/humanmine_bluegenes_properties.json --tools-url http://localhost:15001 \
+  --sources "go ncbigene reactome hgnc ensembl uniprot clinvar gwascatalog pubmed hpo" \
+  --cache-dir $RDF_CACHE_ALL_GENES --gene-identifiers all
+```
+
+`$RDF_CACHE_ALL_GENES` is the RDF cache of an all-genes build (the panel's release cache with the scope=full `ncbigene`
+and `hgnc` groups: the asset `cached_raw_data_allgenes-*.tar.gz` holds exactly those two). `--tools-url` names the front
+(`trial/front/`), whose BlueGenes lists the patched tools the report layout may keep. The front itself is not part of the
+mine build; after a rebuild run `trial/front/gen-jbrowse-config.sh`.
+
+## Milestone 1 build, 18 Nov 2026 [im-9n4.19]
+
+The merged integration branch built from a clean start, from the caches only, with the command above.
+
+**What "clean" meant.** A fresh `$TRIAL_HOME` (the old one moved aside, removed after the pass); empty Postgres and
+Solr volumes (the ut containers stopped, their bind-mounted `volumes_ut` moved aside, so `start_databases` created the
+three databases and two cores from nothing); the stock working directories derived from the caches (`subset`,
+`unpacked`, `whole`, `idsets`, `resolver`) and the worktree's `out/` removed; the resolver cache in `$HOME` removed. Kept:
+the caches themselves (`cached_raw_data.allgenes-*`, `stock_ut/cache`, `stock_ut/filtered-cache`), `in/.upstream` (the
+upstream clones, which `--offline` needs), Gradle's dependency cache, the Docker images and the private Maven repository
+that `publish_intermine` rebuilds. The `--offline` flag was on for every phase, `check_prereqs` to `verify`: none stopped
+for want of the network. Only the data phases are *guaranteed* network-free (`RDFC2IM_OFFLINE=1`); Gradle, Maven and Docker
+ran from warm caches and were not tried with the network cut.
+
+**Found and fixed** (the first clean run passed every phase and still produced a mine whose autocomplete index was empty):
+
+* `create-autocomplete-index` failed on `ProteinDomain.shortName`. `interpro-go` declares `ProteinDomain` without that
+  field, and `reduce_mine.py objectstoresummary` trimmed only absent classes, so the stock line `ProteinDomain.autocomplete =
+  name shortName` stayed. `AutoCompleter.buildIndex` threw, the Gradle task printed `POSTPROCESS create-autocomplete-index
+  FAILED.` and exited 0, the phase passed, and 5 of the 56 `make test-live` checks failed. The previous build (im-9n4.40)
+  has the same line in its log; it had been put right by hand. Now `objectstoresummary` also drops, from each `*.autocomplete`
+  line, the fields the class lacks (and the line when none is left), and says so; `phase_postprocess` ends by requiring a
+  non-empty `humanmine-autocomplete` core and stops the build otherwise. Test: `test_objectstoresummary_drops_autocomplete_fields_the_class_lacks`.
+
+**Timings** (the driver's `phases.tsv`, run 2, which is the clean run with the fix; 10:00:44 to 10:24:34, **23 min 50 s**
+wall; run 1, without the fix, took 24 min 38 s):
+
+| Phase | s | Phase | s |
+|---|---|---|---|
+| check_prereqs | 0 | stage_src_data | 2 |
+| fetch_inputs | 2 | start_databases | 7 |
+| publish_intermine | 199 | build_dbmodel | 20 |
+| rdfc2im_pipeline | 108 | **integrate_sources** | **781** |
+| rdfc2im_project | 8 | **postprocess** | **191** |
+| build_humanmine_items | 11 | build_webapp | 14 |
+| build_stock_sources | 22 | resolve_bluegenes_deps | 4 |
+| fetch_stock_data | 6 | stage_artifacts | 3 |
+| subset_stock_data | 15 | start_mine_stack | 12 |
+| prepare_mine_checkout | 1 | apply_templates / verify | 13 / 6 |
+
+Integrate, per source (s): humanmine-ncbigene 163, humanmine-hgnc 153 (both every human gene), humanmine-clinvar 29,
+psi-intact 28, humanmine-go 26, biogrid 26, humanmine-gwascatalog 23, humanmine-pubmed 23, humanmine-uniprot 22, go-annotation 20,
+interpro-go 20, humanmine-hpo 20, reactome 19, hpo-annotation 17, panther 16, ncbi-gff 16, uniprot 14, protein-atlas 14, psi-mi-ontology 14,
+protein-atlas-rna, atlas-express, gtex, orphanet 13 each, humanmine-ensembl 12, humanmine-reactome 12, ncbi-gff-lengths 12,
+uniprot-keywords 12, mgi-identifiers 10, uniprot-fasta 7.
+
+**Objects**: 1,120,120 in all (`intermineobject`). Per class: Synonym 232,023; CrossReference 221,697; OntologyTermSynonym
+108,909; Gene 65,467 (64,470 human); Allele 59,031; GOTerm 48,348; GOAnnotation 40,516; InteractionDetail 37,826; Author
+37,247; Publication 32,794; GWASResult 30,832; Protein 22,630; Interaction 22,351; HPOTerm 20,413; Location 16,603;
+ProteinDomain 14,776; Disease 12,654; RNASeqResult 11,970; ProteinAtlasExpression 8,390; UniProtFeature 8,105; Exon 7,466;
+MeshTerm 6,604; GWAS 6,175; Homologue 3,166; Pathway 2,883; AtlasExpression 1,824; CDS 604; MRNA 604; Sequence 254.
+
+**Size**: Postgres 3.4 GB on disk (`humanmine-production` 2,188 MB; userprofile 11 MB; items 13 MB); Solr 299 MB (autocomplete
+core 356,523 documents); `$TRIAL_HOME` 1.2 GB; stock raw groups 1.7 GB (psi-intact 1,013 MB, biogrid 199 MB, uniprot 167 MB,
+mgi-identifiers 76 MB, ncbi-gff 75 MB, hpo-annotation 55 MB, orphanet 52 MB, go-annotation 15 MB, atlas-express 13 MB,
+uniprot-fasta 8 MB, gtex 7 MB, panther 6 MB, protein-atlas 5 MB, protein-atlas-rna 5 MB, interpro-go 3 MB, psi-mi-ontology 0.7 MB;
+resolver groups 10 MB) and filtered groups 397 MB (psi-intact 317 MB, biogrid 60 MB, uniprot 13 MB, ncbi-gff 4.7 MB, go-annotation
+1.7 MB, the rest under 1 MB).
+
+**Memory** (16 GB, no swap; `memlog.tsv`, every 15 s): lowest available during `integrate_sources` 6.3 GB (peak used 9.9 GB), during
+`postprocess` 5.1 GB (11.1 GB used), overall lowest 5.0 GB at the start of `build_webapp`. The machine's other containers are
+included in "used".
+
+**Report page, PAX6 and CYP2D6 against public HumanMine** (counts of `Gene.<collection>` through the web service):
+
+| Section | HumanMine PAX6 | This mine PAX6 | This mine CYP2D6 |
+|---|---|---|---|
+| goAnnotation | 79 | 57 | 33 |
+| chromosomeLocation | 1 | 1 | 1 |
+| exons / transcripts | 637 / 53 | 638 / 53 | 17 / 2 |
+| introns, UTRs, CDSs | n/a | 0 | 0 |
+| proteins | 5 | 47 (TrEMBL included) | 59 |
+| protein sequences | 5 | 2 | 2 |
+| homologues | 10 | 12 | 67 |
+| pathways | 10 | 5 | 6 |
+| atlasExpression | 376 | 16 | 16 |
+| proteinAtlasExpression | 90 | 137 | 97 |
+| rnaSeqResults | 97 | 105 | 105 |
+| interactions | 156 | 361 | 4 |
+| alleles | 522 | 996 | 356 |
+| diseases | 8 | 15 | 1 |
+| protein features / comments / publications | n/a | 62 / 15 / 39 | 97 / 9 / 25 |
+
+HumanMine's own CYP2D6: 2 proteins, 22 domain regions, 96 UniProt features.
+
+**Known gaps**, each with the nearest reference (this file and plan 50 name tasks and sections, not open beads; the orchestrator owns the bead ids):
+
+* ArrayExpress tools (three of them, `atlasExpression.tStatistic`): the data is the owner's `/micklem` copy of E-MTAB-62 (plan 50, T1.9); the layout drops them and `test_tool_panels_match_reference` fails on them until the owner decides.
+* Genome sequence: `--with-genome-sequence` (im-9n4.9) is off; `Chromosome.sequence` is absent and `test_reference_sequence_fetch` fails.
+* CDS/UTR per gene: CDS and MRNA exist (604) but the gene collections `CDSs`, `UTRs`, `introns` are empty (the ncbi-gff loader, im-9n4.9).
+* OMIM disease names: OMIM is licensed and kept out (plan 50 D-7, T1.10).
+* RGD symbols: `download.rgd.mcw.edu` is behind the firewall (im-9n4.12, see "Partner genes and symbols").
+* TrEMBL protein sequences: the RDF `uniprot` source does not map `core:sequence`; only Swiss-Prot canonical proteins and isoforms have one.
+* GTEx eQTL: only the median-TPM file is loaded; `Gene_SigSNP` is dropped from the layout (plan 50, T1.10 optional).
+
+**Release assets** (prepared, not uploaded; the owner approves uploads): all three are checked with `python -m rdfc2im cache
+check-release` on the extracted content.
+
+* `cached_raw_data-2026-11-18b.tar.gz`: the panel cache with the `hpo` and `bluegenes-tools-patched` groups added (16 groups, top directory
+  `cached_raw_data/`); restore with `tar -xzf` in the repository root.
+* `stock_filtered-2026-11-18.tar.gz`: the 13 redistributable filtered stock groups under `filtered-cache/`, with
+  `LICENCES-stock-filtered.txt` (Human Protein Atlas is CC BY-SA 4.0 share-alike, IntAct CC BY 4.0, BioGRID MIT; several licences
+  are recorded as unverified). Extract into the directory above `RDFC2IM_STOCK_FILTERED_CACHE`. Not in it: groups for whole-file
+  sources (interpro-go, psi-mi-ontology, uniprot-keywords, orphanet), which stay raw groups in `stock_ut/cache`.
+* `cached_raw_data_allgenes-2026-11-18.tar.gz`: the two RDF groups that differ in an all-genes build (`ncbigene`, `hgnc`, scope=full).
+  `hgnc` holds HGNC's own `main_see_also_omim.tsv` (OMIM ids as HGNC publishes them, no OMIM data).
+
 ## Persistence, and what does not survive
 
 **The loaded mine lives in Docker volumes** - `rdfc2im-pgdata` and `rdfc2im-solrdata` (named

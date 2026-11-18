@@ -1,0 +1,89 @@
+#!/usr/bin/env bash
+# The hybrid HumanMine testbed ("ut" stack), milestone 1, built from the caches in one command [im-9n4.19].
+#
+# What it builds: HumanMine's own sources (stock, loaded by HumanMine's loaders from filtered upstream files) plus
+# the rdfc2im sources (RDF Portal data projected to InterMine items), for every human gene, in an InterMine built
+# from the 6.0 checkout:
+#   stock  uniprot uniprot-fasta uniprot-keywords ncbi-gff go-annotation interpro-go panther mgi-identifiers
+#          psi-mi-ontology psi-intact biogrid protein-atlas protein-atlas-rna gtex atlas-express hpo-annotation orphanet
+#   rdf    go ncbigene reactome hgnc ensembl uniprot clinvar gwascatalog pubmed hpo   (--gene-identifiers all)
+# then the HumanMine templates and Gene report layout (--report-layout, --tools-url) on the demo front's BlueGenes.
+# All data comes from the caches (--use-cached-data, and --offline unless DRIVE_OFFLINE=0): nothing is downloaded.
+#
+# Usage: drive-ut-NAME.sh [first-phase [last-phase]]
+#   no argument     every phase, check_prereqs to verify; one phase at a time (--only), so a memory gate can sit in front
+#                   of the heavy ones and a disk check after each. Stops at the first failing phase (its exit code).
+#   FIRST           resume from that phase: `drive-ut-NAME.sh integrate_sources` re-runs integrate_sources onward.
+#                   Phase names: tools/full-build.sh --list-phases (they run in this order; the phase table is in
+#                   BUILD.md). A resume does not redo what the earlier phases left: they must have passed.
+#   FIRST LAST      only that range.
+# Environment:
+#   DRIVE_STOCK      stock list ("" for none)           DRIVE_SOURCES   rdfc2im --sources
+#   DRIVE_CACHE_DIR  --cache-dir (the RDF groups)       DRIVE_EXTRA     further full-build.sh words
+#   DRIVE_OFFLINE=0  --use-cached-data only (a missing clone or cache entry is then fetched, not an error)
+#   DRIVE_DOWNLOAD=1 neither option: fetch what is not current and save it
+# Logs: $LOG_DIR/run/{drive.log,phases.tsv (phase, seconds, exit code),memlog.tsv (time, MB available, MB used),PHASE.out}
+#       and the build's own build-ut-PHASE-*.{log,timing.tsv} under $LOG_DIR.
+# Paths are in fb-env-ut-NAME.sh, found beside this script by its name (drive-ut-NAME.sh -> fb-env-ut-NAME.sh).
+S=$(cd "$(dirname "$0")" && pwd)
+ENVF=$(basename "$0"); ENVF=fb-env-${ENVF#drive-}
+source "$S/$ENVF"
+OUT=$LOG_DIR/run; mkdir -p "$OUT"
+# the compose file bind-mounts these (trial/docker-compose.yml RDFC2IM_PGDATA/RDFC2IM_SOLRDATA, im-ore.4);
+# full-build.sh creates them
+export RDFC2IM_PGDATA=$D/volumes_ut/postgres RDFC2IM_SOLRDATA=$D/volumes_ut/solr
+# staged webapp + BlueGenes jars, per stack (compose RDFC2IM_ARTIFACTS, im-ore.21): never trial/artifacts, which the default stack mounts
+export RDFC2IM_ARTIFACTS=$TRIAL_HOME/artifacts
+DRIVE_STOCK=${DRIVE_STOCK-"uniprot uniprot-fasta uniprot-keywords ncbi-gff go-annotation interpro-go panther mgi-identifiers psi-mi-ontology psi-intact biogrid protein-atlas protein-atlas-rna gtex atlas-express hpo-annotation orphanet"}
+DRIVE_SOURCES=${DRIVE_SOURCES-"go ncbigene reactome hgnc ensembl uniprot clinvar gwascatalog pubmed hpo"}
+DRIVE_EXTRA=${DRIVE_EXTRA---gene-identifiers all}
+ARGS=(--intermine-src "$INTERMINE_SRC" --stack-name "$STACK_NAME" --stock-sources "$DRIVE_STOCK"
+      --report-layout curation/humanmine_bluegenes_properties.json --tools-url http://localhost:15001)
+if [ "${DRIVE_DOWNLOAD:-0}" != 1 ]; then
+  if [ "${DRIVE_OFFLINE-1}" = 1 ]; then ARGS=(--offline "${ARGS[@]}"); else ARGS=(--use-cached-data "${ARGS[@]}"); fi
+fi
+[ -n "$DRIVE_SOURCES" ] && ARGS+=(--sources "$DRIVE_SOURCES")
+[ -n "${DRIVE_CACHE_DIR:-}" ] && ARGS+=(--cache-dir "$DRIVE_CACHE_DIR")
+[ -n "$DRIVE_EXTRA" ] && ARGS+=($DRIVE_EXTRA)
+echo "$(date -u +%T) ARGS: ${ARGS[*]}" | tee -a "$OUT/drive.log"
+PHASES=$(tools/full-build.sh --list-phases "${ARGS[@]}")
+FIRST=${1:-check_prereqs}; LAST=${2:-}; started=0
+stop_daemons() {   # this home's idle Gradle daemons hold up to 4 GB each; a later phase starts a fresh one
+  [ -x "$TRIAL_HOME/humanmine/gradlew" ] && (cd "$TRIAL_HOME/humanmine" && JAVA_HOME=$JAVA8_HOME ./gradlew --stop >/dev/null 2>&1)
+  JAVA_HOME=$JAVA8_HOME $GRADLE49 --stop >/dev/null 2>&1; return 0
+}
+memgate() {   # wait (2 min steps, up to 45 min) while available memory is under 6 GB
+  stop_daemons
+  for i in $(seq 1 23); do
+    avail=$(free -g | awk '/Mem:/{print $7}')
+    echo "$(date -u +%T) memgate $1: available=${avail}G" | tee -a "$OUT/drive.log"
+    [ "$avail" -ge 6 ] && return 0
+    [ $i -lt 23 ] && sleep 120
+  done
+  echo "memgate $1: still under 6 GB after 45 min" | tee -a "$OUT/drive.log"; return 1
+}
+# peak-memory sampler for the run, every 15 s: time, MB available, MB used
+( while true; do printf '%s\t%s\t%s\n' "$(date -u +%T)" "$(free -m | awk '/Mem:/{print $7}')" "$(free -m | awk '/Mem:/{print $3}')" >> "$OUT/memlog.tsv"; sleep 15; done ) &
+SAMPLER=$!
+trap 'kill $SAMPLER 2>/dev/null' EXIT
+for p in $PHASES; do
+  [ "$p" = "$FIRST" ] && started=1
+  [ $started -eq 1 ] || continue
+  case $p in
+    start_databases|integrate_sources|postprocess|start_mine_stack)
+      memgate "$p" || { echo "STOPPED before $p: memory" | tee -a "$OUT/drive.log"; exit 98; } ;;
+  esac
+  avail_root=$(df -BM --output=avail / | tail -1); avail_docker=$(df -BM --output=avail /var/lib/docker | tail -1)
+  echo "$(date -u +%T) START $p (free / $avail_root, /var/lib/docker $avail_docker)" | tee -a "$OUT/drive.log"
+  t0=$(date +%s)
+  RUN_ID=ut-$p tools/full-build.sh --only "$p" "${ARGS[@]}" > "$OUT/$p.out" 2>&1
+  rc=$?; dt=$(( $(date +%s) - t0 ))
+  printf '%s\t%s\t%s\n' "$p" "$dt" "$rc" >> "$OUT/phases.tsv"
+  echo "$(date -u +%T) END $p rc=$rc ${dt}s" | tee -a "$OUT/drive.log"
+  if [ $rc -ne 0 ]; then echo "STOPPED at $p" | tee -a "$OUT/drive.log"; exit $rc; fi
+  [ "$p" = build_webapp ] && stop_daemons   # the mine's daemon outlives the build
+  r=$(df -BM --output=avail / | tail -1 | tr -dc 0-9); d=$(df -BM --output=avail /var/lib/docker | tail -1 | tr -dc 0-9)
+  if [ "$r" -lt 1536 ] || [ "$d" -lt 1536 ]; then echo "STOPPED: disk low (/ ${r}M, docker ${d}M)" | tee -a "$OUT/drive.log"; exit 99; fi
+  [ "$p" = "$LAST" ] && { echo "STOPPED after $p (as asked)" | tee -a "$OUT/drive.log"; exit 0; }
+done
+echo "ALL DONE" | tee -a "$OUT/drive.log"

@@ -1,0 +1,35 @@
+# Environment of the hybrid HumanMine testbed's "ut" stack (the second, independent Compose stack
+# beside the default one). Sourced by drive-ut-hybrid.sh; copy both files, name them
+# fb-env-ut-NAME.sh and drive-ut-NAME.sh, and edit the four lines under "Paths". BUILD.md,
+# "The hybrid testbed in one command" [im-9n4.19].
+#
+# Paths -------------------------------------------------------------------------------------------
+NAME=hybrid                                          # logs go to $D/logs_ut_$NAME
+WORKTREE=/path/to/rdfc2im-checkout                   # this repository (the one holding tools/full-build.sh)
+D=/path/to/big-disk/rdfc2im                          # scratch disk: home_ut, trial_home_ut, volumes_ut, stock_ut, logs
+INTERMINE_SRC=/path/to/intermine-checkout            # the InterMine checkout (6.0 line) the mine is built from
+# -------------------------------------------------------------------------------------------------
+export HOME=$D/home_ut
+# JDK 8 takes user.home from the passwd entry, not $HOME (see tools/full-build.sh --help, GRADLE_USER_HOME)
+export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:-} -Duser.home=$HOME"
+export GRADLE_USER_HOME=$HOME/.gradle
+export TRIAL_HOME=$D/trial_home_ut
+export JAVA8_HOME=/usr/lib/jvm/java-8-openjdk-arm64
+export GRADLE49=$HOME/opt/gradle-4.9/bin/gradle
+export PATH=$HOME/opt/gradle-4.9/bin:$PATH
+export COMPOSE="docker compose"
+export LANG=C.UTF-8
+export RDFC2IM_RESOLVER_CACHE=$HOME/resolver-cache
+export LOG_DIR=$D/logs_ut_$NAME
+export INTERMINE_SRC
+export STACK_NAME=ut
+export RDFC2IM_ARTIFACTS=$TRIAL_HOME/artifacts   # per stack, not the default stack's trial/artifacts [im-ore.21]
+export INTERMINE_JAVA_HOME=$JAVA8_HOME
+cd "$WORKTREE"
+# stock sources: raw downloads and the restricted groups under $RDFC2IM_STOCK_DIR/cache, the redistributable filtered
+# groups beside them (im-9n4.6: new stock-* groups stay out of the RDF cache)
+export RDFC2IM_STOCK_DIR=$D/stock_ut
+export RDFC2IM_STOCK_FILTERED_CACHE=$D/stock_ut/filtered-cache
+# the RDF groups for --gene-identifiers all (scope=full ncbigene and hgnc); a directory of its own, read-only for a build
+# that is only restoring from it
+export DRIVE_CACHE_DIR=${DRIVE_CACHE_DIR:-/path/to/cached_raw_data.allgenes}
