@@ -613,12 +613,29 @@ panel. `go_enrichment_for_gene` and the `GOAnnotation` model are what it restore
   `subset_raw.py partner-ids` writes `idsets/mgi.txt` (182 ids) and `idsets/rgd.txt` (170) from the filtered PANTHER file
   (panther is therefore cut first, `needs: [panther]` on both), and MRK_List2.rpt is filtered on column 1 to those ids
   (656,902 markers in, 182 out). The cache group of each also records the md5 of its id set.
-  **rgd-identifiers is in the table but not loaded: `download.rgd.mcw.edu` is behind the sandbox firewall (HTTP 403,
-  "Approval required"), so the URL is unverified (`verified: false`) and the 165 rat genes have no symbol.**
+  **rgd-identifiers [im-9n4.35]** was first left out because `download.rgd.mcw.edu` was behind the sandbox firewall; it
+  is now loaded. `GENES_RAT.txt` is 50,659,314 B (RGD, `Last-Modified` 14 Nov 2026; 103 `#` header lines, then the column-name
+  line, then about 45,000 rows). The loader makes `Gene` `RGD:<column 1>` with symbol, name, description, and Ensembl and NCBI
+  cross-references; PantherConverter's rat genes are `RGD:<n>` too (the existing ones are `RGD:3258` and so on), and
+  `Gene.key_primaryidentifier` is the key of both, so the rows merge and no Java change was needed. The cut keeps 168 of the
+  170 partner ids (two are not in the file), 455 KB. `rgd-identifiers` precedes `panther` in HumanMine's project.xml; the
+  order does not matter for the key. Licence: the file and the download host carry no licence text, and `rgd.mcw.edu` (the
+  site) was not reachable from the sandbox, so the table keeps HumanMine's wording (data free to use with citation) as
+  unverified and `redistributable: true`; confirm it on the RGD site before the filtered group goes in a release asset.
+  A build that adds a source needs the download phase to fetch it: with `--use-cached-data` a missing group is a FATAL in
+  `fetch_stock_data` (not fetched), so run that phase once without `--use-cached-data` and `--offline`
+  (`DRIVE_DOWNLOAD=1 drive-ut-NAME.sh fetch_stock_data fetch_stock_data`; it also re-fetched BioGRID, whose server dates
+  the file at the request, and the NCBI resolver and PSI-MI files), then resume from `subset_stock_data`.
 * **Result.** Homologue 3,166 (2,568 orthologue, 598 least diverged), Gene 1,111 (human 114, worm 257, fly 216, mouse 182,
   rat 165, zebrafish 152, yeast 25), all objects 465,814 (was 458,469). PAX6 has 12 homologues (HumanMine 10: mouse,
   rat, 3 fish, 5 fly, 2 worm), CYP2D6 67. 0 duplicate `Gene.primaryIdentifier`, 0 duplicate symbol within a taxon, no Gene
   without an organism. Only the 114 human and 182 mouse genes have a symbol. Integrate 297 s (was about 2 min), postprocess 101 s.
+* **With rgd-identifiers** (im-9n4.35, full rebuild 12:04 UTC, 11:34 to 12:04): rat genes 169 (was 165), 168 with a symbol (was 0).
+  The four extra are RGD ids on PANTHER rows that PantherConverter drops when the resolver cannot map them (`RGD:61894`,
+  `RGD:15004611`, `RGD:15005179`, `RGD:150344934`): the loader makes them from the file, they have no homologue link. The one rat
+  gene with no symbol is `RGD:1306542`, absent from the current file. PAX6's rat homologue is `Pax6` (`RGD:3258`); CYP2D6's five
+  are `Cyp2d1` to `Cyp2d5` (`RGD:708427`, `2471`, `2472`, `620640`, `628630`). Gene 65,471 (was 65,467), objects 1,120,890 (was
+  1,120,120); 0 duplicate `primaryIdentifier`, 0 duplicate symbol within a taxon, over all 65,471 genes. `make test-live` 60/60.
 * **No human partners outside the panel**: the file has no paralogue rows, so every human Gene is a panel gene.
 * **The ID resolver, now with a real consumer.** PantherConverter resolves only human (HGNC id to Entrez id, the primary
   identifier), rat and zebrafish genes; mouse, fly, worm and yeast ids are never looked up and pass through. When the
@@ -1906,7 +1923,7 @@ HumanMine's own CYP2D6: 2 proteins, 22 domain regions, 96 UniProt features.
 * Genome sequence: `--with-genome-sequence` (im-9n4.9) is off; `Chromosome.sequence` is absent and `test_reference_sequence_fetch` fails.
 * CDS/UTR per gene: CDS and MRNA exist (604) but the gene collections `CDSs`, `UTRs`, `introns` are empty (the ncbi-gff loader, im-9n4.9).
 * OMIM disease names: OMIM is licensed and kept out (plan 50 D-7, T1.10).
-* RGD symbols: `download.rgd.mcw.edu` is behind the firewall (im-9n4.12, see "Partner genes and symbols").
+* RGD symbols: closed by im-9n4.35 (see "Partner genes and symbols"); the milestone build above did not have them. Its licence wording is still unverified.
 * TrEMBL protein sequences: the RDF `uniprot` source does not map `core:sequence`; only Swiss-Prot canonical proteins and isoforms have one.
 * GTEx eQTL: only the median-TPM file is loaded; `Gene_SigSNP` is dropped from the layout (plan 50, T1.10 optional).
 

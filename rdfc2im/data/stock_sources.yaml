@@ -257,18 +257,25 @@ sources:
   rgd-identifiers:
     type: rgd-identifiers
     jar: intermine
-    licence: RGD data are free to use with citation (Rat Genome Database)
+    licence: RGD data are free to use with citation (Rat Genome Database; wording as HumanMine records it, the RGD site's own licence page was not readable from the build sandbox, so unverified)
     redistributable: true
     data_dir: rgd-identifiers/current
     needs: [panther]      # its cut is the genes on panther's rows
     notes: >-
-      As mgi-identifiers, for rat: GENES_RAT.txt, column 1 the bare RGD number (the loader makes `RGD:<n>`).
-      Not verified: download.rgd.mcw.edu is behind this sandbox's firewall (HTTP 403, approval needed), so the
-      URL is HumanMine's own and was never fetched here.
+      Gives the rat genes their symbol, name and description (panther creates them with an RGD id alone). The
+      loader reads every row of GENES_RAT.txt (50.7 MB, about 45,000 active rat genes; 38 columns used: 1 the
+      RGD id, 2 symbol, 3 name, 4 description, 21 NCBI gene id, 38 Ensembl ids) and makes a Gene `RGD:<n>` of
+      each, the key panther gives its rat genes (the existing rat genes are `RGD:1303107` and so on), so the two
+      merge. Column 1 is the bare RGD number; the cut keeps the rows of the genes on PANTHER rows with a panel
+      gene (`subset_raw.py partner-ids` writes idsets/rgd.txt). The file's `#` header block is kept and its
+      column-name line is not (the loader needs neither). The file carries no licence text; the download host
+      only has a README of format changes (im-9n4.35).
     files:
       - id: genes
         url: https://download.rgd.mcw.edu/data_release/GENES_RAT.txt
-        verified: false
+        verified: true
+        size: 50659314
+        last_modified: "2026-11-14"
         stage_as: GENES_RAT.txt
         filter: {format: tab, ids: rgd, column: "1", keep_header: true}
 
