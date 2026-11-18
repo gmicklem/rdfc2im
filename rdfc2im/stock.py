@@ -102,6 +102,8 @@ def validate_table(table: Dict[str, dict]) -> List[str]:
         for n in e.get("needs", []) or []:
             if n not in table:
                 out.append(f"{where}: needs '{n}', which is not in the table")
+        if not isinstance(e.get("load_first", False), bool):
+            out.append(f"{where}: `load_first` must be true or false")
         if not isinstance(e.get("properties", {}) or {}, dict):
             out.append(f"{where}: `properties` must be a mapping")
         files = e.get("files")

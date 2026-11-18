@@ -21,7 +21,9 @@
 #   after            integrate-order constraints (plan 50 row 11): HumanMine source names this one
 #                    must load after; a name replaced by an rdfc2im source stands for its replacement
 #   needs            other stock sources that must be selected with this one
-#   postprocess      postprocesses the source needs (plan 50 row 12; phase_postprocess hook)
+#   postprocess      postprocesses the source needs (plan 50 row 12; run by phase_postprocess)
+#   load_first       true: load before every rdfc2im source (rdfc2im project moves it there), for a
+#                    stock source whose keys cannot match the objects rdfc2im sources create
 #   files            the upstream files:
 #     id             short name, unique in the entry
 #     url            the download (null for local-only data)
@@ -50,7 +52,11 @@ sources:
     properties:
       uniprot.organisms: "9606"
     postprocess: []
+    load_first: true
     notes: >-
+      load_first: its keys give Protein only md5checksum+organism, so loaded after humanmine-hgnc
+      it made a second Protein per accession and isoforms ended with dangling canonicalProtein
+      references (im-9n4.6).
       Swiss-Prot only (D-6): no TrEMBL file. With uniprot.organisms set, UniprotConverter takes
       only files named <taxon>_uniprot_sprot.xml (anything else is logged as a bad file and
       skipped), so the shared uniprot/current directory can also hold keywlist.xml and the

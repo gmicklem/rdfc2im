@@ -194,6 +194,26 @@ def test_apply_rewrites_data_and_organism_properties_and_reports_mismatches():
     assert any('omim has no <source name="omim">' in p for p in probs), probs
 
 
+def test_a_load_first_stock_source_moves_ahead_of_the_rdfc2im_sources():
+    """[im-9n4.6] Stock uniprot keys Protein on md5checksum only; after humanmine-hgnc (Protein by
+    primaryAccession) it duplicated each protein, and the later merge left isoforms pointing at a
+    deleted canonical protein. Loaded first, its objects are the ones the accession keys find."""
+    from rdfc2im.project import _move_load_first
+    sources_el = etree.fromstring(
+        '<project><sources><source name="humanmine-hgnc" type="humanmine-items"/>'
+        '<source name="so" type="so"/><source name="uniprot" type="uniprot"/>'
+        '<source name="humanmine-uniprot" type="humanmine-items"/>'
+        '<source name="uniprot-fasta" type="fasta"/></sources></project>').find("sources")
+    _move_load_first(sources_el, ["uniprot"], log=lambda *a: None)
+    assert [s.get("name") for s in sources_el] == ["uniprot", "humanmine-hgnc", "so", "humanmine-uniprot",
+                                                   "uniprot-fasta"]
+    t = stock.load_table()
+    assert t["uniprot"]["load_first"] is True
+    assert not any(t[n].get("load_first") for n in t if n != "uniprot")
+    bad = dict(t, uniprot=dict(t["uniprot"], load_first="yes"))
+    assert any("`load_first` must be true or false" in p for p in stock.validate_table(bad))
+
+
 # ------------------------------------------------------------------ rows for full-build.sh
 
 def test_file_rows_say_how_each_file_is_made_and_staged(tmp_path):
