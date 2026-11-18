@@ -736,6 +736,33 @@ the option nothing changes. The command it runs is, for the BlueGenes container'
 The MSA viewer still needs the aligner container and a `/align-sequence` route on the BlueGenes origin
 (sequence-alignment-service), and the protein visualizer and JBrowse 2 tool need the mine's protein/location data.
 
+## The report layout and HumanMine's templates [im-9n4.16]
+
+Without a `layout.report` property BlueGenes puts every tool of a report page under "Visualizations", collapsed, and a
+collapsed tool never runs. `--report-layout curation/humanmine_bluegenes_properties.json` makes phase `apply_templates`
+(after the demo templates and the restart, default off) run two standard-library tools through the mine's web service,
+as the superuser (`superuser@intermine.org`, the demo's password; `--user`/`--password` override), waiting up to 5 minutes
+for the mine:
+
+- `tools/apply_humanmine_templates.py curation/humanmine_templates.xml`: HumanMine's public templates, kept when every
+  path (view, sort order, constraints, loop paths, joins, subclass constraints) resolves in the mine's live
+  `/service/model`; uploaded with `POST /service/templates` and tagged `im:public` (`POST /service/template/tags`). A name
+  the mine already serves is left alone (the demo's nine, which Cypress specs and `mines.toml` count on, and earlier
+  runs), so this adds to `demo_public_templates.sql` and does not replace it. Dropped ones are printed with the first
+  path that fails.
+- `tools/apply_report_layout.py curation/humanmine_bluegenes_properties.json`: HumanMine's Gene categories and order,
+  keeping a class entry when `Gene.<name>` is a collection or reference in the model, a tool when BlueGenes lists it
+  (`/api/tools/all`), accepts Gene and the classes it depends on are in the model, a template when the mine serves it;
+  the rest are printed with the reason, and a category left empty goes. It sets `layout.report` (`POST` the first time,
+  `PUT` after) and reads it back; a second run changes nothing. `--dry-run` prints without writing. Run it again after a
+  build that loads more data: the dropped list shrinks.
+
+Both read HumanMine's own responses, kept as reference input (fetched 2026-11-18, read-only, one request each):
+`curation/humanmine_bluegenes_properties.json` is `/service/bluegenes-properties` of www.humanmine.org and
+`curation/humanmine_templates.xml` is `/service/templates?format=xml` (its production templates live in its userprofile
+database; the humanmine repository's `default-template-queries.xml` holds three). The property and the templates are in
+the mine's userprofile database, so a rebuild removes them until `--report-layout` is passed again.
+
 ## Watching a build
 
 Every log line goes to the terminal and to `.build-logs/build-<run-id>.log` (in the repository,
