@@ -144,10 +144,18 @@ class ItemStore:
         # for ncbigene/hgnc, Gene.secondaryIdentifier only for ensembl), and committing to one
         # choice regardless leaves a source that never populates it with no real key at all -
         # see InterMineModel.key_attributes' docstring for what that silently breaks.
+        #
+        # The key is the value as InterMine will see it, i.e. after to_ascii (write() folds every
+        # attribute).  Keyed on the raw Unicode, HPO's three related synonyms of HP:0011002
+        # "Albers-Schoenberg", "Albers-Schonberg" and "Albers-Schönberg disease" were three items,
+        # two of them identical once written; InterMine keys OntologyTermSynonym on name, so the
+        # equivalent-object prefetch of their batch failed ("Duplicate objects found for pk") and
+        # the retry of the batch stopped humanmine-hpo with "Given a ProxyReference, but id not in
+        # ID Map" on an unrelated term's crossReferences [im-9n4.41].
         for ka in self.model.key_attributes(cls):
             if values.get(ka):
-                return (cls, ka, values[ka])
-        vals = "|".join(f"{k}={v}" for k, v in sorted(values.items()) if v)
+                return (cls, ka, to_ascii(values[ka]))
+        vals = "|".join(f"{k}={to_ascii(v)}" for k, v in sorted(values.items()) if v)
         return (cls, "*", vals) if vals else None
 
     def get(self, cls: str, values: Dict[str, str]) -> Optional[tuple]:
@@ -166,7 +174,9 @@ class ItemStore:
                 if len(self.dropped) < 50:
                     self.dropped.append(f"{cls} {k[2]}: {f} = {v!r} does not parse as {fd.type} - dropped")
                 continue
-            if f in it.attrs and it.attrs[f] != v:
+            if f in it.attrs and to_ascii(it.attrs[f]) == to_ascii(v):
+                continue          # the same value once written (see key_for): not a conflict
+            if f in it.attrs:
                 if len(self.conflicts) < 50:
                     self.conflicts.append(f"{cls} {k[2]}: {f} = {it.attrs[f]!r} vs {v!r} (first kept)")
                 continue

@@ -1051,3 +1051,42 @@ def test_the_disease_templates_run_with_rows_for_the_example_gene():
                                     "extra1": "H. sapiens", "format": "json"})
         payload = _get_json(f"{MINE_BASE}/service/template/results?{q}")
         assert payload.get("wasSuccessful") and payload["results"], (t, payload.get("error"))
+
+
+# ----------------------------------------------------------------- the RDF hpo source [im-9n4.41]
+RDF_HPO_DATA_SET = "Human Phenotype Ontology (RDF Portal)"
+
+
+def _rdf_hpo_skip():
+    if (s := _disease_skip()) is not None:
+        return s
+    try:
+        ok = bool(query_rows("DataSet.name", "DataSet.name", "=", RDF_HPO_DATA_SET))
+    except Exception:
+        ok = False
+    return None if ok else _skip("mine built without the RDF hpo source (--sources ... hpo)")
+
+
+def test_hpo_terms_of_the_example_genes_diseases_have_names():
+    """humanmine-hpo merges into hpo-annotation's identifier-only HPOTerms (key: identifier), so
+    the terms of PAX6's diseases carry their names, and Gene_Disease_HPO / Gene_HPOphenotype_2
+    show them.  It stopped integrate before im-9n4.41 (two synonyms equal once folded to ASCII)."""
+    if (s := _rdf_hpo_skip()) is not None:
+        return s
+    rows = _human_gene_rows("Gene.diseases.hpoAnnotations.hpoTerm.identifier Gene.diseases.hpoAnnotations.hpoTerm.name", "PAX6")
+    assert rows, "PAX6 has no HPO annotations"
+    unnamed = sorted({r[0] for r in rows if not r[1]})
+    assert not unnamed, f"{len(unnamed)} HPO terms of PAX6's diseases have no name: {unnamed[:5]}"
+
+
+def test_hpo_terms_are_unique_and_no_cross_reference_stand_ins_load():
+    """One HPOTerm per identifier, every one an HP: term with a name (obsolete terms included);
+    no UMLS:/SNOMEDCT_US: stand-ins (the stock OBO loader keeps only FBbt, FMA, MA, WBbt and ZFA
+    cross references; HumanMine has none on HPOTerm)."""
+    if (s := _rdf_hpo_skip()) is not None:
+        return s
+    rows = query_rows("HPOTerm.identifier HPOTerm.name", "HPOTerm.identifier", "IS NOT NULL", "")
+    ids = [r[0] for r in rows]
+    assert len(ids) > 15000 and len(ids) == len(set(ids)), (len(ids), len(set(ids)))
+    assert all(i.startswith("HP:") for i in ids), sorted(i for i in ids if not i.startswith("HP:"))[:5]
+    assert not [r for r in rows if not r[1]], [r for r in rows if not r[1]][:5]

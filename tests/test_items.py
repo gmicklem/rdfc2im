@@ -108,6 +108,49 @@ def test_to_ascii_transliterates_what_the_intermine_loader_cannot_take():
     assert to_ascii("plain ascii") == "plain ascii"
     assert to_ascii("中") == "?"               # no ASCII form at all
 
+
+def test_items_are_keyed_on_the_value_intermine_sees_after_ascii_folding(tmp_path):
+    """Regression for im-9n4.41: HP:0011002 has the related synonyms "Albers-Schonberg disease"
+    and "Albers-Schönberg disease".  Keyed on the raw Unicode they were two OntologyTermSynonym
+    items, written identically once to_ascii folded the o-umlaut; InterMine keys the class on
+    name, the equivalent-object prefetch of that batch failed on the duplicate, and the retried
+    batch stopped humanmine-hpo with "Given a ProxyReference, but id not in ID Map".  They must
+    be one item, linked once, with no attribute conflict reported."""
+    model = """<model name="genomic" package="org.intermine.model.bio">
+    <class name="OntologyTerm" is-interface="true">
+      <attribute name="identifier" type="java.lang.String"/>
+      <collection name="synonyms" referenced-type="OntologyTermSynonym"/>
+    </class>
+    <class name="OntologyTermSynonym" is-interface="true">
+      <attribute name="name" type="java.lang.String"/>
+      <attribute name="type" type="java.lang.String"/>
+    </class>
+    <class name="Note" is-interface="true">
+      <attribute name="text" type="java.lang.String"/>
+    </class>
+    </model>"""
+    (tmp_path / "core.xml").write_text(model)
+    (tmp_path / "x_keys.properties").write_text(
+        "OntologyTerm.key_identifier=identifier\nOntologyTermSynonym.key_name=name\n")
+    m = InterMineModel(); m.load_xml(str(tmp_path / "core.xml")); m.load_keys(str(tmp_path / "x_keys.properties"))
+    m.finalize(); m.live = None
+    store = ItemStore(m)
+    t = store.get("OntologyTerm", {"identifier": "HP:0011002"})
+    names = ["Albers-Schoenberg disease", "Albers-Schonberg disease", "Albers-Schönberg disease"]
+    for name in names:
+        store.link(t, "synonyms", store.get("OntologyTermSynonym", {"name": name, "type": "related"}))
+    syns = [it for it in store.items.values() if it.cls == "OntologyTermSynonym"]
+    assert len(syns) == 2
+    assert len(store.items[t].colls["synonyms"]) == 2
+    assert store.conflicts == []
+    # the composite fallback key folds too
+    k1, k2 = store.key_for("Note", {"text": "Schönberg"}), store.key_for("Note", {"text": "Schonberg"})
+    assert k1 == k2 and k1[1] == "*"
+    path = tmp_path / "items.xml"
+    store.write(str(path))
+    written = [ln for ln in path.read_text().splitlines() if 'name="name"' in ln]
+    assert len(written) == len(set(written)) == 2
+
 def test_data_source_gets_a_url_when_the_source_config_declares_one(tmp_path):
     """Regression for a real gap: DataSource.url was always empty (nothing in sources.yaml or
     the items-generation code ever set it), which BlueGenes' "Browse Sources" page cannot render

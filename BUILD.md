@@ -572,7 +572,8 @@ panel. `go_enrichment_for_gene` and the `GOAnnotation` model are what it restore
   and no new terms from the GAF or interpro2go. Protein stays 13,723: the loader creates a stub Protein for each
   UniProt `with` value, but every one matches an existing accession, so no Protein lacks an organism and none is
   duplicated. 29,760 of the RDF terms are not GO terms at all (identifiers `Reactome:...`, `RHEA:...`, `EC:...`)
-  and have no name; that is the RDF side's, not this source's.
+  and have no name; that is the RDF side's, not this source's (gone since im-9n4.41: the RDF go source keeps only the
+  cross references the stock OBO loader keeps, 48,348 GOTerms).
 * **Widget.** `go_enrichment_for_gene` was missing although `GOAnnotation` was now in the model: the mine checkout is copied
   once and `reduce_mine.py webconfig` only removes, so the widget dropped in the earlier GOA-less builds never came back
   (the same for the ProteinDomain autocomplete lines of `objectstoresummary.config.properties`). `build_dbmodel` now puts
@@ -767,9 +768,7 @@ made when the directory is missing.
 * **HPO counts.** 74 panel genes have a disease: 72 with OMIM (121 diseases), 44 with ORPHA (72 diseases). Evidence rows 3,637
   (OMIM 1,685, ORPHA 1,952, so 1,685 without the ORPHA rows), HPOAnnotation 3,631. The converter loads ORPHA annotations; undoing it is dropping
   `ORPHA:` rows from the two files. PAX6 has 15 diseases (8 OMIM, 7 ORPHANET), CYP2D6 1 (OMIM:608902).
-* **Not done: the RDF `hpo` source.** Its fetch worked (cache group `hpo`, 18 MB, 37,960 terms: 17,547 of them `UMLS:` and
-  `SNOMEDCT_US:` cross-reference stand-ins) but `humanmine-hpo` stops integrate with "Given a ProxyReference, but id not in ID
-  Map" on `HPOTerm.crossReferences` (terms that already hold a cross reference). Not resolved; the mine is built without it.
+* **The RDF `hpo` source** stopped integrate here; it loads since im-9n4.41 (next section).
 * **Report page.** `TOOL_QUERIES` now lists `atlasExpression.tStatistic`/`pValue` for the three ArrayExpress tools (they need
   E-MTAB-62, `arrayexpress-atlas`, not loaded): they are dropped, as is `Gene_SigSNP` (`EMPTY_TEMPLATES`: no eQTL). Kept: both
   Protein Atlas and Human Tissue tools, `Gene_Disease2`, `Gene_Disease_HPO`, `Gene_HPOphenotype_2`. On the PAX6 page in Chromium
@@ -783,6 +782,57 @@ made when the directory is missing.
   `rdfc2im_project` 18 min. `stock_ut/` 2.9 GB, Postgres 1.2 GB, root disk 3.3 GB free before and after.
 * **Licence.** The HPA groups are `redistributable: true` with the CC BY-SA note (share-alike); nothing from OMIM is loaded
   or cached. `cache check-release` passes on `cached_raw_data/` (16 groups) and on the stock filtered cache (13).
+
+#### HPO term names: the RDF hpo source beside hpo-annotation [im-9n4.41]
+
+`--sources "go ncbigene reactome hgnc ensembl uniprot clinvar gwascatalog pubmed hpo"` with the stock list above. `hpo`
+`replaces: [hpo]`: the stock OBO `hpo` entry (in HumanMine's project.xml right before `hpo-annotation`) moves to
+`replaced_sources.xml`, and `humanmine-hpo` loads with the other rdfc2im sources, after `humanmine-hgnc`, so still
+before `hpo-annotation`, as on HumanMine. Its terms merge into hpo-annotation's identifier-only `HPOTerm`s through
+`HPOTerm.key_identifier` (now in the generated keys file).
+
+* **Why it failed.** Not the cross references. `ItemStore` keyed items on the raw Unicode value, but `write()` folds every
+  attribute to ASCII (the large-file loader's UTF-8 bug, see `items.py`). HP:0011002 (Osteopetrosis) has the related
+  synonyms "Albers-Schonberg disease" and "Albers-Schönberg disease": two `OntologyTermSynonym` items, identical once
+  written. InterMine keys that class on `name` (the GO synonyms already in the database make the key live), so the
+  `ParallelBatchingFetcher` prefetch of the batch holding the term (items 5,001 to 10,000) failed with "Duplicate objects
+  found for pk" in a worker thread (the log shows only `PrefetchManager ... Error in worker thread`). That fetch had
+  already put the batch's collection members into the translator's `doneAlready` set; the batch was fetched again in the
+  main thread, those members came back as `ProxyReference`s never stored, and the first one met, `UMLS:C1850970` in
+  HP:0007541's `crossReferences`, stopped the load with "Given a ProxyReference, but id not in ID Map".
+* **The fix.** `ItemStore.key_for` keys on `to_ascii(value)`, so items InterMine would see as identical are one item (and
+  equal-once-folded values are not reported as conflicts). The hpo items have one synonym fewer (29,090) and no duplicate
+  under any key the integration uses except two obsolete terms named "obsolete Radial deviation of the thumb" (key
+  `name, ontology`; harmless while the HPO `Ontology` is new when humanmine-hpo loads, as here, because the fetcher's
+  hints then skip that key; GO has 22 such pairs and loads the same way).
+* **Cross references.** HumanMine's own loader keeps an OBO `xref` only when its prefix is in bio/core's
+  `obo_xrefs.properties` (FBbt, FMA, MA, WBbt, ZFA; `OboParser.addXrefs`); HumanMine has 0 `HPOTerm.crossReferences`,
+  no `UMLS:` term at all, and 8 GOTerm cross references (www.humanmine.org, 18 Nov 2026). The `oboinowl:hasDbXref` entry
+  in `knowledge.yaml` now carries the same rule as a filter, for every ontology: the 17,547 `UMLS:`/`SNOMEDCT_US:`/`NCIT:`/
+  `MSH:` HPOTerm stand-ins and the 29,760 nameless `Reactome:`/`RHEA:`/`EC:` GOTerms of the RDF go source (im-9n4.38) are no
+  longer made; go keeps 8 cross references (48,348 GOTerms, was 78,100). The queries and the cache are unchanged (the
+  filter applies to the fetched rows).
+
+| | before (no hpo) | with hpo |
+|---|---|---|
+| HPOTerm / without a name | 1,523 / 1,523 | 20,413 / 0 (all `HP:`) |
+| GOTerm / without a name | 78,100 / 29,760 | 48,348 / 8 |
+| OntologyTermSynonym | 79,819 | 108,909 |
+| `Gene_Disease_HPO` / `Gene_HPOphenotype_2` for PAX6 | 187 / 187 rows, every term name empty | 187 / 187 rows, every term named |
+| duplicate HPOTerm / OntologyTerm identifier | 0 / 0 | 0 / 0 |
+| PAX6 / CYP2D6 deep counts (proteins, alleles, GO, homologues, interactions, expression, diseases) | | unchanged |
+| all objects | 597,076 | 615,144 |
+
+Integrate 521 s (humanmine-hpo 14 s), postprocess 116 s, the whole driver run from `rdfc2im_pipeline` 17 min.
+Live tests `test_hpo_terms_*` skip on a mine without the `Human Phenotype Ontology (RDF Portal)` data set.
+
+**`Disease.dataSets` and the fork.** `build_humanmine_items` still deletes `Disease.dataSets` from the build's copy of
+`hpo-annotation_additions.xml`. Deleting it in the fork is not the fix: on HumanMine `Disease extends Annotatable`, which
+has no `dataSets`, so the line is what gives HumanMine's Disease its data sets (its `/service/model/Disease` lists
+`Disease.dataSets`; `BioStoreHook.setDataSets` fills it for every hpo-annotation and orphanet Disease). The clash exists
+only because this repository's `curation/extensions_additions.xml` makes `Disease extends BioEntity`, whose `dataSets`
+has the reverse `DataSet.bioEntities`. A fork change that works for both would have to make HumanMine's Disease a
+BioEntity too; until someone decides that, the build's logged edit is the right place.
 
 ### The ID-resolver gate [im-9n4.4]
 

@@ -866,12 +866,17 @@ predicates:
     class: OntologyTerm
     im: OntologyTerm.crossReferences
     status: sure
-    basis: java:OboConverter
+    basis: java:OboParser
+    filter: "regex:^(FBbt|FMA|MA|WBbt|ZFA):"
     note: >-
-      Exactly what stock HumanMine loads: OboParser reads `xref`, and OboConverter.createXref
-      builds an OntologyTerm with that identifier and adds it to crossReferences.  The collection
-      holds OntologyTerm, not CrossReference, so xref ids like Reactome:REACT_28392 become
-      identifier-only OntologyTerms - that is the stock behaviour this replaces, not a side effect.
+      What stock HumanMine loads: OboParser.addXrefs keeps an `xref` only when its prefix is
+      listed in bio/core's obo_xrefs.properties (FBbt, FMA, MA, WBbt, ZFA: anatomy ontologies),
+      and OboConverter.createXref then builds an identifier-only OntologyTerm for it in
+      crossReferences.  Every other xref is dropped by the stock parser, and so here by the
+      filter (required=no, so the term row stays and only the xref is blanked).  Without it the
+      RDF go source made 29,760 nameless GOTerms (Reactome:, RHEA:, EC:) and hpo 17,547 nameless
+      HPOTerms (UMLS:, SNOMEDCT_US:, NCIT:, MSH:); HumanMine itself has 0 HPOTerm and 8 GOTerm
+      cross references (www.humanmine.org, 18 Nov 2026) [im-9n4.41, im-9n4.38].
   - pred: oboinowl:hasAlternativeId
     class: OntologyTerm
     im: OntologyTermSynonym.name
