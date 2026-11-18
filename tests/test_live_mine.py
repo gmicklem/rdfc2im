@@ -361,7 +361,11 @@ def test_gene_panel_is_panel_sized():
     """
     if not mine_up():
         return _skip(f"live checks off or no mine at {MINE_BASE} (make test-live)")
-    rows = query_rows("Gene.primaryIdentifier", "Gene.organism.taxonId", "=", "9606")   # panther adds partner genes of other taxa
+    # panther adds partner genes of other taxa, psi-intact and biogrid human partner stubs (an Entrez id and
+    # nothing else) [im-9n4.13]: the panel is the human genes the RDF ncbigene source loaded
+    rows = query_rows_q('<query model="genomic" view="Gene.primaryIdentifier">'
+                        '<constraint path="Gene.organism.taxonId" op="=" value="9606"/>'
+                        f'<constraint path="Gene.dataSets.name" op="=" value="{RDF_GENE_DATA_SET}"/></query>')
     assert 0 < len(rows) < 1000, (
         f"expected a panel-sized Gene table, got {len(rows)} - is a source unscoped?")
 
@@ -818,3 +822,107 @@ def test_no_gene_is_duplicated_across_the_homologue_organisms():
     assert len(ids) == len(set(ids)), "duplicate Gene.primaryIdentifier"
     syms = [(r[2], r[1]) for r in rows if r[1]]
     assert len(syms) == len(set(syms)), "duplicate Gene.symbol within a taxon"
+
+
+# ----------------------------------------------------------------- stock psi-intact, biogrid, psi-mi-ontology [im-9n4.13]
+INTACT_DATA_SET = "IntAct molecular interactions"    # PsiConverter's data set title
+BIOGRID_DATA_SET = "BioGRID interaction data set"    # BioGridConverter's
+PAX6_ID = "5080"
+
+
+def stock_interactions_loaded() -> bool:
+    try:
+        return bool(query_rows_q('<query model="genomic" view="DataSet.name"><constraint path="DataSet.name" op="ONE OF">'
+                                 f'<value>{INTACT_DATA_SET}</value><value>{BIOGRID_DATA_SET}</value></constraint></query>'))
+    except Exception:
+        return False
+
+
+def _interaction_skip():
+    if not mine_up():
+        return _skip(f"live checks off or no mine at {MINE_BASE} (make test-live)")
+    if not stock_interactions_loaded():
+        return _skip("mine built without --stock-sources psi-intact/biogrid")
+    return None
+
+
+def test_the_example_genes_have_interactions_from_intact_and_biogrid():
+    """The pre-filter keeps every interaction with one panel gene; the partner loads through the all-human resolver.
+    HumanMine (2022) shows 156 interactions for PAX6."""
+    if (s := _interaction_skip()) is not None:
+        return s
+    rows = query_rows("Gene.interactions.participant2.primaryIdentifier Gene.interactions.details.dataSets.name",
+                      "Gene.primaryIdentifier", "=", PAX6_ID)
+    assert len({r[0] for r in rows}) >= 50, len({r[0] for r in rows})
+    assert {r[1] for r in rows} >= {INTACT_DATA_SET, BIOGRID_DATA_SET}, {r[1] for r in rows}
+    assert query_rows("Gene.interactions.participant2.primaryIdentifier", "Gene.primaryIdentifier", "=", EXAMPLE_GENE_ID)
+
+
+def test_every_interaction_detail_has_an_experiment_a_type_and_an_interaction():
+    if (s := _interaction_skip()) is not None:
+        return s
+    for ref in ("experiment", "interaction"):
+        orphans = query_rows_q(f'<query model="genomic" view="InteractionDetail.id"><join path="InteractionDetail.{ref}" '
+                               f'style="OUTER"/><constraint path="InteractionDetail.{ref}" op="IS NULL"/></query>')
+        assert orphans == [], (ref, orphans[:5])
+    untyped = query_rows_q('<query model="genomic" view="InteractionDetail.id">'
+                           '<constraint path="InteractionDetail.type" op="IS NULL"/></query>')
+    assert untyped == [], untyped[:5]
+    assert {r[0] for r in query_rows("InteractionDetail.type", "InteractionDetail.type", "IS NOT NULL", "")} <= {
+        "physical", "genetic"}
+
+
+def test_one_interaction_per_ordered_gene_pair_and_both_sources_merge_into_it():
+    """Interaction is keyed on participant1, participant2 by both loaders, so IntAct and BioGRID share one per pair."""
+    if (s := _interaction_skip()) is not None:
+        return s
+    rows = query_rows("Interaction.participant1.id Interaction.participant2.id", "Interaction.id", "!=", "0")
+    pairs = [tuple(r) for r in rows]
+    assert len(pairs) == len(set(pairs)), "duplicate Interaction for a gene pair"
+    both = query_rows_q('<query model="genomic" view="Interaction.id Interaction.details.dataSets.name">'
+                        f'<constraint path="Interaction.participant1.primaryIdentifier" op="=" value="{PAX6_ID}"/></query>')
+    per = {}
+    for i, ds in both:
+        per.setdefault(i, set()).add(ds)
+    assert any(len(v) == 2 for v in per.values()), "no PAX6 pair has details from both IntAct and BioGRID"
+
+
+def test_publications_terms_and_genes_are_not_duplicated_by_the_interaction_loaders():
+    """Publication by pubMedId (RDF pubmed and both loaders), InteractionTerm by identifier (psi-mi-ontology and
+    both loaders), Gene by primaryIdentifier (partner stubs from both loaders and the panel genes)."""
+    if (s := _interaction_skip()) is not None:
+        return s
+    for view, path in (("Publication.pubMedId", "Publication.pubMedId"),
+                       ("InteractionTerm.identifier", "InteractionTerm.identifier"),
+                       ("Gene.primaryIdentifier", "Gene.primaryIdentifier")):
+        ids = [r[0] for r in query_rows(view, path, "IS NOT NULL", "")]
+        assert len(ids) == len(set(ids)), f"duplicate {view}"
+    named = query_rows("InteractionTerm.identifier InteractionTerm.name", "InteractionTerm.identifier", "=", "MI:0018")
+    assert named and named[0][1] == "two hybrid", named        # the term merged with psi-mi-ontology's
+
+
+def test_the_cytoscape_tool_query_runs_for_the_example_gene():
+    """The query bundled in bluegenes-cytoscape-interaction-network-viewer (Gene_Interactions plus type = physical):
+    it answered 400 while the model had no Gene.interactions."""
+    if (s := _interaction_skip()) is not None:
+        return s
+    view = ("Gene.primaryIdentifier Gene.symbol Gene.interactions.participant2.symbol "
+            "Gene.interactions.participant2.primaryIdentifier Gene.interactions.details.name "
+            "Gene.interactions.details.role1 Gene.interactions.details.role2 Gene.interactions.details.type "
+            "Gene.interactions.details.dataSets.name")
+    rows = query_rows_q(f'<query model="genomic" view="{view}" constraintLogic="A and B">'
+                        '<constraint path="Gene" op="LOOKUP" value="PAX6" code="A"/>'
+                        '<constraint path="Gene.interactions.details.type" op="=" value="physical" code="B"/></query>')
+    assert rows and all(r[1] == "PAX6" for r in rows)
+
+
+def test_the_interaction_report_template_runs_with_rows():
+    if (s := _interaction_skip()) is not None:
+        return s
+    names = set(_get_json(f"{MINE_BASE}/service/templates?format=json")["templates"])
+    if "Gene_Interactions_forReportPage" not in names:
+        return _skip("HumanMine's templates not applied (tools/apply_humanmine_templates.py)")
+    q = urllib.parse.urlencode({"name": "Gene_Interactions_forReportPage", "constraint1": "Gene", "op1": "LOOKUP",
+                                "value1": "PAX6", "extra1": "H. sapiens", "format": "json"})
+    payload = _get_json(f"{MINE_BASE}/service/template/results?{q}")
+    assert payload.get("wasSuccessful") and payload["results"], payload.get("error")
