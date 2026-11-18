@@ -1,4 +1,4 @@
-# Ensembl gene IDs for the 113-gene food/drug-metabolism demo panel (curation/demo_gene_panel.txt)
+# Ensembl gene IDs for the 114-gene food/drug-metabolism demo panel (curation/demo_gene_panel.txt)
 #
 # Pulled live from this mine (Gene.symbol -> Gene.secondaryIdentifier) on 2026-09-17, i.e.
 # the actual Ensembl ID each gene merged onto after ncbigene+hgnc+ensembl integration -
@@ -8,6 +8,7 @@
 # One gene, GSTT1, has no Ensembl ID: confirmed genuine upstream gap, not an rdfc2im bug -
 # even NCBI's own gene2ensembl cross-reference data has no mapping for it, most likely
 # because of its well-known common deletion/copy-number polymorphism.
+# PAX6 was added on 2026-11-18 (im-9n4.5, the mine-tests fixture gene); its row comes from the rebuilt demo mine.
 #
 # symbol             ensembl_id
 ABCB1               ENSG00000085563
@@ -87,6 +88,7 @@ NQO1                ENSG00000181019
 NR1H4               ENSG00000012504
 OPRM1               ENSG00000112038
 PAH                 ENSG00000171759
+PAX6                ENSG00000007372
 PCSK9               ENSG00000169174
 PNPLA3              ENSG00000100344
 PPARA               ENSG00000186951
