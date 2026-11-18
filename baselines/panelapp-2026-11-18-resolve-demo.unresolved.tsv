@@ -1,0 +1,79 @@
+panel_id	panel	symbol	hgnc_id	ensembl_grch38	status	resolved_by	conflict	hgnc_outcome	ensembl_outcome	symbol_outcome	why
+19	Multiple lipomas	MT-TK	HGNC:7489	ENSG00000210156	resolved	hgnc_id	yes	unique:OTHER	unique:MATCH	unique:OTHER	biotype Mt_tRNA
+47	Dilated Cardiomyopathy and conduction defects	TAZ	HGNC:11577	ENSG00000102125	resolved	hgnc_id		unique:OTHER	unique:MATCH	ambiguous:DUPLICATE	symbol matches 2 genes
+66	Rhabdomyolysis and metabolic muscle disorders	MT-CO2	HGNC:7421	ENSG00000198712	resolved	hgnc_id	yes	unique:OTHER	unique:MATCH	unique:OTHER	
+85	Hereditary neuropathy	GARS	HGNC:4162	ENSG00000106105	resolved	hgnc_id	yes	unique:OTHER	unique:MATCH	unique:OTHER	
+111	COVID-19 research	TAZ	HGNC:11577	ENSG00000102125	resolved	hgnc_id		unique:OTHER	unique:MATCH	ambiguous:DUPLICATE	symbol matches 2 genes
+112	Mitochondrial disorders	GARS	HGNC:4162	ENSG00000106105	resolved	hgnc_id	yes	unique:OTHER	unique:MATCH	unique:OTHER	
+112	Mitochondrial disorders	MT-CO2	HGNC:7421	ENSG00000198712	resolved	hgnc_id	yes	unique:OTHER	unique:MATCH	unique:OTHER	
+112	Mitochondrial disorders	MT-TK	HGNC:7489	ENSG00000210156	resolved	hgnc_id	yes	unique:OTHER	unique:MATCH	unique:OTHER	biotype Mt_tRNA
+112	Mitochondrial disorders	TAZ	HGNC:11577	ENSG00000102125	resolved	hgnc_id		unique:OTHER	unique:MATCH	ambiguous:DUPLICATE	symbol matches 2 genes
+144	Fetal hydrops	TAZ	HGNC:11577	ENSG00000102125	resolved	hgnc_id		unique:OTHER	unique:MATCH	ambiguous:DUPLICATE	symbol matches 2 genes
+159	Cytopenias and congenital anaemias	TAZ	HGNC:11577	ENSG00000102125	resolved	hgnc_id		unique:OTHER	unique:MATCH	ambiguous:DUPLICATE	symbol matches 2 genes
+162	Severe microcephaly	SARS	HGNC:10537	ENSG00000031698	resolved	hgnc_id		unique:OTHER	unique:MATCH	ambiguous:DUPLICATE	symbol matches 2 genes
+238	Left Ventricular Noncompaction Cardiomyopathy	TAZ	HGNC:11577	ENSG00000102125	resolved	hgnc_id		unique:OTHER	unique:MATCH	ambiguous:DUPLICATE	symbol matches 2 genes
+285	Intellectual disability	SARS	HGNC:10537	ENSG00000031698	resolved	hgnc_id		unique:OTHER	unique:MATCH	ambiguous:DUPLICATE	symbol matches 2 genes
+285	Intellectual disability	TAZ	HGNC:11577	ENSG00000102125	resolved	hgnc_id		unique:OTHER	unique:MATCH	ambiguous:DUPLICATE	symbol matches 2 genes
+302	Undiagnosed metabolic disorders	GARS	HGNC:4162	ENSG00000106105	resolved	hgnc_id	yes	unique:OTHER	unique:MATCH	unique:OTHER	
+302	Undiagnosed metabolic disorders	GIF	HGNC:4268	ENSG00000134812	resolved	hgnc_id	yes	unique:OTHER	unique:MATCH	unique:OTHER	
+302	Undiagnosed metabolic disorders	MT-CO2	HGNC:7421	ENSG00000198712	resolved	hgnc_id	yes	unique:OTHER	unique:MATCH	unique:OTHER	
+302	Undiagnosed metabolic disorders	MT-TK	HGNC:7489	ENSG00000210156	resolved	hgnc_id	yes	unique:OTHER	unique:MATCH	unique:OTHER	biotype Mt_tRNA
+302	Undiagnosed metabolic disorders	TAZ	HGNC:11577	ENSG00000102125	resolved	hgnc_id		unique:OTHER	unique:MATCH	ambiguous:DUPLICATE	symbol matches 2 genes
+302	Undiagnosed metabolic disorders	UGT1A1	HGNC:12530	ENSG00000241635	resolved-by-fallback	ensembl_id		unresolved	unique:MATCH	unique:MATCH	
+385	Neonatal cholestasis	UGT1A1	HGNC:12530	ENSG00000241635	resolved-by-fallback	ensembl_id		unresolved	unique:MATCH	unique:MATCH	
+398	Primary immunodeficiency or monogenic inflammatory bowel disease	TAZ	HGNC:11577	ENSG00000102125	resolved	hgnc_id		unique:OTHER	unique:MATCH	ambiguous:DUPLICATE	symbol matches 2 genes
+402	Early onset or syndromic epilepsy	MT-TK	HGNC:7489	ENSG00000210156	resolved	hgnc_id	yes	unique:OTHER	unique:MATCH	unique:OTHER	biotype Mt_tRNA
+402	Early onset or syndromic epilepsy	SARS	HGNC:10537	ENSG00000031698	resolved	hgnc_id		unique:OTHER	unique:MATCH	ambiguous:DUPLICATE	symbol matches 2 genes
+465	Other rare neuromuscular disorders	MT-CO2	HGNC:7421	ENSG00000198712	resolved	hgnc_id	yes	unique:OTHER	unique:MATCH	unique:OTHER	
+467	Likely inborn error of metabolism	GARS	HGNC:4162	ENSG00000106105	resolved	hgnc_id	yes	unique:OTHER	unique:MATCH	unique:OTHER	
+467	Likely inborn error of metabolism	GIF	HGNC:4268	ENSG00000134812	resolved	hgnc_id	yes	unique:OTHER	unique:MATCH	unique:OTHER	
+467	Likely inborn error of metabolism	MT-CO2	HGNC:7421	ENSG00000198712	resolved	hgnc_id	yes	unique:OTHER	unique:MATCH	unique:OTHER	
+467	Likely inborn error of metabolism	MT-TK	HGNC:7489	ENSG00000210156	resolved	hgnc_id	yes	unique:OTHER	unique:MATCH	unique:OTHER	biotype Mt_tRNA
+467	Likely inborn error of metabolism	TAZ	HGNC:11577	ENSG00000102125	resolved	hgnc_id		unique:OTHER	unique:MATCH	ambiguous:DUPLICATE	symbol matches 2 genes
+467	Likely inborn error of metabolism	UGT1A1	HGNC:12530	ENSG00000241635	resolved-by-fallback	ensembl_id		unresolved	unique:MATCH	unique:MATCH	
+478	Fetal anomalies	TAZ	HGNC:11577	ENSG00000102125	resolved	hgnc_id		unique:OTHER	unique:MATCH	ambiguous:DUPLICATE	symbol matches 2 genes
+484	DDG2P	SARS	HGNC:10537	ENSG00000031698	resolved	hgnc_id		unique:OTHER	unique:MATCH	ambiguous:DUPLICATE	symbol matches 2 genes
+484	DDG2P	TAZ	HGNC:11577	ENSG00000102125	resolved	hgnc_id		unique:OTHER	unique:MATCH	ambiguous:DUPLICATE	symbol matches 2 genes
+484	DDG2P	UGT1A1	HGNC:12530	ENSG00000241635	resolved-by-fallback	ensembl_id		unresolved	unique:MATCH	unique:MATCH	
+486	Paediatric disorders	GARS	HGNC:4162	ENSG00000106105	resolved	hgnc_id	yes	unique:OTHER	unique:MATCH	unique:OTHER	
+486	Paediatric disorders	GIF	HGNC:4268	ENSG00000134812	resolved	hgnc_id	yes	unique:OTHER	unique:MATCH	unique:OTHER	
+486	Paediatric disorders	MT-CO2	HGNC:7421	ENSG00000198712	resolved	hgnc_id	yes	unique:OTHER	unique:MATCH	unique:OTHER	
+486	Paediatric disorders	MT-TK	HGNC:7489	ENSG00000210156	resolved	hgnc_id	yes	unique:OTHER	unique:MATCH	unique:OTHER	biotype Mt_tRNA
+486	Paediatric disorders	SARS	HGNC:10537	ENSG00000031698	resolved	hgnc_id		unique:OTHER	unique:MATCH	ambiguous:DUPLICATE	symbol matches 2 genes
+486	Paediatric disorders	TAZ	HGNC:11577	ENSG00000102125	resolved	hgnc_id		unique:OTHER	unique:MATCH	ambiguous:DUPLICATE	symbol matches 2 genes
+486	Paediatric disorders	UGT1A1	HGNC:12530	ENSG00000241635	resolved-by-fallback	ensembl_id		unresolved	unique:MATCH	unique:MATCH	
+490	Hypotonic infant	GARS	HGNC:4162	ENSG00000106105	resolved	hgnc_id	yes	unique:OTHER	unique:MATCH	unique:OTHER	
+490	Hypotonic infant	GIF	HGNC:4268	ENSG00000134812	resolved	hgnc_id	yes	unique:OTHER	unique:MATCH	unique:OTHER	
+490	Hypotonic infant	MT-CO2	HGNC:7421	ENSG00000198712	resolved	hgnc_id	yes	unique:OTHER	unique:MATCH	unique:OTHER	
+490	Hypotonic infant	MT-TK	HGNC:7489	ENSG00000210156	resolved	hgnc_id	yes	unique:OTHER	unique:MATCH	unique:OTHER	biotype Mt_tRNA
+490	Hypotonic infant	SARS	HGNC:10537	ENSG00000031698	resolved	hgnc_id		unique:OTHER	unique:MATCH	ambiguous:DUPLICATE	symbol matches 2 genes
+490	Hypotonic infant	TAZ	HGNC:11577	ENSG00000102125	resolved	hgnc_id		unique:OTHER	unique:MATCH	ambiguous:DUPLICATE	symbol matches 2 genes
+490	Hypotonic infant	UGT1A1	HGNC:12530	ENSG00000241635	resolved-by-fallback	ensembl_id		unresolved	unique:MATCH	unique:MATCH	
+496	Leukodystrophy, childhood onset	GARS	HGNC:4162	ENSG00000106105	resolved	hgnc_id	yes	unique:OTHER	unique:MATCH	unique:OTHER	
+496	Leukodystrophy, childhood onset	GIF	HGNC:4268	ENSG00000134812	resolved	hgnc_id	yes	unique:OTHER	unique:MATCH	unique:OTHER	
+496	Leukodystrophy, childhood onset	MT-CO2	HGNC:7421	ENSG00000198712	resolved	hgnc_id	yes	unique:OTHER	unique:MATCH	unique:OTHER	
+496	Leukodystrophy, childhood onset	MT-TK	HGNC:7489	ENSG00000210156	resolved	hgnc_id	yes	unique:OTHER	unique:MATCH	unique:OTHER	biotype Mt_tRNA
+496	Leukodystrophy, childhood onset	SARS	HGNC:10537	ENSG00000031698	resolved	hgnc_id		unique:OTHER	unique:MATCH	ambiguous:DUPLICATE	symbol matches 2 genes
+496	Leukodystrophy, childhood onset	TAZ	HGNC:11577	ENSG00000102125	resolved	hgnc_id		unique:OTHER	unique:MATCH	ambiguous:DUPLICATE	symbol matches 2 genes
+496	Leukodystrophy, childhood onset	UGT1A1	HGNC:12530	ENSG00000241635	resolved-by-fallback	ensembl_id		unresolved	unique:MATCH	unique:MATCH	
+518	Rare anaemia	GIF	HGNC:4268	ENSG00000134812	resolved	hgnc_id	yes	unique:OTHER	unique:MATCH	unique:OTHER	
+519	Cytopenia - NOT Fanconi anaemia	TAZ	HGNC:11577	ENSG00000102125	resolved	hgnc_id		unique:OTHER	unique:MATCH	ambiguous:DUPLICATE	symbol matches 2 genes
+539	Possible mitochondrial disorder, nuclear genes	GARS	HGNC:4162	ENSG00000106105	resolved	hgnc_id	yes	unique:OTHER	unique:MATCH	unique:OTHER	
+539	Possible mitochondrial disorder, nuclear genes	TAZ	HGNC:11577	ENSG00000102125	resolved	hgnc_id		unique:OTHER	unique:MATCH	ambiguous:DUPLICATE	symbol matches 2 genes
+544	Cholestasis	UGT1A1	HGNC:12530	ENSG00000241635	resolved-by-fallback	ensembl_id		unresolved	unique:MATCH	unique:MATCH	
+555	Ichthyosis and erythrokeratoderma	LOR	HGNC:6663	ENSG00000203782	resolved	hgnc_id	yes	unique:OTHER	unique:MATCH	unique:OTHER	
+556	Palmoplantar keratodermas	LOR	HGNC:6663	ENSG00000203782	resolved	hgnc_id	yes	unique:OTHER	unique:MATCH	unique:OTHER	
+749	Paediatric or syndromic cardiomyopathy	TAZ	HGNC:11577	ENSG00000102125	resolved	hgnc_id		unique:OTHER	unique:MATCH	ambiguous:DUPLICATE	symbol matches 2 genes
+846	Hereditary neuropathy or pain disorder	GARS	HGNC:4162	ENSG00000106105	resolved	hgnc_id	yes	unique:OTHER	unique:MATCH	unique:OTHER	
+846	Hereditary neuropathy or pain disorder	SARS	HGNC:10537	ENSG00000031698	resolved	hgnc_id		unique:OTHER	unique:MATCH	ambiguous:DUPLICATE	symbol matches 2 genes
+1141	Acute rhabdomyolysis	MT-CO2	HGNC:7421	ENSG00000198712	resolved	hgnc_id	yes	unique:OTHER	unique:MATCH	unique:OTHER	
+1174	Pulmonary Fibrosis, Familial	MARS	HGNC:6898	ENSG00000166986	resolved	hgnc_id	yes	unique:OTHER	unique:MATCH	unique:OTHER	
+1220	Unexplained death in infancy and sudden unexplained death in childhood	GARS	HGNC:4162	ENSG00000106105	resolved	hgnc_id	yes	unique:OTHER	unique:MATCH	unique:OTHER	
+1220	Unexplained death in infancy and sudden unexplained death in childhood	GIF	HGNC:4268	ENSG00000134812	resolved	hgnc_id	yes	unique:OTHER	unique:MATCH	unique:OTHER	
+1220	Unexplained death in infancy and sudden unexplained death in childhood	MT-CO2	HGNC:7421	ENSG00000198712	resolved	hgnc_id	yes	unique:OTHER	unique:MATCH	unique:OTHER	
+1220	Unexplained death in infancy and sudden unexplained death in childhood	MT-TK	HGNC:7489	ENSG00000210156	resolved	hgnc_id	yes	unique:OTHER	unique:MATCH	unique:OTHER	biotype Mt_tRNA
+1220	Unexplained death in infancy and sudden unexplained death in childhood	SARS	HGNC:10537	ENSG00000031698	resolved	hgnc_id		unique:OTHER	unique:MATCH	ambiguous:DUPLICATE	symbol matches 2 genes
+1220	Unexplained death in infancy and sudden unexplained death in childhood	TAZ	HGNC:11577	ENSG00000102125	resolved	hgnc_id		unique:OTHER	unique:MATCH	ambiguous:DUPLICATE	symbol matches 2 genes
+1220	Unexplained death in infancy and sudden unexplained death in childhood	UGT1A1	HGNC:12530	ENSG00000241635	resolved-by-fallback	ensembl_id		unresolved	unique:MATCH	unique:MATCH	
+1308	Barth syndrome	TAZ	HGNC:11577	ENSG00000102125	resolved	hgnc_id		unique:OTHER	unique:MATCH	ambiguous:DUPLICATE	symbol matches 2 genes
+1638	Childhood interstitial lung disease	MARS	HGNC:6898	ENSG00000166986	resolved	hgnc_id	yes	unique:OTHER	unique:MATCH	unique:OTHER	

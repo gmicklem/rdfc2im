@@ -379,7 +379,10 @@ def test_resolve_counts_each_identifier_type_alone_and_as_a_chain(raw, tmp_path)
     assert res["mine_version"] == 30 and res["id_order"] == ["hgnc_id", "ensembl_id", "symbol"]
     # 12 Green gene entries: 91 has 2, 165 has 3, 59 has 2, 263 has 2, 9 has 2 -> 11
     assert t["genes"] == 11
-    assert t["hgnc_id"] == {"have": 11, "unique": 2, "ambiguous": 1, "unresolved": 8}      # ALAS2, ABCD1 / ABHD16A
+    assert {k: v for k, v in t["hgnc_id"].items() if k != "unique_by_category"} == \
+        {"have": 11, "unique": 2, "ambiguous": 1, "unresolved": 8}                          # ALAS2, ABCD1 / ABHD16A
+    assert t["hgnc_id"]["unique_by_category"] == {"MATCH": 1, "OTHER": 1}                   # ABCD1 is a synonym match
+    assert res["distinct"]["by_identifier"]["hgnc_id"] == {"unique": 2, "ambiguous": 1, "unresolved": 8}
     assert t["ensembl_id"]["unique"] == 1 and t["symbol"]["unique"] == 2                   # FECH / ALAS2, ADAR
     c = t["chain"]
     assert c["resolved"] == 4 and c["by_hgnc_id"] == 2 and c["by_ensembl_id"] == 1 and c["by_symbol"] == 1

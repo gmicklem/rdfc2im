@@ -1342,10 +1342,12 @@ What the upload needs to know (read from the web service code, `ListUploadServic
   name change (`replaces` in the list definition) is retired by deleting the old name (`DELETE /service/lists?name=`).
 * The upload treats identifiers like `/service/ids` does: a match on a key field is added; a match that the service
   files under an issue (a synonym match, `OTHER`; a gene matched twice, `DUPLICATE`) is *not* added unless the request
-  says `add=OTHER` (and so on) and is returned as unmatched. HGNC ids reach the mine as synonyms, so check in
-  `resolve.json` which category the demo gives them before choosing between sending HGNC ids with `add=OTHER` or
-  sending the mine's own identifiers from `resolve.json.genes.tsv` (Entrez `primaryIdentifier`, one per gene, only for
-  genes the chain resolved to exactly one gene).
+  says `add=OTHER` (and so on) and is returned as unmatched. Measured on the demo mine (18 Nov 2026): every HGNC id
+  resolves as `OTHER` ("searching synonyms for all types"), every Ensembl GRCh38 id as a `MATCH` (`secondaryIdentifier`),
+  symbols mostly `MATCH`. So upload either Ensembl ids (one gene each, 4,307 of 4,308 distinct genes; RMRP's differs in
+  the mine) or, per gene, the Entrez `primaryIdentifier` that `resolve` chose (`resolve.json.genes.tsv`, all 4,308),
+  which should be a key match and need no `add` (not tested: nothing was uploaded). Do not upload symbols: 29 gene entries are ambiguous and 6 genes resolve to a
+  different gene than the HGNC id names.
 * Empty lists (panels with no Green gene) cannot be uploaded; skip them (`index.tsv` has `genes` 0).
 * The `--mine` option of `lists` reads `GET /service/lists` anonymously to mark lists the mine already has.
 

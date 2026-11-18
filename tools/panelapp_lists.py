@@ -370,7 +370,10 @@ class MineHttp:
                 with self.urlopen(urllib.request.Request(url, data=data, headers=headers, method=method),
                                   timeout=timeout) as resp:
                     raw = resp.read().decode("utf-8")
-                    return json.loads(raw) if raw.strip() else {}
+                    try:
+                        return json.loads(raw) if raw.strip() else {}
+                    except ValueError:
+                        return {"raw": raw.strip()}
             except urllib.error.HTTPError as e:
                 if e.code < 500 or attempt == self.retries:
                     raise FetchError(f"{method} {url}: HTTP {e.code} {e.read()[:300]!r}") from e
@@ -529,12 +532,16 @@ def resolve(in_dir, mine, out_file, http=None, organism="H. sapiens", select="al
         for r in recs:
             for kind, v in candidate_identifiers(r):
                 values[kind].add(v)
+    wait_for_mine(mine, http, sleep=sleep, log=log)
     version = http.get_json(mine.rstrip("/") + "/service/version")
+    if not isinstance(version, dict):
+        version = {"version": version}
+    version.setdefault("version", version.get("raw"))
     log(f"mine {mine}: version {version.get('version')}; identifiers: " +
         ", ".join(f"{k} {len(v)}" for k, v in values.items()))
     outcome = {kind: resolve_values(mine, values[kind], http, organism, sleep, log) for kind in ID_ORDER}
 
-    tallies = lambda: {"genes": 0, **{k: {"have": 0, "unique": 0, "ambiguous": 0, "unresolved": 0} for k in ID_ORDER},
+    tallies = lambda: {"genes": 0, **{k: {"have": 0, "unique": 0, "ambiguous": 0, "unresolved": 0, "unique_by_category": {}} for k in ID_ORDER},
                        "chain": {"resolved": 0, "by_hgnc_id": 0, "by_ensembl_id": 0, "by_symbol": 0,
                                  "fallback": 0, "ambiguous": 0, "unresolved": 0, "conflict": 0}}
     total, panel_stats, problems = tallies(), {}, []
@@ -560,6 +567,9 @@ def resolve(in_dir, mine, out_file, http=None, organism="H. sapiens", select="al
                     if kind in outs:
                         tl[kind]["have"] += 1
                         tl[kind][outs[kind]["status"]] += 1
+                        if outs[kind]["status"] == "unique":
+                            cat = "+".join(outs[kind]["categories"])
+                            tl[kind]["unique_by_category"][cat] = tl[kind]["unique_by_category"].get(cat, 0) + 1
                 c = tl["chain"]
                 if status == "resolved":
                     c["resolved"] += 1
@@ -583,7 +593,9 @@ def resolve(in_dir, mine, out_file, http=None, organism="H. sapiens", select="al
               "chain_unresolved": sum(1 for v in distinct.values() if v[2] == "unresolved"),
               "chain_ambiguous": sum(1 for v in distinct.values() if v[2] == "ambiguous"),
               "chain_fallback": sum(1 for v in distinct.values() if v[2] == "resolved" and v[3] != "hgnc_id"),
-              "conflicts": sum(1 for v in distinct.values() if v[4])}
+              "conflicts": sum(1 for v in distinct.values() if v[4]),
+              "by_identifier": {k: {st: sum(1 for v in distinct.values() if k in v[1] and v[1][k]["status"] == st)
+                                    for st in ("unique", "ambiguous", "unresolved")} for k in ID_ORDER}}
     result = {"mine": mine, "mine_version": version.get("version"), "fetch_date": meta["fetch_date"],
               "run_date": datetime.date.today().isoformat(), "select": select, "organism": organism,
               "id_order": list(ID_ORDER), "identifiers_submitted": {k: len(v) for k, v in values.items()},
@@ -601,7 +613,8 @@ def resolve(in_dir, mine, out_file, http=None, organism="H. sapiens", select="al
                                                 "; ".join(pr["why"]))) + "\n")
     # one row per distinct gene: what T2.3 needs to upload (the mine's own identifier for each gene)
     with open(out_file + ".genes.tsv", "w", encoding="utf-8", newline="\n") as fh:
-        fh.write("hgnc_id\tsymbol\tensembl_grch38\tstatus\tresolved_by\tmine_object_id\tmine_primaryIdentifier\tmine_symbol\n")
+        fh.write("hgnc_id\tsymbol\tensembl_grch38\tstatus\tresolved_by\tmine_object_id\tmine_primaryIdentifier\tmine_symbol\t"
+                 "hgnc_outcome\tensembl_outcome\tsymbol_outcome\tpanelapp_hgnc_symbol\tbiotype\n")
         for key in sorted(distinct, key=str):
             r, outs, status, chain_kind, conflict = distinct[key]
             gid = sm = pid = msym = ""
@@ -611,7 +624,11 @@ def resolve(in_dir, mine, out_file, http=None, organism="H. sapiens", select="al
                 sm = o.get("summaries", {}).get(gid, {})
                 pid, msym = sm.get("primaryIdentifier", ""), sm.get("symbol", "")
             fh.write("\t".join(str(x) for x in (r["hgnc_id"] or "", r["symbol"] or "", r["ensembl_grch38"] or "", status,
-                                                chain_kind or "", gid, pid, msym)) + "\n")
+                                                chain_kind or "", gid, pid, msym,
+                                                *(("absent" if k not in outs else outs[k]["status"] + (
+                                                    ":" + "+".join(outs[k]["categories"]) if outs[k]["categories"] else ""))
+                                                  for k in ID_ORDER),
+                                                r.get("hgnc_symbol") or "", r.get("biotype") or "")) + "\n")
     return result
 
 
