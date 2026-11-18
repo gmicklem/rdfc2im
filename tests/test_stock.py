@@ -220,7 +220,7 @@ def test_file_rows_say_how_each_file_is_made_and_staged(tmp_path):
     t = stock.load_table()
     rows = [r.split("\t") for r in stock.file_rows(t, ["uniprot", "panther", "psi-mi-ontology", "biogrid"],
                                                     "/S", "/S/cache")]
-    assert all(len(r) == 17 for r in rows)
+    assert all(len(r) == 18 for r in rows)
     assert all(r[16] == "-" for r in rows)                    # keep_types: gff3 only
     by = {(r[0], r[1]): r for r in rows}
     u = by[("uniprot", "sprot")]
@@ -236,6 +236,34 @@ def test_file_rows_say_how_each_file_is_made_and_staged(tmp_path):
     o = [r.split("\t") for r in stock.file_rows(t, ["omim"], "/S", "/S/cache", str(tmp_path))]
     assert o[0][2:5] == ["local", "-", str(tmp_path / "omim" / "mimTitles.txt")]
     assert o[1][2] == "download"                                # no local morbidmap.txt
+
+
+def test_psi_intact_is_filtered_from_the_zip_by_member_glob_with_its_xref_db():
+    """[im-9n4.13] psi-xml reads the members of human.zip itself (a glob, which other formats refuse) and
+    the xref db list travels in field 18; the spec, and so the cache key, includes it."""
+    t = stock.load_table()
+    r = stock.file_rows(t, ["psi-intact"], "/S", "/S/cache")[0].split("\t")
+    assert r[5:9] == ["zip", "*.xml", "psi-xml", "uniprot"] and r[12:16] == [
+        "/S/subset/psi-intact/human", "filtered", "psi/intact/current", "-"]
+    assert r[17] == "uniprotkb"
+    t2 = copy.deepcopy(t)
+    t2["psi-intact"]["files"][0]["filter"]["xref_db"] = ["uniprotkb", "ensembl"]
+    assert stock.file_rows(t2, ["psi-intact"], "/S", "/S/cache")[0].split("\t")[17] == "uniprotkb,ensembl"
+    assert stock.cache_meta(t2, "psi-intact")[0] != stock.cache_meta(t, "psi-intact")[0]
+    assert stock.validate_table(t) == []
+
+
+def test_only_psi_xml_may_filter_a_member_glob_and_xref_db_is_its_own():
+    t = stock.load_table()
+    bad = copy.deepcopy(t)
+    bad["psi-intact"]["files"][0]["filter"] = {"format": "tab", "ids": "uniprot", "column": "1"}
+    assert any("only a single file can be filtered" in p for p in stock.validate_table(bad))
+    bad = copy.deepcopy(t)
+    bad["panther"]["files"][0]["filter"]["xref_db"] = ["uniprotkb"]
+    assert any("`xref_db` is for format psi-xml only" in p for p in stock.validate_table(bad))
+    bad = copy.deepcopy(t)
+    bad["psi-intact"]["files"][0]["filter"]["xref_db"] = "uniprotkb"
+    assert any("`xref_db` must be a list" in p for p in stock.validate_table(bad))
 
 
 def test_ncbi_gff_rows_keep_gene_rows_and_derive_the_chromosome_lengths():

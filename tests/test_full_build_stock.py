@@ -370,3 +370,27 @@ def test_panther_adds_rat_and_zebrafish_gene_info_to_the_resolver_and_is_cut_fir
     mgi = next(i for i, c in enumerate(cmds) if "subset_raw.py filter --format tab" in c and "MRK_List2.rpt" in c)
     assert pan < part < mgi, cmds
     assert f"--ids {stock}/idsets/mgi.txt" in cmds[mgi] and "--column 1" in cmds[mgi]
+
+
+def test_psi_intact_and_biogrid_are_filtered_straight_from_their_zips_and_staged_under_member_names(tmp_path):
+    """[im-9n4.13] psi-xml: subset_raw reads the zip and a member glob itself (no unzip of IntAct's 20 GB), writing
+    one file per member into the work directory, which stage_src_data links file by file."""
+    src = _fake_intermine_60(tmp_path)
+    names = "psi-mi-ontology psi-intact biogrid"
+    plan = _plan(tmp_path, "--only", "subset_stock_data", "--intermine-src", src, "--stock-sources", names)
+    if plan is None:
+        return
+    cmds, stock = _cmds(plan, "subset_stock_data"), str(tmp_path / "stock")
+    intact = next(c for c in cmds if "subset_raw.py filter --format psi-xml" in c and "human.zip" in c)
+    assert intact == (f"python3 tools/subset_raw.py filter --format psi-xml --in {stock}/cache/stock-raw-psi-intact/"
+                      f"data/human.zip --ids {stock}/idsets/uniprot.txt --xref-db uniprotkb --member *.xml "
+                      f"--out {stock}/subset/psi-intact/human"), intact
+    grid = next(c for c in cmds if "subset_raw.py filter --format psi-xml" in c and "BIOGRID" in c)
+    assert f"--ids {stock}/idsets/entrez.txt --xref-db entrez gene/locuslink" in grid
+    assert grid.endswith(f"--member BIOGRID-ORGANISM-Homo_sapiens-*.psi25.xml --out {stock}/subset/biogrid/organisms")
+    assert not any(c.startswith("unzip") or "unzip -p" in c for c in cmds), cmds
+    assert any("cache save stock-psi-intact " in c for c in cmds) and any("cache save stock-biogrid " in c for c in cmds)
+    plan = _plan(tmp_path, "--only", "stage_src_data", "--intermine-src", src, "--stock-sources", names)
+    staged = " ".join(_cmds(plan, "stage_src_data"))
+    assert f"for f in '{stock}/subset/psi-intact/human'/*" in staged and "'/micklem/data/psi/intact/current'" in staged
+    assert f"for f in '{stock}/subset/biogrid/organisms'/*" in staged

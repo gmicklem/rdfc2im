@@ -1054,12 +1054,12 @@ _last_modified() {
 phase_fetch_stock_data() {
   [ -n "$STOCK_SOURCES" ] || { log "no --stock-sources: nothing to fetch"; return 0; }
   activate_venv
-  local rows src fid origin url raw unpack member fmt ids col taxon keep work kind sdir sname ktypes
+  local rows src fid origin url raw unpack member fmt ids col taxon keep work kind sdir sname ktypes xdb
   _fetch_resolver_data
   rows=$(_stock_files)
   for src in $STOCK_SOURCES; do
     local group="stock-raw-$src" urls=() fids=() raws=() whole=0
-    while IFS=$'\t' read -r -u 3 s fid origin url raw unpack member fmt ids col taxon keep work kind sdir sname ktypes; do
+    while IFS=$'\t' read -r -u 3 s fid origin url raw unpack member fmt ids col taxon keep work kind sdir sname ktypes xdb; do
       [ "$s" = "$src" ] || continue
       [ "$origin" = derived ] && continue     # made from another file of the source by subset_stock_data
       [ "$origin" = download ] || { log "$src/$fid: local copy $raw"; continue; }
@@ -1166,10 +1166,19 @@ _stock_filtered_cache() {
 # or a whole file unpacked from its archive or .gz, or a derived file (the Chromosome lengths read from
 # a filtered GFF, tools/subset_raw.py chromosome-lengths). Arguments are the row's fields.
 _stock_produce() {
-  local src=$1 fid=$2 raw=$3 unpack=$4 member=$5 fmt=$6 ids=$7 col=$8 taxon=$9 keep=${10} work=${11} kind=${12} sname=${13} ktypes=${14:-}
+  local src=$1 fid=$2 raw=$3 unpack=$4 member=$5 fmt=$6 ids=$7 col=$8 taxon=$9 keep=${10} work=${11} kind=${12} sname=${13} ktypes=${14:-} xdb=${15:-}
   local in=$raw tmp="$STOCK_DIR/unpacked/$src/$fid"
   run rm -rf "$work"
   run mkdir -p "$work"
+  if [ "$kind" = filtered ] && [ "$fmt" = psi-xml ]; then
+    # PSI-MI XML reads the zip itself (IntAct human.zip is 1 GB of dozens of members, never unpacked):
+    # one filtered file per member, under the member's own name, into the work directory [im-9n4.13]
+    local args=(--format psi-xml --in "$raw" --ids "$STOCK_DIR/idsets/$ids.txt")
+    [ -z "$xdb" ] || args+=(--xref-db "$xdb")
+    if [ -n "$unpack" ]; then args+=(--member "$member" --out "$work"); else args+=(--out "$work/$sname"); fi
+    run python3 tools/subset_raw.py filter "${args[@]}"
+    return 0
+  fi
   if [ "$kind" = derived ]; then
     [ "$fmt" = chromosome-lengths ] || die "$src/$fid: unknown derived format $fmt"
     run python3 tools/subset_raw.py chromosome-lengths --in "$raw" --out "$work/$sname" --taxon "${taxon:-$TAXON}"
@@ -1217,7 +1226,7 @@ phase_subset_stock_data() {
   [ -n "$STOCK_SOURCES" ] || { log "no --stock-sources: nothing to subset"; return 0; }
   activate_venv
   [ "$DRY_RUN" -eq 1 ] || [ -f tools/subset_raw.py ] || die "tools/subset_raw.py (task T0.2) is missing"
-  local rows s fid origin url raw unpack member fmt ids col taxon keep work kind sdir sname ktypes
+  local rows s fid origin url raw unpack member fmt ids col taxon keep work kind sdir sname ktypes xdb
   rows=$(_stock_files)
   run python3 tools/subset_raw.py idsets --genes "$GENE_PANEL" --out "$STOCK_DIR/idsets" --items-root out \
     --lookup-dir "$LOOKUP_DIR" --taxon "$TAXON"
@@ -1274,7 +1283,7 @@ phase_subset_stock_data() {
         restore=0
       fi
     fi
-    while IFS=$'\t' read -r -u 3 s fid origin url raw unpack member fmt ids col taxon keep work kind sdir sname ktypes; do
+    while IFS=$'\t' read -r -u 3 s fid origin url raw unpack member fmt ids col taxon keep work kind sdir sname ktypes xdb; do
       [ "$s" = "$src" ] || continue
       case "$kind" in
         filtered) filtered=1
@@ -1283,7 +1292,7 @@ phase_subset_stock_data() {
         asis) continue ;;
       esac
       _stock_produce "$src" "$fid" "$raw" "$(_dash "$unpack")" "$(_dash "$member")" "$(_dash "$fmt")" "$(_dash "$ids")" \
-        "$(_dash "$col")" "$(_dash "$taxon")" "$keep" "$work" "$kind" "$(_dash "$sname")" "$(_dash "$ktypes")"
+        "$(_dash "$col")" "$(_dash "$taxon")" "$keep" "$work" "$kind" "$(_dash "$sname")" "$(_dash "$ktypes")" "$(_dash "$xdb")"
     done 3<<< "$rows"
     [ "$filtered" -eq 1 ] || continue
     if [ "$restore" -eq 1 ]; then
@@ -1714,9 +1723,9 @@ phase_stage_src_data() {
 # file (a deployment's own HumanMine data under /micklem/data) is never replaced.
 _stage_stock_data() {
   activate_venv
-  local rows s fid origin url raw unpack member fmt ids col taxon keep work kind sdir sname ktypes dirs=""
+  local rows s fid origin url raw unpack member fmt ids col taxon keep work kind sdir sname ktypes xdb dirs=""
   rows=$(_stock_files)
-  while IFS=$'\t' read -r -u 3 s fid origin url raw unpack member fmt ids col taxon keep work kind sdir sname ktypes; do
+  while IFS=$'\t' read -r -u 3 s fid origin url raw unpack member fmt ids col taxon keep work kind sdir sname ktypes xdb; do
     [ -n "$s" ] || continue
     case " $dirs " in *" $sdir "*) ;; *) dirs="$dirs $sdir" ;; esac
   done 3<<< "$rows"
@@ -1725,7 +1734,7 @@ _stage_stock_data() {
     run mkdir -p "$DATA_ROOT/$d"
     run find "$DATA_ROOT/$d" -maxdepth 1 -type l \( -lname "$STOCK_DIR/*" ${STOCK_LOCAL:+-o -lname "${STOCK_LOCAL%/}/*"} \) -delete
   done
-  while IFS=$'\t' read -r -u 3 s fid origin url raw unpack member fmt ids col taxon keep work kind sdir sname ktypes; do
+  while IFS=$'\t' read -r -u 3 s fid origin url raw unpack member fmt ids col taxon keep work kind sdir sname ktypes xdb; do
     [ -n "$s" ] || continue
     local dest="$DATA_ROOT/$sdir" from
     if [ "$kind" = asis ]; then from=$raw; else from="$work/$sname"; fi
