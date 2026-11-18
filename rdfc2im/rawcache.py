@@ -215,8 +215,12 @@ def save(group: str, src_dir: str, cache_dir: str = DEFAULT_CACHE_DIR, meta: dic
     return info
 
 
-def verify(group: str, cache_dir: str = DEFAULT_CACHE_DIR) -> dict:
-    """Re-hash every cached file against the manifest. Raises CacheError on any difference."""
+def verify(group: str, cache_dir: str = DEFAULT_CACHE_DIR, meta: dict | None = None) -> dict:
+    """Re-hash every cached file against the manifest. Raises CacheError on any difference.
+
+    `meta`, when given, must match what save recorded, key by key, as on restore: for data that is
+    used where it lies in the cache (full-build.sh's large stock-source downloads) instead of being
+    restored first."""
     _check_group(group)
     gdir = os.path.join(cache_dir, group)
     if not os.path.isdir(gdir):
@@ -230,7 +234,16 @@ def verify(group: str, cache_dir: str = DEFAULT_CACHE_DIR) -> dict:
         got = md5_file(os.path.join(gdir, "data", rel))
         if got != want:
             raise CacheError(f"{group}: {rel} is corrupt in the cache (md5 {got}, expected {want})")
+    _check_meta(group, info, meta)
     return info
+
+
+def _check_meta(group: str, info: dict, meta: dict | None) -> None:
+    have = info.get("meta", {})
+    for k, want in (meta or {}).items():
+        if have.get(k) != want:
+            raise CacheError(f"{group}: cached data was fetched for {k}={have.get(k)!r}, "
+                             f"but this build needs {k}={want!r} - refusing to use it")
 
 
 def restore(group: str, dest_dir: str, cache_dir: str = DEFAULT_CACHE_DIR, meta: dict | None = None) -> dict:
@@ -240,12 +253,7 @@ def restore(group: str, dest_dir: str, cache_dir: str = DEFAULT_CACHE_DIR, meta:
     what was recorded at save time. dest_dir's other files are removed: a stale file left beside
     restored ones would be picked up by the next stage exactly as if it had been fetched.
     """
-    info = verify(group, cache_dir)                 # includes: exists, complete, uncorrupted
-    have = info.get("meta", {})
-    for k, want in (meta or {}).items():
-        if have.get(k) != want:
-            raise CacheError(f"{group}: cached data was fetched for {k}={have.get(k)!r}, "
-                             f"but this build needs {k}={want!r} - refusing to restore it")
+    info = verify(group, cache_dir, meta)           # includes: exists, complete, uncorrupted, meta
     gdir = os.path.join(cache_dir, group)
     man = _read_manifest(gdir)
     os.makedirs(dest_dir, exist_ok=True)

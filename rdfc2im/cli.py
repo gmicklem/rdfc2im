@@ -12,6 +12,8 @@
   rdfc2im docs         out/_docs/{STATUS.md, CURATION_GUIDE.md}
   rdfc2im all          allow + translate + tsv + items + project + check + docs  (fetch only with --fetch)
   rdfc2im cache        save|restore|verify|list checksummed copies of fetched data in cached_raw_data/
+  rdfc2im stock        list|check|jars|files|postprocess|size|meta: the stock-source table
+                       (rdfc2im/data/stock_sources.yaml) for full-build.sh --stock-sources
 
 All paths come from rdfc2im.yaml in the working directory (or --workspace); flags override.
 """
@@ -80,6 +82,7 @@ def main(argv=None):
     ap.add_argument("--version", action="version", version=__version__)
     sub = ap.add_subparsers(dest="cmd", required=True)
     _add_cache_parser(sub)
+    _add_stock_parser(sub)
     for name in ("allow", "translate", "fetch", "tsv", "items", "project", "check", "linkml", "docs", "all"):
         p = sub.add_parser(name)
         p.add_argument("--source", "-s", action="append", help="restrict to these rdf-config sources")
@@ -106,9 +109,16 @@ def main(argv=None):
                        "field of its own, so this is separate from --genes, and (unlike --genes) "
                        "restricts at fetch time via VALUES-batching, not a query-embedded FILTER, "
                        "since a panel's cited-publication list is far too large for that.")
+        if name in ("project", "all"):
+            p.add_argument("--stock-source", action="append", default=[], metavar="NAME",
+                           help="keep this HumanMine stock <source> (rdfc2im/data/stock_sources.yaml), "
+                                "with its data property and organism properties rewritten from the "
+                                "table; repeat, or give a space-separated list")
     a = ap.parse_args(argv)
     if a.cmd == "cache":          # needs no workspace: it copies files between two directories
         return run_cache(a)
+    if a.cmd == "stock":          # reads the workspace only for project_xml, when there is one
+        return run_stock(a, load_ws(a.workspace))
     if not os.path.exists(a.workspace):
         sys.exit(f"rdfc2im: no {a.workspace} in {os.getcwd()} - run from the workspace directory "
                  f"(the one containing rdfc2im.yaml and the Makefile), or pass --workspace")
@@ -144,6 +154,8 @@ def _add_cache_parser(sub):
                             "save recorded, or the restore is refused")
     c = cs.add_parser("verify", parents=[common], help="re-hash cached files against their MD5SUMS")
     c.add_argument("group", nargs="*", help="default: every entry")
+    c.add_argument("--meta", action="append", default=[], metavar="KEY=VALUE",
+                   help="also refuse an entry whose recorded KEY differs (as restore does)")
     cs.add_parser("list", parents=[common])
 
 
@@ -167,7 +179,7 @@ def run_cache(a) -> int:
             if not names:
                 raise rawcache.CacheError(f"nothing cached in {a.cache_dir}/")
             for g in names:
-                i = rawcache.verify(g, a.cache_dir)
+                i = rawcache.verify(g, a.cache_dir, meta)
                 print(f"ok  {g}: {i['files']} files, {i['bytes']} bytes, cached {i['saved_at']}")
         else:
             for g in rawcache.groups(a.cache_dir):
@@ -175,6 +187,91 @@ def run_cache(a) -> int:
                 print(f"{g}\t{i['files']} files\t{i['bytes']} bytes\t{i['saved_at']}\t{i['meta']}")
     except rawcache.CacheError as e:
         print(f"rdfc2im cache: {e}", file=sys.stderr)
+        return 1
+    return 0
+
+
+def _add_stock_parser(sub):
+    p = sub.add_parser("stock", help="the stock-source table for hybrid builds (see rdfc2im/stock.py)")
+    common = argparse.ArgumentParser(add_help=False)
+    common.add_argument("--table", default=None, help="default: the package's data/stock_sources.yaml")
+    common.add_argument("--local", default=None, metavar="DIR",
+                        help="local copies: DIR/<source>/<raw file name> (full-build.sh --stock-local)")
+    ss = p.add_subparsers(dest="stock_cmd", required=True)
+    ss.add_parser("list", parents=[common])
+    for name in ("check", "jars", "files", "postprocess", "size"):
+        c = ss.add_parser(name, parents=[common])
+        c.add_argument("names", nargs="*", help="stock source names (space or comma separated)")
+        if name == "check":
+            c.add_argument("--sources", default="", help="this build's rdfc2im sources (a replaced stock "
+                           "source is refused)")
+            c.add_argument("--taxon", default="9606")
+            c.add_argument("--project-xml", default=None, help="default: the workspace's project_xml")
+        if name == "jars":
+            c.add_argument("--im-version", required=True, help="the --intermine-src checkout's version")
+        if name == "files":
+            c.add_argument("--stock-dir", required=True, help="full-build.sh's STOCK_DIR")
+            c.add_argument("--raw-cache", required=True, help="cache dir of the raw download groups")
+    c = ss.add_parser("meta", parents=[common])
+    c.add_argument("name")
+    g = c.add_mutually_exclusive_group()
+    g.add_argument("--restore", action="store_true", help="only what a restore must match (spec_md5)")
+    g.add_argument("--record", action="store_true", help="only what save records besides (redistributable, licence)")
+
+
+def run_stock(a, ws) -> int:
+    from . import stock
+    try:
+        table = stock.load_table(a.table)
+        if a.stock_cmd == "list":
+            for n, e in table.items():
+                print(stock._row(n, e["type"], e["jar"], "redistributable" if e["redistributable"]
+                                 else "restricted", e["licence"]))
+            return 0
+        if a.stock_cmd == "meta":
+            if a.name not in table:
+                raise stock.StockError(f"unknown stock source {a.name!r}")
+            words = stock.cache_meta(table, a.name)
+            if a.restore:
+                words = [w for w in words if w.startswith("spec_md5=")]
+            elif a.record:
+                words = [w for w in words if not w.startswith("spec_md5=")]
+            print(" ".join(f"--meta {w}" for w in words))
+            return 0
+        names = stock.parse_names(a.names)
+        if a.stock_cmd == "check":
+            with open(ws["sources_yaml"] or os.path.join(HERE, "data", "sources.yaml")) as fh:
+                sources_cfg = yaml.safe_load(fh) or {}
+            px = a.project_xml or ws.get("project_xml")
+            if px and not os.path.exists(px):
+                # a first build checks before fetch_inputs has made in/: order as given (rdfc2im
+                # project and reduce_mine keep project.xml's own order whatever this says)
+                print(f"rdfc2im stock: note: no {px} yet - not ordered by HumanMine's project.xml", file=sys.stderr)
+                px = None
+            order, problems = stock.select(
+                table, names, px, stock.parse_names([a.sources]),
+                sources_cfg, a.local, [t for t in a.taxon.split(",") if t])
+            for pr in problems:
+                print(f"rdfc2im stock: {pr}", file=sys.stderr)
+            if problems:
+                return 1
+            print(" ".join(order))
+            return 0
+        unknown = [n for n in names if n not in table]
+        if unknown:
+            raise stock.StockError(f"unknown stock source(s) {', '.join(unknown)} (run `stock check` first)")
+        if a.stock_cmd == "jars":
+            rows = stock.jar_rows(table, names, a.im_version)
+        elif a.stock_cmd == "files":
+            rows = stock.file_rows(table, names, a.stock_dir, a.raw_cache, a.local)
+        elif a.stock_cmd == "postprocess":
+            rows = stock.postprocess_rows(table, names)
+        else:
+            rows = [str(stock.download_bytes(table, names, a.local))]
+        for r in rows:
+            print(r)
+    except stock.StockError as e:
+        print(f"rdfc2im stock: {e}", file=sys.stderr)
         return 1
     return 0
 
@@ -232,6 +329,11 @@ def _resolve_pmids(a) -> list:
     scope.py's extract_publication_pmids for gathering that list, and do_fetch's use of
     pipeline.fetch_source_by_keys for how it restricts PubMed's own fetch."""
     return _parse_list_arg(getattr(a, "pmids", None))
+
+
+def _stock_names(a) -> list:
+    from .stock import parse_names
+    return parse_names(getattr(a, "stock_source", None) or [])
 
 
 def run(a, ws) -> int:
@@ -349,7 +451,8 @@ def run(a, ws) -> int:
                            ws.get("project_xml"), sources_cfg, ws.get("extensions"),
                            ws.get("source_version"), ws.get("priorities"),
                            ws.get("priorities_override"),
-                           only=a.source or ws.get("sources"))
+                           only=a.source or ws.get("sources"),
+                           stock=_stock_names(a))
 
     def do_check(m):
         return check_project(out, os.path.join(out, "_mine"), m, ws["type"], ws.get("project_xml"), sources_cfg)
@@ -374,7 +477,13 @@ def run(a, ws) -> int:
     if cmd == "translate":
         do_translate(m); return 0
     if cmd == "project":
-        do_project(m); return 0
+        from .stock import StockError
+        try:
+            do_project(m)
+        except StockError as e:
+            print(f"rdfc2im project: {e}", file=sys.stderr)
+            return 1
+        return 0
     if cmd == "check":
         return do_check(m)
     if cmd == "docs":

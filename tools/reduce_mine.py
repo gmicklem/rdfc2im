@@ -8,11 +8,15 @@ to HumanMine's full deployment can be entirely absent from a 9-source reduced bu
 versa a class only some replaced source contributes can still be present.
 
 Subcommands:
-  sources   <project.xml> <type>
+  sources   <project.xml> <type> [NAME...]
       Keep only <source type="TYPE" .../> entries (our rdfc2im-generated sources all share one
-      type name, set once in rdfc2im.yaml - see that file's `type:` key). Drops every other
-      stock HumanMine source project.xml would otherwise still list, which is what makes
-      dbmodel:addSourceDependencies try to resolve a jar for each one, JCenter or not.
+      type name, set once in rdfc2im.yaml - see that file's `type:` key), plus the stock sources
+      NAMEd (by project.xml name: reactome, and a hybrid build's --stock-sources), in the order
+      project.xml has them. Drops every other stock HumanMine source project.xml would otherwise
+      still list, which is what makes dbmodel:addSourceDependencies try to resolve a jar for each
+      one, JCenter or not. A NAME with no <source> in the file is an error (exit 1): a stock source
+      that silently fell out (replaced by an rdfc2im source, or misspelt) would otherwise build a
+      mine without it and no message.
 
   priorities <genomic_priorities.properties> <genomic_model.xml>
       Drop every line whose class (before the first '.') is not in the merged model.
@@ -102,9 +106,14 @@ def cmd_sources(args):
     # `alongside: [reactome]` declares as a real dependency of our humanmine-reactome (Pathway
     # merges onto it by identifier; without it Pathway has no protein/gene participants at all).
     path, keep_type = args[0], args[1]
-    keep_names = set(args[2:])
+    keep_names = set(n for a in args[2:] for n in a.split())
     t = ET.parse(path)
     sources = t.getroot().find("sources")
+    present = {s.get("name") for s in sources if isinstance(s.tag, str)}
+    missing = sorted(keep_names - present)
+    if missing:
+        sys.exit(f"reduce_mine sources: no <source> named {', '.join(missing)} in {path} - "
+                 f"nothing changed")
     kept, dropped = [], []
     for src in list(sources):
         if src.get("type") == keep_type or src.get("name") in keep_names:

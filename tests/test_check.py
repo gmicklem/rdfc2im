@@ -676,3 +676,75 @@ def test_organism_fields_the_items_step_fills_outrank_a_stock_source_loaded_alon
     prio = open(os.path.join(mine, "genomic_priorities.properties")).read().splitlines()
     for f in ("name", "shortName", "genus", "species"):
         assert f"Organism.{f} = humanmine-hgnc, reactome, humanmine-reactome, *" in prio, (f, prio)
+
+
+# ------------------------------------------------------- stock sources (--stock-sources)
+
+STOCK_TABLE = """sources:
+  reactome:
+    type: reactome
+    jar: intermine
+    licence: CC0
+    redistributable: true
+    data_dir: reactome/current
+    properties: {reactome.organisms: "9606"}
+    after: [ncbi-gene]
+    files:
+      - {id: map, url: "https://reactome.org/download/current/UniProt2Reactome.txt",
+         stage_as: UniProt2Reactome.txt, filter: none}
+  panther:
+    type: panther
+    jar: intermine
+    licence: x
+    redistributable: true
+    data_dir: panther/current
+    after: [reactome]
+    files:
+      - {id: o, url: "https://e/o", stage_as: o, filter: none}
+"""
+
+
+def _stock_table(tmp_path, text=STOCK_TABLE):
+    p = tmp_path / "stock.yaml"
+    p.write_text(text)
+    return str(p)
+
+
+def test_stock_sources_keep_humanmines_order_and_get_their_properties(tmp_path):
+    from rdfc2im.project import gen_project
+    m, out_root, mine, px = _alongside_setup(tmp_path)
+    cfg = {"reactome": {"replaces": [], "alongside": ["reactome"]}}
+    gen_project(out_root, mine, m, "humanmine-items", "/data", px, cfg, None, log=lambda *a: None,
+                stock=["panther", "reactome"], stock_table=_stock_table(tmp_path))
+    root = etree.parse(os.path.join(mine, "project.xml")).getroot()
+    assert [s.get("name") for s in root.iter("source")] == ["ncbi-gene", "reactome", "humanmine-reactome", "panther"]
+    r = next(s for s in root.iter("source") if s.get("name") == "reactome")
+    assert {p.get("name"): p.get("value") or p.get("location") for p in r.iter("property")} == {
+        "src.data.dir": "/micklem/data/reactome/current", "reactome.organisms": "9606"}
+    # risk 3: the stock source ranks first for every field its alongside rdfc2im source also writes
+    prio = open(os.path.join(mine, "genomic_priorities.properties")).read().splitlines()
+    for fld in ("Pathway.identifier", "Pathway.organism", "Organism.taxonId"):
+        assert f"{fld} = reactome, humanmine-reactome, *" in prio, (fld, prio)
+
+
+def test_a_stock_source_without_its_source_entry_or_out_of_order_stops_project(tmp_path):
+    from rdfc2im.project import gen_project
+    from rdfc2im.stock import StockError
+    m, out_root, mine, px = _alongside_setup(tmp_path)
+    cfg = {"reactome": {"replaces": ["reactome"]}}          # our reactome replaces the stock one
+    try:
+        gen_project(out_root, mine, m, "humanmine-items", "/data", px, cfg, None, log=lambda *a: None,
+                    stock=["reactome"], stock_table=_stock_table(tmp_path))
+    except StockError as e:
+        assert 'no <source name="reactome">' in str(e)
+    else:
+        raise AssertionError("a replaced stock source must be refused")
+    late = STOCK_TABLE.replace("after: [reactome]", "after: [reactome, nowhere]").replace(
+        "after: [ncbi-gene]", "after: [panther]")
+    try:
+        gen_project(out_root, mine, m, "humanmine-items", "/data", px, {}, None, log=lambda *a: None,
+                    stock=["reactome", "panther"], stock_table=_stock_table(tmp_path, late))
+    except StockError as e:
+        assert "reactome must integrate after panther" in str(e)
+    else:
+        raise AssertionError("an order constraint against project.xml must be refused")

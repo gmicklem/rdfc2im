@@ -1,0 +1,428 @@
+# Stock InterMine and HumanMine sources a hybrid build loads beside the rdfc2im ones
+# (tools/full-build.sh --stock-sources "a b c"; plan 50 in the planning repo, decisions D-1 to D-10).
+# Read through rdfc2im/stock.py (`python -m rdfc2im stock ...`), never parsed by bash.
+#
+# One entry per HumanMine project.xml <source name>:
+#   type             the project.xml source type; the loader jar is org.intermine:bio-source-<type>
+#   jar              intermine: built from the --intermine-src checkout (6.0 line, D-5) and published
+#                      into its private m2 repo by phase publish_intermine;
+#                    humanmine-bio-sources: built in the maint-2026 branch of the humanmine-bio-sources
+#                      fork (version 4.3.0), like humanmine-items
+#   licence          the data licence, as far as it is known
+#   redistributable  false: the data must never enter cached_raw_data/ or the CI release asset
+#                    (D-7; `cache save --for-release` refuses it, T0.3)
+#   local_copy       required: the files come only from --stock-local DIR/<name>/<raw_name>
+#                    (default optional: a local copy, when present, is used instead of the download)
+#   data_dir         HumanMine's own data directory under /micklem/data (in/humanmine_project.xml);
+#                    the filtered files are staged there under RDFC2IM_DATA_ROOT
+#   data_property    src.data.dir (default) or src.data.file (then data_file is the file name)
+#   properties       project.xml property values to set (organisms cut to human, ...);
+#                    "{data_root}" stands for /micklem/data
+#   after            integrate-order constraints (plan 50 row 11): HumanMine source names this one
+#                    must load after; a name replaced by an rdfc2im source stands for its replacement
+#   needs            other stock sources that must be selected with this one
+#   postprocess      postprocesses the source needs (plan 50 row 12; phase_postprocess hook)
+#   files            the upstream files:
+#     id             short name, unique in the entry
+#     url            the download (null for local-only data)
+#     raw_name       file name of the download (default: the url's basename)
+#     verified       true: a HEAD (or one-byte GET) request answered 200 from the sandbox on the date
+#                    in `checked`; size and last_modified are from that answer
+#     unpack, member zip | tar.gz, and the member (name or glob) to take from the archive
+#     stage_as       the file name the converter expects (the loaders read plain text only: no .gz)
+#     filter         none (the file is used whole), or {format, ids, column, taxon, keep_header}:
+#                    tools/subset_raw.py filter --format F --ids <idsets>/<ids>.txt [--column N]
+#                    [--taxon T] [--keep-comments]
+#   notes            anything a later task must know (format drift since HumanMine's 2022 load, ...)
+#
+# Loaders gated by the ID resolver (psi, biogrid, panther, omim, the HumanMine expression sources)
+# are filter: none here: T0.3's filtered ${resolver.file.rootpath}/entrez does their gene cut.
+#
+# Every URL was checked on 17 Nov 2026 unless the file says verified: false.
+
+sources:
+  uniprot:
+    type: uniprot
+    jar: intermine
+    licence: CC BY 4.0 (UniProt)
+    redistributable: true
+    data_dir: uniprot/current
+    properties:
+      uniprot.organisms: "9606"
+    postprocess: []
+    notes: >-
+      Swiss-Prot only (D-6): no TrEMBL file. With uniprot.organisms set, UniprotConverter takes
+      only files named <taxon>_uniprot_sprot.xml (anything else is logged as a bad file and
+      skipped), so the shared uniprot/current directory can also hold keywlist.xml and the
+      varsplic FASTA. The human Swiss-Prot XML is 175 MB gzipped, not the 80 MB plan 50 estimated.
+    files:
+      - id: sprot
+        url: https://ftp.ebi.ac.uk/pub/databases/uniprot/current_release/knowledgebase/taxonomic_divisions/uniprot_sprot_human.xml.gz
+        verified: true
+        size: 174683391
+        last_modified: "2026-11-04"
+        stage_as: 9606_uniprot_sprot.xml
+        filter: {format: uniprot-xml, ids: uniprot}
+
+  uniprot-keywords:
+    type: uniprot-keywords
+    jar: intermine
+    licence: CC BY 4.0 (UniProt)
+    redistributable: true
+    data_dir: uniprot/current
+    notes: >-
+      The EBI mirror has only keywlist.xml.gz (keywlist.xml is a 404 there); project.xml's
+      src.data.dir.includes=keywlist.xml picks the unpacked file out of the shared directory.
+    files:
+      - id: keywlist
+        url: https://ftp.ebi.ac.uk/pub/databases/uniprot/current_release/knowledgebase/complete/docs/keywlist.xml.gz
+        verified: true
+        size: 155546
+        last_modified: "2026-11-04"
+        stage_as: keywlist.xml
+        filter: none
+
+  uniprot-fasta:
+    type: fasta
+    jar: intermine
+    licence: CC BY 4.0 (UniProt)
+    redistributable: true
+    data_dir: uniprot/current
+    properties:
+      fasta.taxonId: "9606"
+    after: [uniprot]
+    notes: >-
+      UniProtFastaLoaderTask takes fasta.includes=uniprot_sprot_varsplic.fasta and the
+      organism from each header's OS= name. Isoforms only; the canonical sequences come from
+      the Swiss-Prot XML.
+    files:
+      - id: varsplic
+        url: https://ftp.ebi.ac.uk/pub/databases/uniprot/current_release/knowledgebase/complete/uniprot_sprot_varsplic.fasta.gz
+        verified: true
+        size: 8586697
+        last_modified: "2026-11-04"
+        stage_as: uniprot_sprot_varsplic.fasta
+        filter: {format: fasta, ids: uniprot}
+
+  go-annotation:
+    type: go-annotation
+    jar: intermine
+    licence: CC BY 4.0 (GO Consortium, GOA)
+    redistributable: true
+    data_dir: go-annotation/current/human
+    after: [uniprot, go]
+    postprocess: [do-sources]
+    notes: >-
+      GoPostprocess is the source's own postprocess (do-sources). The plugin ignores project.xml's
+      src.data.includes, so every file in the directory is read as GAF: stage nothing else there.
+      Column 2 is a UniProt accession for human. The GO terms come from rdfc2im's go source,
+      which replaces stock go.
+    files:
+      - id: gaf
+        url: https://current.geneontology.org/annotations/goa_human.gaf.gz
+        verified: true
+        size: 15041996
+        last_modified: "2026-05-28"
+        stage_as: gene_association.goa_human
+        filter: {format: gaf, ids: uniprot}
+
+  ncbi-gff:
+    type: ncbi-gff
+    jar: intermine
+    licence: public domain (NCBI RefSeq)
+    redistributable: true
+    data_dir: human/gff/current
+    after: [ncbi-gene]
+    postprocess: [create-chromosome-locations-and-lengths, create-gene-flanking-features,
+                  create-location-overlap-index, create-overlap-view]
+    notes: >-
+      GFF3 converter default includes *.gff,*.gff3; seqids NC_0000xx are mapped to chromosome
+      names for GRCh38. The filter keeps every ##sequence-region line, the panel genes (Dbxref
+      GeneID) and their Parent closure. RefSeq annotation release of Aug 2024.
+    files:
+      - id: gff
+        url: https://ftp.ncbi.nlm.nih.gov/refseq/H_sapiens/annotation/GRCh38_latest/refseq_identifiers/GRCh38_latest_genomic.gff.gz
+        verified: true
+        size: 77807126
+        last_modified: "2024-08-27"
+        stage_as: GRCh38_latest_genomic.gff
+        filter: {format: gff3, ids: entrez}
+
+  ncbi-fasta:
+    type: fasta
+    jar: intermine
+    licence: public domain (NCBI RefSeq)
+    redistributable: true
+    data_dir: human/fasta/current
+    properties:
+      fasta.taxonId: "9606"
+    after: [ncbi-gene]
+    postprocess: [create-chromosome-locations-and-lengths, transfer-sequences]
+    notes: >-
+      Optional (whole chromosomes, no gene filter possible): 973 MB gzipped, about 3.1 GB
+      unpacked under the data root. NCBIFastaLoaderTask throws on a header without the word
+      "chromosome" (or "mitochondrion"); GRCh38_latest_genomic.fna also holds unplaced and alt
+      scaffolds whose headers have not been checked against it (unverified).
+    files:
+      - id: genome
+        url: https://ftp.ncbi.nlm.nih.gov/refseq/H_sapiens/annotation/GRCh38_latest/refseq_identifiers/GRCh38_latest_genomic.fna.gz
+        verified: true
+        size: 972898531
+        last_modified: "2024-08-27"
+        stage_as: GRCh38_latest_genomic.fna
+        filter: none
+
+  panther:
+    type: panther
+    jar: intermine
+    licence: PANTHER terms of use, free with citation (unverified)
+    redistributable: true
+    data_dir: panther/current
+    properties:
+      panther.organisms: "9606"
+    notes: >-
+      Every file in the directory is parsed as tab-separated orthologues. The gene cells
+      (HUMAN|HGNC=5|UniProtKB=P...) do not split into ids that subset_raw's tab filter matches,
+      so the cut is the resolver gate (T0.3). PANTHER 19 (Apr 2024).
+    files:
+      - id: orthologs
+        url: https://data.pantherdb.org/ftp/ortholog/current_release/RefGenomeOrthologs.tar.gz
+        verified: true
+        size: 5932588
+        last_modified: "2024-04-02"
+        unpack: tar.gz
+        member: RefGenomeOrthologs
+        stage_as: RefGenomeOrthologs
+        filter: none
+
+  psi-intact:
+    type: psi
+    jar: intermine
+    licence: CC BY 4.0 (IntAct, EMBL-EBI)
+    redistributable: true
+    data_dir: psi/intact/current
+    properties:
+      intact.organisms: "9606"
+    after: [psi-mi-ontology]
+    notes: >-
+      1.06 GB zip of PSI-MI XML files (member layout unverified; unpacked size unknown, likely
+      several GB: needs the data root on the large disk). No PSI XML filter exists yet, so the
+      cut is the resolver gate (T0.3), which keeps panel-to-panel pairs only (plan 50 2.2).
+    files:
+      - id: human
+        url: https://ftp.ebi.ac.uk/pub/databases/intact/current/psi25/species/human.zip
+        verified: true
+        size: 1061726001
+        last_modified: "2026-10-24"
+        unpack: zip
+        member: "*.xml"
+        filter: none
+
+  biogrid:
+    type: biogrid
+    jar: intermine
+    licence: MIT (BioGRID; unverified)
+    redistributable: true
+    data_dir: biogrid/current
+    properties:
+      biogrid.organisms: "9606"
+    after: [psi-mi-ontology]
+    notes: >-
+      The converter needs the BIOGRID-ORGANISM-<Genus_species>-<version>.psi25.xml file name
+      layout (it reads the organism out of it). The server sends no Content-Length; over 140 MB.
+      Resolver gate (T0.3).
+    files:
+      - id: organisms
+        url: https://downloads.thebiogrid.org/Download/BioGRID/Latest-Release/BIOGRID-ORGANISM-LATEST.psi25.zip
+        verified: true
+        last_modified: "2026-11-17"
+        unpack: zip
+        member: "BIOGRID-ORGANISM-Homo_sapiens-*.psi25.xml"
+        filter: none
+
+  psi-mi-ontology:
+    type: psi-mi-ontology
+    jar: intermine
+    licence: CC BY 4.0 (HUPO-PSI; unverified)
+    redistributable: true
+    data_dir: psi/ontology/current
+    data_property: src.data.file
+    data_file: psi-mi.obo
+    files:
+      - id: obo
+        url: https://purl.obolibrary.org/obo/mi.obo
+        verified: true
+        size: 744253
+        stage_as: psi-mi.obo
+        filter: none
+
+  protein-atlas:
+    type: protein-atlas
+    jar: humanmine-bio-sources
+    licence: CC BY-SA 3.0 in the converter (HPA now states 4.0; share-alike)
+    redistributable: true
+    data_dir: metabolic/protein-atlas/current
+    notes: >-
+      HPA renamed normal_tissue.tsv.zip to normal_ihc_data.tsv.zip (the old name is a 404);
+      staged under the name the converter accepts. Any other file in the directory makes the
+      converter throw. Column layout of the renamed file against the 2022 converter: unverified.
+      The member name inside the zip is assumed.
+    files:
+      - id: normal
+        url: https://www.proteinatlas.org/download/tsv/normal_ihc_data.tsv.zip
+        verified: true
+        size: 5617166
+        last_modified: "2026-11-10"
+        unpack: zip
+        member: normal_ihc_data.tsv
+        stage_as: normal_tissue.tsv
+        filter: {format: tab, ids: ensembl, column: "1", keep_header: true}
+
+  protein-atlas-rna:
+    type: protein-atlas-rna
+    jar: humanmine-bio-sources
+    licence: CC BY-SA 3.0 in the converter (HPA now states 4.0; share-alike)
+    redistributable: true
+    data_dir: metabolic/protein-atlas/RNA-seq/current
+    notes: >-
+      The converter accepts only a file named rna_tissue.tsv (anything else throws): col 1
+      Ensembl gene, col 3 tissue, col 4 nTPM, which rna_tissue_consensus.tsv has. Member name
+      inside the zip assumed.
+    files:
+      - id: consensus
+        url: https://www.proteinatlas.org/download/tsv/rna_tissue_consensus.tsv.zip
+        verified: true
+        size: 5293680
+        last_modified: "2026-11-10"
+        unpack: zip
+        member: rna_tissue_consensus.tsv
+        stage_as: rna_tissue.tsv
+        filter: {format: tab, ids: ensembl, column: "1", keep_header: true}
+
+  gtex:
+    type: gtex
+    jar: humanmine-bio-sources
+    licence: GTEx open-access summary data
+    redistributable: true
+    data_dir: human/GTEx/current
+    notes: >-
+      The converter reads a file whose name contains gene_median, but only after a header row
+      whose first cell is gene_id; the v8 GCT header says Name, so HumanMine's 2022 copy was
+      probably edited (unverified). Gene ids carry a version suffix, which subset_raw's tab
+      filter does not strip, so the cut is the resolver gate (T0.3). eQTLs (1.5 GB) are left out.
+    files:
+      - id: median
+        url: https://storage.googleapis.com/adult-gtex/bulk-gex/v8/rna-seq/GTEx_Analysis_2017-06-05_v8_RNASeQCv1.1.9_gene_median_tpm.gct.gz
+        verified: true
+        size: 6952331
+        last_modified: "2023-03-20"
+        stage_as: GTEx_Analysis_2017-06-05_v8_RNASeQCv1.1.9_gene_median_tpm.gct
+        filter: none
+
+  atlas-express:
+    type: atlas-express
+    jar: humanmine-bio-sources
+    licence: CC BY 4.0 (Expression Atlas, EMBL-EBI)
+    redistributable: true
+    data_dir: atlas-express
+    notes: >-
+      Every file in the directory is read as a tab file with a header row, col 1 Ensembl gene id.
+      The experiment's TPM table from the Atlas FTP area (the /gxa/experiments-content URL is a
+      404); the file HumanMine loaded in 2014 is not known.
+    files:
+      - id: tpms
+        url: https://ftp.ebi.ac.uk/pub/databases/microarray/data/atlas/experiments/E-MTAB-513/E-MTAB-513-tpms.tsv
+        verified: true
+        size: 12909800
+        last_modified: "2021-12-14"
+        stage_as: E-MTAB-513-tpms.tsv
+        filter: {format: tab, ids: ensembl, column: "1", keep_header: true}
+
+  hpo-annotation:
+    type: hpo-annotation
+    jar: humanmine-bio-sources
+    licence: HPO licence (reuse with attribution, terms not to be altered; unverified for a filtered copy)
+    redistributable: true
+    data_dir: hpo/current
+    needs: [omim]
+    properties:
+      hpo.disease.file: "{data_root}/metabolic/omim/current/mimTitles.txt"
+    notes: >-
+      The 2022 converter requires phenotype_annotation.tab and phenotype_annotation_negated.tab,
+      which HPO no longer publishes (phenotype.hpoa replaced them, in another layout), and
+      hpo.disease.file (OMIM mimTitles.txt, hence needs omim). Loading it needs converter work
+      first (plan 50 section 3); the hpoa staging below is a placeholder (verified: false).
+    files:
+      - id: genes-to-phenotype
+        url: https://purl.obolibrary.org/obo/hp/hpoa/genes_to_phenotype.txt
+        verified: true
+        size: 20821704
+        last_modified: "2026-09-02"
+        stage_as: genes_to_phenotype.txt
+        filter: {format: tab, ids: entrez, column: "1", keep_header: true}
+      - id: hpoa
+        url: https://purl.obolibrary.org/obo/hp/hpoa/phenotype.hpoa
+        verified: false
+        size: 35816037
+        last_modified: "2026-09-02"
+        stage_as: phenotype.hpoa
+        filter: none
+
+  orphanet:
+    type: orphanet
+    jar: humanmine-bio-sources
+    licence: CC BY 4.0 (Orphanet)
+    redistributable: true
+    data_dir: human/orphanet/current
+    notes: Disorder codes and names only, no gene ids, so no filter. Any other file in the directory throws.
+    files:
+      - id: product1
+        url: https://www.orphadata.com/data/xml/en_product1.xml
+        verified: true
+        size: 54026799
+        last_modified: "2026-06-29"
+        stage_as: en_product1.xml
+        filter: none
+
+  omim:
+    type: omim
+    jar: intermine
+    licence: OMIM licensed download (personal or institutional use only)
+    redistributable: false
+    local_copy: required
+    data_dir: metabolic/omim/current
+    notes: >-
+      D-7: only from Gos's local copy (--stock-local DIR, DIR/omim/<file>), never downloaded,
+      never in cached_raw_data/ or the CI release asset. All three files are required by the
+      converter. Resolver gate (T0.3) on the morbidmap symbols.
+    files:
+      - id: titles
+        url: null
+        raw_name: mimTitles.txt
+        stage_as: mimTitles.txt
+        filter: none
+      - id: morbidmap
+        url: null
+        raw_name: morbidmap.txt
+        stage_as: morbidmap.txt
+        filter: none
+      - id: pubmed-cited
+        url: null
+        raw_name: pubmed_cited
+        stage_as: pubmed_cited
+        filter: none
+
+  interpro-go:
+    type: interpro-go
+    jar: intermine
+    licence: CC0 (InterPro)
+    redistributable: true
+    data_dir: interpro/ontology/current
+    files:
+      - id: interpro2go
+        url: https://ftp.ebi.ac.uk/pub/databases/interpro/current_release/interpro2go
+        verified: true
+        size: 3057468
+        last_modified: "2026-11-04"
+        stage_as: interpro2go
+        filter: none

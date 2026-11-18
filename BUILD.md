@@ -3,7 +3,7 @@
 `tools/full-build.sh` takes this repository from nothing to a running, fully-configured
 demonstration HumanMine: RDF Portal SPARQL extraction, Items XML generation, the InterMine
 database build and load, postprocessing, the Solr search index, the webapp, BlueGenes, and the
-demo templates. One command, 18 phases, no manual steps in between.
+demo templates. One command, 20 phases, no manual steps in between.
 
 This file is the operator's guide to running it on an ordinary Linux machine with Docker. The
 script's own header comment (`sed -n '1,65p' tools/full-build.sh`, or `tools/full-build.sh
@@ -73,7 +73,7 @@ curl -fsSLO https://services.gradle.org/distributions/gradle-4.9-bin.zip
 unzip -q gradle-4.9-bin.zip -d ~/opt && export PATH="$HOME/opt/gradle-4.9/bin:$PATH"
 ```
 
-This is needed by `phase_resolve_bluegenes_deps` and `phase_build_reactome_source`, which build
+This is needed by `phase_resolve_bluegenes_deps` and `phase_build_stock_sources` (its reactome step), which build
 throwaway Gradle projects that have no wrapper of their own. Put it on `PATH` as `gradle`, or
 point `GRADLE49` at the launcher. The humanmine and humanmine-bio-sources checkouts use their
 own `./gradlew` wrapper and are unaffected by this.
@@ -151,7 +151,7 @@ Useful options:
 | Option | Effect |
 |---|---|
 | `--dry-run` | Print every command instead of running it |
-| `--list-phases` | Print the 18 phase names (19 with `--intermine-src`), in order, and exit |
+| `--list-phases` | Print the 20 phase names (21 with `--intermine-src`), in order, and exit |
 | `--from PHASE` | Resume: start at `PHASE` instead of the beginning |
 | `--only PHASE` | Run exactly one phase and stop |
 | `--sources "a b c"` | Override the nine-source demo panel |
@@ -164,6 +164,8 @@ Useful options:
 | `--reactome-levels default\|all` | Which of Reactome's own two files to load (see below); default `default` |
 | `--intermine-src DIR` | Build against the InterMine checkout `DIR` instead of the published 5.0.x artefacts (see "Building against a local InterMine checkout") |
 | `--stack-name NAME` | Run a second stack beside the default one: own container/volume names, Compose project and ports (see "A second stack") |
+| `--stock-sources "a b"` | Also load these stock HumanMine/InterMine sources (the hybrid testbed; see "Stock sources"). Default empty: the build is exactly as without the option |
+| `--stock-local DIR` | Local copies of stock data, `DIR/<source>/<file>`; the only way in for data that is not redistributable (OMIM) |
 
 `--from` and `--only` always run `check_prereqs` first regardless, because that phase is what
 sets the `JAVA_HOME` override the Gradle calls need.
@@ -172,11 +174,15 @@ Key environment variables (see the script header for the rest): `TRIAL_HOME` (sc
 the upstream checkouts and Gradle output, default `~/intermine-build/trial_home`),
 `UPSTREAM_CACHE` (default `in/.upstream`), `JAVA8_HOME`, `GRADLE49`, `COMPOSE`, `PG_PORT`,
 `BG_PORT`, `SOLR_PORT`, `MINE_PORT`, `RDFC2IM_PREFIX`, `COMPOSE_PROJECT_NAME`, `MINE_TITLE`,
-`INTERMINE_JAVA_HOME`.
+`INTERMINE_JAVA_HOME`, `RDFC2IM_STOCK_DIR`, `RDFC2IM_STOCK_LOCAL`.
+
+`--from build_reactome_source` and `--only build_reactome_source` still work: that phase is now
+`build_stock_sources`, which builds stock reactome exactly as before and then the `--stock-sources`
+jars.
 
 ### Reactome pathway levels
 
-The stock reactome source (phase 6/11/12 - see "What you get") reads one of Reactome's own two
+The stock reactome source (phases 6/13/14 - see "What you get") reads one of Reactome's own two
 published UniProt-to-pathway files:
 
 - **`default`** (`UniProt2Reactome.txt`) - a protein is listed only against the specific, lowest-
@@ -259,9 +265,9 @@ Gradle 6.9.4/7.6.6) get the deployer edits above. 8.x is the **6.0 line** (maint
   relative SO term paths). Only the
   version pins and the wrapper are then re-applied from the checkout. A pre-existing
   `$TRIAL_HOME/humanmine` that still has the old war composition stops the phase with a message;
-- the `web.xml`/absolute-SO-path patches and the `copyWebappContent` pre-run of phase 13 are not
+- the `web.xml`/absolute-SO-path patches and the `copyWebappContent` pre-run of `build_webapp` are not
   applied (the plugin's war task does not need them);
-- `build_reactome_source` takes the caching antlr jar from `bio/sources/reactome/libs` (5.x
+- `build_stock_sources` (reactome) takes the caching antlr jar from `bio/sources/reactome/libs` (5.x
   trees) or `intermine/libs/antlr-2.7.6-caching.jar` (maint-2026, since im-jqz.6), and stops with
   a message naming both paths if neither exists.
 
@@ -326,6 +332,57 @@ git clone --branch maint-2026 /path/to/humanmine in/.upstream/humanmine-6.0
 `in/.upstream/humanmine-6.0` is still cloned from `HUMANMINE_60_URL`, so supply one of the above
 first. Checked 2026-11-16: `git clone --depth 1 --branch maint-2026 <path of an existing clone>`
 works and yields `58fbf8f`, the commit of the 6.0-line run above.
+
+### Stock sources (`--stock-sources`, the hybrid testbed)
+
+`--stock-sources "uniprot go-annotation ..."` loads stock InterMine and HumanMine sources beside the
+rdfc2im ones, with their own converters, from upstream files cut down to the gene panel (planning
+repo `plans/50-hybrid-humanmine-testbed.md`, decisions D-1 to D-10). The default is an empty list,
+and then every phase below is a no-op and the build is exactly the one without the option.
+
+The sources, and everything the build needs to know about each, are one table:
+`rdfc2im/data/stock_sources.yaml` (`python3 -m rdfc2im stock list`). Per HumanMine project.xml
+source name: its `type`; where its loader jar comes from (`intermine`: the `--intermine-src`
+checkout, published by `publish_intermine`; `humanmine-bio-sources`: the fork's `maint-2026`
+branch, version 4.3.0); HumanMine's own data directory under `/micklem/data`; the upstream files
+with the name the converter expects and how each is filtered; the licence and a
+`redistributable` flag; integrate-order constraints (`after`), other stock sources it `needs`, and
+the postprocesses it wants. The file's header documents every key; bash reads it only through
+`python3 -m rdfc2im stock check|jars|files|postprocess|size|meta`.
+
+Limits: the 6.0 line only (`--intermine-src` with Gradle 8, D-5; check_prereqs refuses anything
+else), human only (`--taxon 9606`), and `tools/subset_raw.py` (the raw-file filter) must be in the
+checkout for a real run.
+
+What each phase does with the list:
+
+| Phase | With `--stock-sources` |
+|---|---|
+| `check_prereqs` | Validates the list against the table, as `--sources` is validated against `SCOPE_MODE`: unknown or repeated names, a source an rdfc2im source of this build replaces (stock `hgnc` with rdfc2im `hgnc`), a missing `needs` (hpo-annotation needs omim), a `redistributable: false` source with no local copy under `--stock-local`, the 6.0-line and human-only limits, and the free space where `RDFC2IM_STOCK_DIR` lives (twice the downloads plus 2 GB). Puts the list into HumanMine's project.xml order, which every later phase uses |
+| `rdfc2im_project` | `rdfc2im project --stock-source NAME...`: each named `<source>` must still be in project.xml (not replaced) with the table's type and the version attribute its jar origin needs; its data property and organism properties are rewritten from the table; its `after` constraints are checked against the final order. Fields an `alongside` rdfc2im source also writes list the stock source first in `genomic_priorities.properties` (risk 3) |
+| `build_stock_sources` | Reactome as before, then each jar: an `intermine` one is checked in the private m2 repo (`publish_intermine` already published every `bio/sources` jar; a missing one is built there), a `humanmine-bio-sources` one is built in the fork copy with `publishToMavenLocal`, like humanmine-items |
+| `fetch_stock_data` | Downloads each source's files into the cache group `stock-raw-<name>` in `$RDFC2IM_STOCK_DIR/cache` (default `$RDFC2IM_DATA_ROOT/_stock/cache`, never `cached_raw_data/`), keyed to each file's URL and `Last-Modified`; an unchanged upstream file is not fetched again. The loaders read the files where they lie in the cache, so each is on disk once. `--use-cached-data`/`--offline` only verify the cached group |
+| `subset_stock_data` | `tools/subset_raw.py idsets` turns the panel into Entrez, Ensembl, UniProt and symbol id sets (from the rdfc2im items and the gene-id lookup); `subset_raw.py filter` cuts each filtered file to them. A source's filtered files are the cache group `stock-<name>`, keyed to `genes_md5`, `taxon` and the table's filter spec (`spec_md5`), and also recording each file's upstream `Last-Modified`, `redistributable` and `licence`. It goes to `cached_raw_data/` for redistributable data and to the stock cache otherwise. Files used whole are unpacked from the raw group on every build and are not cached twice |
+| `prepare_mine_checkout` | `reduce_mine.py sources ... humanmine-items reactome <stock names>` keeps their entries, in project.xml order. A name project.xml lacks stops the build |
+| `stage_src_data` | Links each file into HumanMine's own data directory under the data root by the name its converter expects (`go-annotation/current/human/gene_association.goa_human`, `uniprot/current/9606_uniprot_sprot.xml`, ...). Each directory is first cleared of links this build made earlier (several loaders read every file in their directory, and some throw on an unexpected one). A real file there is never replaced |
+| `integrate_sources` | Unchanged: the stock sources load in project.xml order with the rest |
+| `postprocess` | Lists the postprocesses the table asks for; they are not run yet (a marked hook) |
+
+Two hooks are marked in the script and left for the next tasks: the ID-resolver gate (a filtered
+`${resolver.file.rootpath}/entrez`, written in `subset_stock_data` and set in
+`prepare_mine_checkout`; T0.3), which is what cuts the loaders the table leaves unfiltered (psi,
+biogrid, panther, omim, the HumanMine expression sources), and `cache save --for-release` refusing
+groups whose META says `redistributable=false` (T0.3).
+
+Large raw data: UniProt Swiss-Prot human is 175 MB gzipped, IntAct human 1 GB, the genome FASTA
+973 MB. In the sandbox set `RDFC2IM_STOCK_DIR` (or `RDFC2IM_DATA_ROOT`) to a directory under
+`repos/.sandbox-disk/`; the sandbox root has about 4 GB free.
+
+```sh
+python3 -m rdfc2im stock list                       # the table
+python3 -m rdfc2im stock check go-annotation uniprot --sources "go ncbigene uniprot"
+tools/full-build.sh --dry-run --intermine-src DIR --stack-name ut --stock-sources "go-annotation uniprot"
+```
 
 ### A second stack
 
@@ -437,7 +494,9 @@ Everything the data phases take from the network, and where `--use-cached-data` 
 | RDF Portal and TogoVar SPARQL endpoints (`rdfc2im fetch`; PubMed, MeSH, GWAS Catalog included) | `rdfc2im_pipeline` | `cached_raw_data/<source>/`, one entry per source (9 for the demo panel) |
 | RDF Portal SPARQL, gene symbol -> NCBI/Ensembl id (`translate --genes`, `scope.resolve_gene_ids`) | `rdfc2im_pipeline` | `cached_raw_data/gene-id-lookup/` (keyed to taxon and gene-panel md5) |
 | humanmine.org `/service/model?format=xml,json` | `fetch_inputs` | `cached_raw_data/humanmine-model/` |
-| reactome.org `UniProt2Reactome[_All_Levels].txt` | `build_reactome_source` | `cached_raw_data/reactome-uniprot-map/` (keyed to `--reactome-levels`) |
+| reactome.org `UniProt2Reactome[_All_Levels].txt` | `build_stock_sources` | `cached_raw_data/reactome-uniprot-map/` (keyed to `--reactome-levels`) |
+| `--stock-sources` upstream files (UniProt, GO, NCBI, ...) | `fetch_stock_data` | `$RDFC2IM_STOCK_DIR/cache/stock-raw-<name>/` (keyed to URL and Last-Modified); not in `cached_raw_data/` |
+| (derived) `--stock-sources` files cut to the panel | `subset_stock_data` | `cached_raw_data/stock-<name>/` (keyed to genes_md5, taxon, spec_md5); restricted data in the stock cache instead |
 | GitHub: rdf-config, intermine, humanmine, humanmine-bio-sources | `fetch_inputs` | not in `cached_raw_data/`: the clones in `$UPSTREAM_CACHE` (default `in/.upstream`); `--use-cached-data` clones a missing one and never pulls, `--offline` makes no attempt and a missing clone stops the build |
 
 Nothing else in those phases is networked (`rdfc2im project`, `check`, `tsv`, `items`,
@@ -474,26 +533,28 @@ the option to fetch afresh and re-save.
 
 | # | Phase | What it does |
 |---|---|---|
-| 1 | `check_prereqs` | Tool checks, JDK 8, `/micklem`, `~/.gradle/gradle.properties`, source-list validation |
+| 1 | `check_prereqs` | Tool checks, JDK 8, `/micklem`, `~/.gradle/gradle.properties`, source-list and stock-source-list validation |
 | 2 | `fetch_inputs` | `tools/make-inputs.sh`: clones rdf-config, intermine, humanmine, humanmine-bio-sources; fetches the live HumanMine model |
 | 3 | `rdfc2im_pipeline` | Per source: `translate` → `fetch` → `tsv` → `items`. The RDF extraction. |
 | 4 | `rdfc2im_project` | `project` → `check` → `make fork-sync` (project.xml, keys, additions, priorities) |
 | 5 | `build_humanmine_items` | Builds and installs the `bio-source-humanmine-items` loader jar |
-| 6 | `build_reactome_source` | Builds stock `bio-source-reactome` (converter only, for now) and downloads `UniProt2Reactome.txt` |
-| 7 | `prepare_mine_checkout` | Copies and patches the humanmine checkout; writes `~/.intermine/humanmine.properties`; trims project.xml to the sources actually loaded |
-| 8 | `stage_src_data` | Symlinks each `out/<src>/items/<src>.xml` into `$RDFC2IM_DATA_ROOT/rdfc2im/<src>/` (default `/micklem/data`) |
-| 9 | `start_databases` | `docker compose up -d postgres solr`; creates the three databases and two Solr cores |
-| 10 | `build_dbmodel` | `:dbmodel:builddb` and `:dbmodel:buildUserDB`; the reduced-mine trims |
-| 11 | `integrate_sources` | `:dbmodel:integrate` per source, in project.xml's own order |
-| 12 | `postprocess` | `create-references`, `create-attribute-indexes`, `ReactomePostProcess`, the Solr index (build → schema fix → clear → rebuild), autocomplete, objectstore summary |
-| 13 | `build_webapp` | `:webapp:war` |
-| 14 | `resolve_bluegenes_deps` | Resolves `org.intermine:bluegenes:1.4.5` to its 178 runtime jars |
-| 15 | `stage_artifacts` | `tools/trial-stage.sh`: explodes the war, patches its baked-in DB/Solr hosts to the compose network's |
-| 16 | `start_mine_stack` | `docker compose up -d mine bluegenes`, then restarts the webapp and BlueGenes (it reads the DB once, at startup) |
-| 17 | `apply_templates` | Loads `curation/demo_public_templates.sql` into the userprofile DB; restarts the webapp and BlueGenes |
-| 18 | `verify` | `/service/version`, `/service/model`, BlueGenes' root |
+| 6 | `build_stock_sources` | Builds stock `bio-source-reactome` (converter only, for now) and downloads `UniProt2Reactome.txt`; then the `--stock-sources` jars (was `build_reactome_source`) |
+| 7 | `fetch_stock_data` | `--stock-sources` only: downloads the upstream files into the stock cache |
+| 8 | `subset_stock_data` | `--stock-sources` only: panel id sets, then the files cut to them (`tools/subset_raw.py`) |
+| 9 | `prepare_mine_checkout` | Copies and patches the humanmine checkout; writes `~/.intermine/humanmine.properties`; trims project.xml to the sources actually loaded |
+| 10 | `stage_src_data` | Symlinks each `out/<src>/items/<src>.xml` into `$RDFC2IM_DATA_ROOT/rdfc2im/<src>/` (default `/micklem/data`), and the `--stock-sources` files into HumanMine's own paths there |
+| 11 | `start_databases` | `docker compose up -d postgres solr`; creates the three databases and two Solr cores |
+| 12 | `build_dbmodel` | `:dbmodel:builddb` and `:dbmodel:buildUserDB`; the reduced-mine trims |
+| 13 | `integrate_sources` | `:dbmodel:integrate` per source, in project.xml's own order |
+| 14 | `postprocess` | `create-references`, `create-attribute-indexes`, `ReactomePostProcess`, the Solr index (build → schema fix → clear → rebuild), autocomplete, objectstore summary |
+| 15 | `build_webapp` | `:webapp:war` |
+| 16 | `resolve_bluegenes_deps` | Resolves `org.intermine:bluegenes:1.4.5` to its 178 runtime jars |
+| 17 | `stage_artifacts` | `tools/trial-stage.sh`: explodes the war, patches its baked-in DB/Solr hosts to the compose network's |
+| 18 | `start_mine_stack` | `docker compose up -d mine bluegenes`, then restarts the webapp and BlueGenes (it reads the DB once, at startup) |
+| 19 | `apply_templates` | Loads `curation/demo_public_templates.sql` into the userprofile DB; restarts the webapp and BlueGenes |
+| 20 | `verify` | `/service/version`, `/service/model`, BlueGenes' root |
 
-Load order in phase 11 is read back out of `project.xml` rather than re-decided, because the
+Load order in phase 13 is read back out of `project.xml` rather than re-decided, because the
 `alongside` sources (`uniprot`, `reactome`) must integrate *after* the stock source they
 supplement or they duplicate instead of merging.
 

@@ -172,3 +172,50 @@ def test_objectstoresummary_keeps_config_keys_and_drops_absent_classes(tmp_path)
     assert "autocomplete.solrurl = http://localhost:8983/solr/humanmine-autocomplete" in out
     assert "ignore.counts=" in out
     assert "# a comment" in out
+
+
+# ------------------------------------------------------------------ sources
+
+SOURCES_XML = """<?xml version="1.0"?>
+<project type="bio"><sources>
+  <source name="humanmine-ncbigene" type="humanmine-items"/>
+  <source name="uniprot" type="uniprot"/>
+  <source name="humanmine-uniprot" type="humanmine-items"/>
+  <source name="interpro" type="interpro"/>
+  <source name="go-annotation" type="go-annotation"/>
+  <source name="reactome" type="reactome"/>
+  <source name="panther" type="panther"/>
+</sources></project>"""
+
+
+def _names(path):
+    import lxml.etree as ET
+    return [s.get("name") for s in ET.parse(str(path)).getroot().iter("source")]
+
+
+def test_sources_keeps_named_stock_sources_in_project_xml_order(tmp_path, capsys):
+    p = tmp_path / "project.xml"
+    p.write_text(SOURCES_XML)
+    # names in any order, one argument or several (full-build.sh passes $STOCK_SOURCES unquoted)
+    reduce_mine.cmd_sources([str(p), "humanmine-items", "reactome", "go-annotation uniprot"])
+    assert _names(p) == ["humanmine-ncbigene", "uniprot", "humanmine-uniprot", "go-annotation", "reactome"]
+    assert "dropped 2" in capsys.readouterr().out
+
+
+def test_sources_with_no_stock_names_is_what_it_always_was(tmp_path):
+    p = tmp_path / "project.xml"
+    p.write_text(SOURCES_XML)
+    reduce_mine.cmd_sources([str(p), "humanmine-items", "reactome"])
+    assert _names(p) == ["humanmine-ncbigene", "humanmine-uniprot", "reactome"]
+
+
+def test_sources_refuses_a_name_project_xml_does_not_have(tmp_path):
+    p = tmp_path / "project.xml"
+    p.write_text(SOURCES_XML)
+    try:
+        reduce_mine.cmd_sources([str(p), "humanmine-items", "reactome", "go"])
+    except SystemExit as e:
+        assert "no <source> named go" in str(e)
+    else:
+        raise AssertionError("a stock source missing from project.xml must stop the build")
+    assert p.read_text() == SOURCES_XML, "nothing changed"
