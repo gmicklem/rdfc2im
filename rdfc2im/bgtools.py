@@ -36,6 +36,8 @@ import subprocess
 import tarfile
 
 PATCHED_SUFFIX = "-patched.1"
+# A tool whose patch list has grown gets a higher suffix; the others stay at PATCHED_SUFFIX.
+PATCHED_SUFFIXES = {"bluegenes-msa-viewer": "-patched.2"}
 SCOPE = "@intermine"
 JBROWSE2_NAME = "bluegenes-jbrowse2-tool"
 NPM_MTIME = 499162500            # 1985-10-26 08:15 UTC, what `npm pack` stamps on every member
@@ -52,6 +54,7 @@ class PatchError(Exception):
 # the shipped source file as well as the bundle where there is one, so the two agree.
 RCSB_V1 = "rcsbsearch/v1/query"
 RCSB_V2 = "rcsbsearch/v2/query"
+NO_SEQUENCE_MESSAGE = "No protein sequences are available for this gene, so there is nothing to align."
 ALIGNER_HOST = "https://sequencealignment.apps.intermine.org"
 
 PATCHES: dict[str, list[tuple[str, str, str, str, int]]] = {
@@ -69,6 +72,37 @@ PATCHES: dict[str, list[tuple[str, str, str, str, int]]] = {
         # legacy wheel events: Firefox's handler reads a zero delta and cancels native scrolling
         ("msa-legacy-wheel", "dist/bundle.js",
          't.mousewheel="_onmousewheel",t.DOMMouseScroll="_onmousewheel",', "", 1),
+        # A protein without a sequence (today every TrEMBL protein loaded from RDF) made the whole tool
+        # give up with "No protein found for UniProtKB accession ...". The query now resolves null, and
+        # the viewer drops such proteins; with none left it says so, and with one left it shows it
+        # unaligned, as upstream does for a gene with a single protein. The aligner is called for two
+        # or more sequences only.
+        ("msa-skip-no-sequence", "dist/bundle.js",
+         'i("No protein found for UniProtKB accession "+t)', 'r(null)', 1),
+        ("msa-skip-no-sequence", "dist/bundle.js",
+         'Promise.all(a).then(e=>{e.forEach(',
+         'Promise.all(a).then(e=>{var k=[];i=i.filter((p,j)=>e[j]&&e[j].sequence&&e[j].sequence.residues&&k.push(e[j]));'
+         'if(!(e=k).length)return u(t,"%s");e.forEach(' % NO_SEQUENCE_MESSAGE, 1),
+        ("msa-skip-no-sequence", "src/queries/proteinToSequence.js",
+         "reject(\n\t\t\t\t\t\t'No protein found for UniProtKB accession ' + primaryAccession\n\t\t\t\t\t);",
+         "resolve(null);", 1),
+        ("msa-skip-no-sequence", "src/index.js",
+         "\t\t\t\t\t// concat all sequences together\n",
+         "\t\t\t\t\t// skip proteins without a sequence (patched)\n"
+         "\t\t\t\t\tconst kept = [];\n"
+         "\t\t\t\t\tproteins = proteins.filter(\n"
+         "\t\t\t\t\t\t(p, j) =>\n"
+         "\t\t\t\t\t\t\tresults[j] &&\n"
+         "\t\t\t\t\t\t\tresults[j].sequence &&\n"
+         "\t\t\t\t\t\t\tresults[j].sequence.residues &&\n"
+         "\t\t\t\t\t\t\tkept.push(results[j])\n"
+         "\t\t\t\t\t);\n"
+         "\t\t\t\t\tresults = kept;\n"
+         "\t\t\t\t\tif (!results.length) {\n"
+         "\t\t\t\t\t\trenderError(el, '%s');\n"
+         "\t\t\t\t\t\treturn;\n"
+         "\t\t\t\t\t}\n"
+         "\t\t\t\t\t// concat all sequences together\n" % NO_SEQUENCE_MESSAGE, 1),
     ],
     # The JBrowse 2 tool is packed from source, then patched like the rest. HumanMine's copy points
     # at https://www.humanmine.org/jbrowse2/; the testbed serves JBrowse 2 on the BlueGenes origin
@@ -80,9 +114,13 @@ PATCHES: dict[str, list[tuple[str, str, str, str, int]]] = {
 }
 
 
-def _version_edit(old_version: str) -> tuple[str, str, str, str, int]:
+def patched_suffix(name: str) -> str:
+    return PATCHED_SUFFIXES.get(name, PATCHED_SUFFIX)
+
+
+def _version_edit(name: str, old_version: str) -> tuple[str, str, str, str, int]:
     return ("version-bump", "package.json", '"version": "%s"' % old_version,
-            '"version": "%s%s"' % (old_version, PATCHED_SUFFIX), 1)
+            '"version": "%s%s"' % (old_version, patched_suffix(name)), 1)
 
 
 def apply_edit(text: str, pid: str, member: str, old: str, new: str, count: int) -> str:
@@ -127,7 +165,7 @@ def patch_tarball(data: bytes, name: str, version: str) -> tuple[bytes, list[dic
 
     Members keep their order and metadata; only the edited members' contents (and sizes) change.
     """
-    edits = list(PATCHES.get(name, [])) + [_version_edit(version)]
+    edits = list(PATCHES.get(name, [])) + [_version_edit(name, version)]
     members: list[tuple[tarfile.TarInfo, bytes]] = []
     with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as tf:
         for ti in tf.getmembers():
@@ -220,7 +258,7 @@ def stage(src_cache: str, jbrowse2_src: str, out_dir: str, build_dir: str | None
             data = fh.read()
         if name in PATCHES:
             data, applied = patch_tarball(data, name, version)
-            out_version, patches = version + PATCHED_SUFFIX, applied
+            out_version, patches = version + patched_suffix(name), applied
             out_fn = f"intermine__{name}-{out_version}.tgz"
         else:
             out_version, patches, out_fn = version, [], fn
@@ -239,7 +277,7 @@ def stage(src_cache: str, jbrowse2_src: str, out_dir: str, build_dir: str | None
     patches: list[dict] = []
     if short in PATCHES:
         data, patches = patch_tarball(data, short, version)
-        version += PATCHED_SUFFIX
+        version += patched_suffix(short)
     out_fn = f"intermine__{short}-{version}.tgz"
     with open(os.path.join(out_dir, out_fn), "wb") as fh:
         fh.write(data)
