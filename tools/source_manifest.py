@@ -17,7 +17,8 @@ mine; --mine adds the loaded counts.
       [--build-name NAME] [--intermine-src DIR] [--trial-home DIR] [--gene-identifiers panel|all]
 
 Where each value comes from (USAGE.md, "Data-source status pages", has the full table):
-  url, licence, redistributable    rdfc2im/data/stock_sources.yaml (stock), sources.yaml (RDF)
+  url, licence (name, status, URL, date read, quotation, conditions), redistributable
+                                    rdfc2im/data/stock_sources.yaml (stock), sources.yaml (RDF), other_licences.yaml (stock reactome)
   last_modified, fetched_at        the raw cache group's META.json (meta last_modified.<id>, saved_at)
   size, sha256, md5                the cached raw file itself (sha256 computed here; md5 from MD5SUMS)
   release                          the file's own header (`release:` in the stock mapping file)
@@ -416,8 +417,8 @@ def stock_entry(name, table, args, idcounts, flogs, mine, model):
             rec["filter_log"] = logged[-1]
         files.append(rec)
     out = {"id": f"stock:{name}", "kind": "stock", "name": name, "type": e["type"], "jar": e["jar"],
-           "licence": e.get("licence"), "redistributable": bool(e.get("redistributable")),
-           "data_dir": e.get("data_dir"), "properties": e.get("properties") or {},
+           "licence": e.get("licence"), "licence_info": st.licence_info(e),
+           "redistributable": bool(e.get("redistributable")), "data_dir": e.get("data_dir"), "properties": e.get("properties") or {},
            "mapping": _mapping_summary(mp, name), "files": files,
            "raw_group": {"path": raw_group, "saved_at": (group or {}).get("saved_at")},
            "filtered_group": ({"saved_at": filtered.get("saved_at"), "meta": filtered.get("meta")} if filtered else None)}
@@ -449,6 +450,7 @@ def reactome_entry(args, mine, model):
     if not group:
         return None
     mf = (mp.get("files") or [{}])[0]
+    rlic = st.other_licences()["reactome"]
     raw = os.path.join(gdir, "data", "UniProt2Reactome.txt")
     url = group.get("meta", {}).get("url")
     rec = {"id": mf.get("id", "map"), "url": url, "cached_url": url, "raw_name": os.path.basename(raw),
@@ -464,7 +466,8 @@ def reactome_entry(args, mine, model):
             rec["counts_raw"] = _slim(rc)
             rec["records_raw"] = rec["records_kept"] = rc["records"]
     out = {"id": "stock:reactome", "kind": "stock", "name": "reactome", "type": "reactome", "jar": "intermine",
-           "licence": "CC0 (Reactome)", "redistributable": True, "data_dir": "reactome/current",
+           "licence": rlic.get("licence"), "licence_info": st.licence_info(rlic),
+           "redistributable": bool(rlic.get("redistributable")), "data_dir": "reactome/current",
            "properties": {"reactome.organisms": "9606"}, "mapping": _mapping_summary(mp, "reactome"), "files": [rec],
            "raw_group": {"path": gdir, "saved_at": group.get("saved_at")}, "filtered_group": None,
            "levels": group.get("meta", {}).get("levels")}
@@ -589,6 +592,7 @@ def rdf_entry(src, args, scfg, mine, model):
                     report[k.strip()] = v.strip()
     ent = {"id": f"rdf:{src}", "kind": "rdf", "name": src, "loader": "rdfc2im (items XML, humanmine-items type)",
            "data_source": {"name": scfg.get("data_source_name"), "url": scfg.get("data_source_url")},
+           "licence": scfg.get("licence"), "licence_info": st.licence_info(scfg),
            "data_set": scfg.get("data_set_title"), "replaces": scfg.get("replaces") or [],
            "alongside": scfg.get("alongside") or [],
            "cache_group": {"path": gdir, "saved_at": (group or {}).get("saved_at"), "meta": (group or {}).get("meta"),

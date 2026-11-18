@@ -1,0 +1,57 @@
+# Licences of what the demo build uses that is in neither stock_sources.yaml nor sources.yaml [im-9n4.45].
+# Same keys as there (see the header of stock_sources.yaml). Read by rdfc2im/stock.py `other_licences()`;
+# tools/source_manifest.py takes stock reactome's from here. docs/LICENCES.md is the table of everything.
+# Read on 2026-11-18 (UTC) from the source's own page or file.
+
+reactome:
+  # stock reactome: UniProt2Reactome.txt, in the RDF cache group reactome-uniprot-map
+  licence: "CC0-1.0"
+  licence_status: verified
+  licence_url: "https://reactome.org/license"
+  licence_checked: "2026-11-18"
+  licence_quote: "All data in the Reactome database and files derived from that data are licensed under the Creative Commons Public Domain Dedication (CC0)."
+  licence_conditions:
+    - "Attribution encouraged, not required. Reactome's pathway illustrations, icons and branding are CC BY 4.0 and its software Apache-2.0 (neither is used)."
+  redistributable: true
+  redistributable_reason: "CC0 allows redistribution without conditions."
+
+ncbi-gene-info:
+  # the ID resolver's gene_info files (ftp.ncbi.nlm.nih.gov/gene/DATA/GENE_INFO/), cache group gene-id-lookup
+  licence: "NCBI FTP notice: unrestricted public data (no licence named)"
+  licence_status: partial
+  licence_url: "https://ftp.ncbi.nlm.nih.gov/README.ftp"
+  licence_checked: "2026-11-18"
+  licence_quote: "NOTE: ALL DATA HERE IS PUBLIC, NON-SENSITIVE, UNRESTRICTED SCIENTIFIC DATA SHARING AMONG SCIENTIFIC COMMUNITIES."
+  licence_conditions:
+    - "The notice names no licence and asks for no attribution; gene/DATA/README and the file header state none either. NCBI's data-use policy page (https://www.ncbi.nlm.nih.gov/home/about/policies/) is on a host the sandbox blocks (www.ncbi.nlm.nih.gov), so it was not read."
+  redistributable: true
+  redistributable_reason: "The server notice says the data are unrestricted; the policy page was not readable."
+
+bluegenes-tools:
+  # the 18 npm packages of cache group bluegenes-tools (bluegenes-tools-patched: 19 packages, two of them patched
+  # copies and one added, plus SHA256SUMS and patches.json); licence read from each cached tarball's package.json
+  # `license` and its LICENSE file
+  licence: "MIT (16 packages), LGPL-3.0 (cytoscape-interaction-network-viewer), LGPL-2.1 (protvista)"
+  licence_status: verified
+  licence_url: "cached_raw_data/bluegenes-tools/data/*.tgz (package/package.json, package/LICENSE)"
+  licence_checked: "2026-11-18"
+  licence_quote: "\"license\": \"MIT\" in package.json of 16 tarballs (each with a package/LICENSE file); \"LGPL-3.0\" in bluegenes-cytoscape-interaction-network-viewer 2.0.2 (LICENSE: Copyright (c) 2018 Yo Yehudi, GNU Lesser General Public License v3 or later); \"LGPL-2.1\" in bluegenes-protvista 2.0.0."
+  licence_conditions:
+    - "MIT: keep the copyright and permission notice (the LICENSE file stays in the tarball)."
+    - "LGPL: the tarballs are distributed unchanged with their licence text, which the LGPL allows; a modified copy must stay under the LGPL with its source available. bluegenes-protvista has no LICENSE file in its tarball, only the package.json field: ship its licence text beside it in any release notice."
+    - "bluegenes-tools-patched holds three tarballs patched or added by this project (jbrowse2-tool 0.1.0-patched.1, msa-viewer and protein-visualizer -patched): all three declare MIT; patches.json and SHA256SUMS are not packages."
+  redistributable: true
+  redistributable_reason: "MIT and LGPL both allow redistribution of the unchanged packages with their notices."
+
+imjs:
+  # fetched by trial/front/up.sh: imjs 4.0.0 from registry.npmjs.org (dist/im.min.js is served to the front end)
+  licence: "LGPL-3.0"
+  licence_status: verified
+  licence_url: "https://registry.npmjs.org/imjs/-/imjs-4.0.0.tgz (package/LICENCE, package/package.json)"
+  licence_checked: "2026-11-18"
+  licence_quote: "This library is open source software according to the definition of the GNU Lesser General Public Licence, Version 3, (LGPLv3) a copy of which is included with this software. All use of this software is covered according to the terms of the LGPLv3."
+  licence_conditions:
+    - "package.json says \"license\": \"LGPL\" (no version); the LICENCE file says LGPLv3 and the tarball carries lgpl-3.0.txt."
+    - "The copyright is held by InterMine (www.intermine.org) and Alex Kalderimis. The front end loads the minified file unchanged; the LGPL asks that the licence text and a pointer to the source (https://github.com/intermine/imjs) be available to users."
+  redistributable: true
+  redistributable_reason: "Not part of a data cache; the LGPL allows redistributing the unchanged library with its licence."

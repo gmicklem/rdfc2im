@@ -15,7 +15,7 @@ What each source of this hybrid HumanMine build loaded, from which file and rele
 
 | Source | Data source | Release / date | Fetched (UTC) | Scope | Fields loaded / not loaded / unknown | Licence |
 |---|---|---|---|---|---|---|
-| [toy (stock)](stock-toy.md) | Toy DB | release 7 (Jan 2026) | 2026-11-18 | 2-gene panel | 1 / 2 / 0 | CC BY 4.0 (Toy) |
+| [toy (stock)](stock-toy.md) | Toy DB | release 7 (Jan 2026) | 2026-11-18 | 2-gene panel | 1 / 2 / 0 | CC-BY-4.0 |
 
 ## How these pages are made
 

@@ -329,7 +329,7 @@ def test_jar_rows_name_each_jar_once_at_its_origins_version():
 def test_cache_meta_keys_the_filter_spec_and_records_redistribution():
     t = stock.load_table()
     m = stock.cache_meta(t, "uniprot")
-    assert m[1:] == ["redistributable=true", "licence=CC_BY_4.0_UniProt"]
+    assert m[1:] == ["redistributable=true", "licence=CC-BY-4.0"]
     t2 = copy.deepcopy(t)
     t2["uniprot"]["files"][0]["filter"]["ids"] = "symbol"
     assert stock.cache_meta(t2, "uniprot")[0] != m[0]          # another filter, another cache key
@@ -437,8 +437,56 @@ def test_expression_and_disease_files_are_redistributable_and_hpa_says_share_ali
     t = stock.load_table()
     for n in ("protein-atlas", "protein-atlas-rna", "gtex", "atlas-express", "hpo-annotation", "orphanet"):
         assert t[n]["redistributable"] is True, n
-    assert "share-alike" in t["protein-atlas"]["licence"] and "share-alike" in t["protein-atlas-rna"]["licence"]
+    # the Human Protein Atlas page states CC BY 4.0, not share-alike (read 2026-11-18, im-9n4.45)
+    assert t["protein-atlas"]["licence"] == t["protein-atlas-rna"]["licence"] == "CC-BY-4.0"
     assert t["omim"]["redistributable"] is False
+
+
+def test_every_source_has_a_complete_licence_record():
+    """im-9n4.45: the licence is what the source states, with the page, the date and a status; an unread licence
+    says so (`not verified`) instead of carrying a guess."""
+    t = stock.load_table()
+    for n, e in t.items():
+        assert e["licence_status"] in stock.LICENCE_STATUSES, n
+        assert e["licence_checked"] == "2026-11-18" or e["licence_status"] == "not-checked", n
+        assert e.get("licence_conditions"), n
+        assert e.get("redistributable_reason"), n
+        if e["licence_status"] in ("verified", "partial"):
+            assert e["licence_url"].startswith("http") and e["licence_quote"], n
+        if e["licence_status"] in ("not-verified", "not-stated"):
+            assert e["licence"].startswith("not verified"), n
+    rdf = _sources_cfg()
+    for n in ("go", "ncbigene", "reactome", "hgnc", "ensembl", "uniprot", "clinvar", "gwascatalog", "pubmed", "hpo"):
+        assert not stock.licence_problems(n, rdf[n]) and rdf[n]["licence_status"], n
+        assert rdf[n]["licence_checked"] == "2026-11-18" and rdf[n]["redistributable_reason"], n
+        assert "rdfportal_licence_note" in rdf[n], n
+    other = stock.other_licences()
+    assert set(other) == {"reactome", "ncbi-gene-info", "bluegenes-tools", "imjs"}
+    assert other["reactome"]["licence"] == "CC0-1.0"
+
+
+def test_docs_licences_names_every_source():
+    """docs/LICENCES.md is the summary of the YAML records: no source may be missing from it."""
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    with open(os.path.join(root, "docs", "LICENCES.md"), encoding="utf-8") as fh:
+        doc = fh.read()
+    for n in stock.load_table():
+        assert f"`{n}`" in doc, n
+    for n in ("go", "ncbigene", "reactome", "hgnc", "ensembl", "uniprot", "clinvar", "gwascatalog", "pubmed", "hpo"):
+        assert f"RDF `{n}`" in doc, n
+    for s in ("gene_info", "BlueGenes tools", "imjs"):
+        assert s in doc, s
+
+
+def test_licence_problems_reports_a_malformed_record():
+    bad = {"licence_status": "verified", "licence_checked": "18 Nov", "licence_conditions": "text"}
+    msgs = stock.licence_problems("x", bad)
+    assert any("YYYY-MM-DD" in m for m in msgs) and any("list of strings" in m for m in msgs)
+    assert any("licence_url" in m for m in msgs) and any("licence_quote" in m for m in msgs)
+    assert stock.licence_problems("x", {"licence_status": "maybe"})
+    assert stock.licence_problems("x", {}) == []          # a table older than im-9n4.45 still loads
+    info = stock.licence_info({"licence": "MIT", "licence_status": "verified", "redistributable": True})
+    assert info["name"] == "MIT" and info["conditions"] == [] and info["quote"] is None
 
 
 def test_disease_name_priority_ranks_orphanet_above_hpo_annotation():

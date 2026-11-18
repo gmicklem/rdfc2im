@@ -1,5 +1,10 @@
 # Per-source settings for the rdf-config sources in scope.
 #
+#   licence, licence_status, licence_url, licence_checked, licence_quote, licence_conditions, redistributable,
+#              redistributable_reason: the upstream's licence as the upstream states it, read on licence_checked
+#              (same keys as stock_sources.yaml; written for the ten sources of the demo build). rdfportal_licence,
+#              rdfportal_licence_url, rdfportal_licence_note: what RDF Portal's own data set page states, where it
+#              differs or is a bare link. The record of every source is docs/LICENCES.md.
 #   replaces:  project.xml <source name=...> entries that the rdf-config load supersedes
 #              (moved to replaced_sources.xml by `rdfc2im project`); [] = adds data, replaces nothing
 #   alongside: stock sources this one supplements rather than replaces.  It loads right after them,
@@ -27,6 +32,18 @@ ncbigene:
   data_source_name: NCBI
   data_source_url: https://rdfportal.org/dataset/ncbigene
   data_set_title: NCBI Gene (RDF Portal)
+  licence: "NCBI FTP notice: unrestricted public data (no licence named)"
+  licence_status: partial
+  licence_url: "https://ftp.ncbi.nlm.nih.gov/README.ftp"
+  licence_checked: "2026-11-18"
+  licence_quote: "NOTE: ALL DATA HERE IS PUBLIC, NON-SENSITIVE, UNRESTRICTED SCIENTIFIC DATA SHARING AMONG SCIENTIFIC COMMUNITIES."
+  licence_conditions:
+    - "The notice names no licence and asks for no attribution. NCBI's own data-use policy page (https://www.ncbi.nlm.nih.gov/home/about/policies/) is on a host the sandbox blocks, so its wording on attribution and on third-party rights in some records was not read."
+  redistributable: true
+  redistributable_reason: "The server notice says the data are unrestricted; the policy page was not readable."
+  rdfportal_licence: "https://www.ncbi.nlm.nih.gov/home/about/policies/"
+  rdfportal_licence_url: "https://rdfportal.org/dataset/ncbigene/"
+  rdfportal_licence_note: "RDF Portal's page gives a URL (NCBI's policies page, which is blocked here), not a licence name."
   consts: {Organism.taxonId: "9606"}
   gene_scope_field: primaryIdentifier
   # STATUS.md D14: 255 Ensembl gene ids in NCBI's own cross-reference data are each shared by
@@ -59,6 +76,17 @@ hgnc:
   data_source_name: HGNC
   data_source_url: https://rdfportal.org/dataset/hgnc
   data_set_title: HGNC identifiers (RDF Portal)
+  licence: "not verified"
+  licence_status: not-verified
+  licence_url: "https://rdfportal.org/dataset/hgnc/"
+  licence_checked: "2026-11-18"
+  licence_conditions:
+    - "HGNC's own page (https://www.genenames.org/about/) answered HTTP 403, Approval required for www.genenames.org; no other route to the statement was found (the EBI mirror path for HGNC is not on the FTP server)."
+  redistributable: true
+  redistributable_reason: "Unverified. Already inside the published demo-data asset; re-check once www.genenames.org is read."
+  rdfportal_licence: "https://www.genenames.org/about/"
+  rdfportal_licence_url: "https://rdfportal.org/dataset/hgnc/"
+  rdfportal_licence_note: "RDF Portal's page gives HGNC's about page as the licence."
   consts: {Organism.taxonId: "9606"}
   # hgnc's Protein items (see_also uniprot) are an accession and a gene link; outside the panel
   # (--gene-identifiers all) nothing else gives them an organism.  items.organisms_from_genes.
@@ -92,6 +120,19 @@ uniprot:
   # core:reviewed in knowledge.yaml.  Stock names two datasets, "Swiss-Prot data set" and
   # "TrEMBL data set", by input file; one query cannot, so the title says what it holds.
   data_set_title: UniProtKB, Swiss-Prot and TrEMBL (RDF Portal)
+  licence: "CC-BY-4.0"
+  licence_status: verified
+  licence_url: "https://ftp.ebi.ac.uk/pub/databases/uniprot/current_release/knowledgebase/complete/README"
+  licence_checked: "2026-11-18"
+  licence_quote: "We have chosen to apply the Creative Commons Attribution 4.0 International (CC BY 4.0) License (https://creativecommons.org/licenses/by/4.0/) to all copyrightable parts of our databases."
+  licence_conditions:
+    - "Attribution: credit the UniProt Consortium and say that the data were changed (this build keeps human Swiss-Prot entries, cut to the gene panel)."
+    - "The README adds: some data may be covered by patents or other rights, and medical or genetic information is for research, educational and informational purposes only."
+  redistributable: true
+  redistributable_reason: "CC BY 4.0 allows redistribution with attribution."
+  rdfportal_licence: "Creative Commons Attribution 4.0 International (CC BY 4.0) License"
+  rdfportal_licence_url: "https://rdfportal.org/dataset/uniprot/"
+  rdfportal_licence_note: "Same as upstream."
   consts: {Organism.taxonId: "9606"}
   gene_scope_field: symbol
   scope: good
@@ -103,12 +144,33 @@ go:
   # RDF-Portal-hosted sources here).
   data_source_url: https://geneontology.org/
   data_set_title: GO (RDF Portal)
+  licence: "CC-BY-4.0"
+  licence_status: partial
+  licence_url: "https://current.geneontology.org/ontology/go-basic.obo"
+  licence_checked: "2026-11-18"
+  licence_quote: "property_value: terms:license http://creativecommons.org/licenses/by/4.0/"
+  licence_conditions:
+    - "Stated in the header of go-basic.obo (the ontology). The GO Consortium licence page (geneontology.org) is blocked, so the wording on citation was not read."
+    - "Attribution to the Gene Ontology Consortium."
+  redistributable: true
+  redistributable_reason: "CC BY 4.0 allows redistribution with attribution."
+  rdfportal_licence_note: "RDF Portal has no data set page for GO (rdfportal.org/dataset/go and /ontology/go answer 404)."
   consts: {Ontology.name: GO}
   scope: good
 hpo:
   replaces: [hpo]
   data_source_name: HPO
   data_set_title: Human Phenotype Ontology (RDF Portal)
+  licence: "not verified (points to https://hpo.jax.org/app/license)"
+  licence_status: not-verified
+  licence_url: "http://purl.obolibrary.org/obo/hp.obo"
+  licence_checked: "2026-11-18"
+  licence_quote: "property_value: terms:license https://hpo.jax.org/app/license"
+  licence_conditions:
+    - "Stated in the header of hp.obo as a pointer; the repository README says the same. The page (hpo.jax.org) answered HTTP 403, Approval required for hpo.jax.org."
+  redistributable: true
+  redistributable_reason: "Unverified. Already inside the published demo-data asset (group hpo); re-check once hpo.jax.org is read."
+  rdfportal_licence_note: "RDF Portal has no data set page for HPO (rdfportal.org/dataset/hpo answers 404)."
   consts: {Ontology.name: Human Phenotype Ontology}
   scope: good
 mp:
@@ -137,6 +199,18 @@ reactome:
   # every pathway sat in two data sets: each enrichment row of pathway_enrichment appeared twice and
   # a data set filter matched half of them.  im-ore.10.
   data_set_title: Reactome pathways data set
+  licence: "CC0-1.0"
+  licence_status: verified
+  licence_url: "https://reactome.org/license"
+  licence_checked: "2026-11-18"
+  licence_quote: "All data in the Reactome database and files derived from that data are licensed under the Creative Commons Public Domain Dedication (CC0)."
+  licence_conditions:
+    - "Attribution encouraged, not required. Reactome's pathway illustrations, icons and branding are CC BY 4.0 and its software Apache-2.0 (not used)."
+  redistributable: true
+  redistributable_reason: "CC0 allows redistribution without conditions."
+  rdfportal_licence: "Creative Commons Public Domain (CC0) License"
+  rdfportal_licence_url: "https://rdfportal.org/dataset/reactome/"
+  rdfportal_licence_note: "Same as upstream."
   consts: {Organism.taxonId: "9606"}
   scope: good
 gwascatalog:
@@ -146,6 +220,17 @@ gwascatalog:
   # out/gwascatalog/queries/*.sparql - so the provenance link is TogoVar's own site.
   data_source_url: https://togovar.org/
   data_set_title: GWAS Catalog (TogoVar)
+  licence: "EMBL-EBI terms of use (summary statistics CC0)"
+  licence_status: partial
+  licence_url: "https://www.ebi.ac.uk/gwas/docs/about"
+  licence_checked: "2026-11-18"
+  licence_quote: "The NHGRI-EBI GWAS Catalog and all its contents are available under the general Terms of Use for EMBL-EBI Services. Summary statistics are made available under CC0 unless otherwise stated."
+  licence_conditions:
+    - "This build reads the associations through TogoVar's SPARQL endpoint; TogoVar's own terms (https://togovar.org/) answered HTTP 403, Approval required for togovar.org."
+    - "Cite the GWAS Catalog (citation page linked from the about page)."
+  redistributable: true
+  redistributable_reason: "EMBL-EBI adds no restriction beyond the data owner's; TogoVar's terms are unread, so partial."
+  rdfportal_licence_note: "RDF Portal lists no data set page for this source (rdfportal.org/dataset/gwas_catalog answers 404)."
   # No source-level Organism constant: nothing on the root, GWASResult, can hold an organism, so it
   # loaded unlinked.  The organism is declared where it belongs - SNP.organism and Gene.organism -
   # on the terms:snps and terms:mapped_genes entries in knowledge.yaml.
@@ -170,6 +255,19 @@ clinvar:
   data_source_name: ClinVar
   data_source_url: https://rdfportal.org/dataset/clinvar
   data_set_title: ClinVar (RDF Portal)
+  licence: "NCBI FTP notice: unrestricted public data (no licence named)"
+  licence_status: partial
+  licence_url: "https://ftp.ncbi.nlm.nih.gov/README.ftp"
+  licence_checked: "2026-11-18"
+  licence_quote: "NOTE: ALL DATA HERE IS PUBLIC, NON-SENSITIVE, UNRESTRICTED SCIENTIFIC DATA SHARING AMONG SCIENTIFIC COMMUNITIES."
+  licence_conditions:
+    - "The notice names no licence and asks for no attribution. NCBI's own data-use policy page (https://www.ncbi.nlm.nih.gov/home/about/policies/) is on a host the sandbox blocks, so its wording on attribution and on third-party rights in some records was not read."
+    - "ClinVar's own data-use page (https://www.ncbi.nlm.nih.gov/clinvar/docs/maintenance_use/, the one RDF Portal names) is on the same blocked host; the ClinVar FTP README states no licence."
+  redistributable: true
+  redistributable_reason: "The server notice says the data are unrestricted; ClinVar's page was not readable."
+  rdfportal_licence: "https://www.ncbi.nlm.nih.gov/clinvar/docs/maintenance_use/"
+  rdfportal_licence_url: "https://rdfportal.org/dataset/clinvar/"
+  rdfportal_licence_note: "RDF Portal's page gives ClinVar's data-use page (blocked here) as the licence."
   consts: {Organism.taxonId: "9606"}
   gene_scope_field: primaryIdentifier
   scope: good
@@ -178,6 +276,21 @@ pubmed:
   data_source_name: PubMed
   data_source_url: https://rdfportal.org/dataset/pubmed
   data_set_title: PubMed (RDF Portal)
+  licence: "NLM terms and conditions (free; acknowledge NLM)"
+  licence_status: verified
+  licence_url: "https://ftp.ncbi.nlm.nih.gov/pubmed/baseline/README.txt"
+  licence_checked: "2026-11-18"
+  licence_quote: "NLM freely provides PubMed data. Please note some abstracts may be protected by copyright."
+  licence_conditions:
+    - "Acknowledge NLM as the source \"in a clear and conspicuous manner\"."
+    - "Do not use the PubMed wordmark or logo, and do not imply NLM/NIH/HHS endorsement."
+    - "Anyone who republishes or redistributes the data must maintain the most current version, or make known in a clear and conspicuous manner that the product does not reflect the most current data from NLM."
+    - "Some abstracts may be copyrighted; NLM gives no legal advice on that."
+  redistributable: true
+  redistributable_reason: "Redistribution is allowed on those conditions (the currency notice matters for a frozen cache); abstract copyright is a separate question."
+  rdfportal_licence: "https://www.nlm.nih.gov/databases/download.html"
+  rdfportal_licence_url: "https://rdfportal.org/dataset/pubmed/"
+  rdfportal_licence_note: "RDF Portal's page gives NLM's download page (blocked here) as the licence; the FTP README is the same terms."
   scope: good
   pmid_scope_field: identifier
   note: HumanMine fills Publication via update-publications; this would pre-load details for cited papers
@@ -202,6 +315,17 @@ ensembl:
   data_source_name: Ensembl
   data_source_url: https://rdfportal.org/dataset/ensembl
   data_set_title: Ensembl genes (RDF Portal)
+  licence: "not verified"
+  licence_status: not-verified
+  licence_url: "https://rdfportal.org/dataset/ensembl/"
+  licence_checked: "2026-11-18"
+  licence_conditions:
+    - "Ensembl's disclaimer page (https://www.ensembl.org/info/about/legal/disclaimer.html) answered HTTP 403, Approval required for www.ensembl.org."
+  redistributable: true
+  redistributable_reason: "Unverified. Already inside the published demo-data asset; re-check once www.ensembl.org is read."
+  rdfportal_licence: "http://ensembl.org/info/about/legal/disclaimer.html"
+  rdfportal_licence_url: "https://rdfportal.org/dataset/ensembl/"
+  rdfportal_licence_note: "RDF Portal's page gives Ensembl's disclaimer page as the licence."
   consts: {Organism.taxonId: "9606"}
   gene_scope_field: secondaryIdentifier
   scope: good

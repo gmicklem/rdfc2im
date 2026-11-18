@@ -1,0 +1,35 @@
+Filtered stock-source data for the rdfc2im hybrid HumanMine testbed (corrected 2026-11-18, im-9n4.45)
+=====================================================================================================
+
+Each directory stock-<source>/ is a subset of an upstream file, cut to the human genes (and the ids that tie to
+them) the build needs by tools/subset_raw.py: the data were changed by filtering. Nothing here is original to this
+project; each part stays under its upstream licence and must be credited to it. META.json in each group records
+a short licence key. The licence of each source was read from the source's own page or file on 2026-11-18; the
+record, with the links and wording, is rdfc2im/data/stock_sources.yaml and docs/LICENCES.md.
+
+Verified (the source states the licence)
+  stock-uniprot, stock-uniprot-fasta   UniProt Swiss-Prot human   CC BY 4.0  (c) UniProt Consortium
+  stock-mgi-identifiers                MGI marker list            CC BY 4.0  credit Mouse Genome Informatics
+  stock-biogrid                        BioGRID human interactions MIT        keep this notice; cite Stark et al., Nucleic Acids Res 2006;34:D535-9
+  stock-protein-atlas, stock-protein-atlas-rna
+                                       Human Protein Atlas        CC BY 4.0  cite a primary publication AND "Human Protein Atlas proteinatlas.org";
+                                       (not share-alike: the earlier version of this file said CC BY-SA 4.0, wrongly)
+  stock-atlas-express                  Expression Atlas, Illumina Body Map (E-MTAB-513)   CC BY 4.0
+                                       cite "Expression Atlas in 2026 ... (Nucleic Acids Research, 10 December 2025)"
+
+Partly verified
+  stock-go-annotation                  GOA human annotation       "may be copied and redistributed freely, without advance permission, provided that
+                                       this copyright statement is reproduced with each copy": GOA - GO Annotation. Copyright 2018 (C) The European
+                                       Bioinformatics Institute.
+  stock-ncbi-gff                       NCBI RefSeq GRCh38 annotation   NCBI FTP notice: "ALL DATA HERE IS PUBLIC, NON-SENSITIVE, UNRESTRICTED SCIENTIFIC
+                                       DATA SHARING AMONG SCIENTIFIC COMMUNITIES" (NCBI's policy page was not readable)
+
+Licence not verified: hold these groups out of the published asset until their terms are read
+  stock-panther         PANTHER orthologues         no terms found (www.pantherdb.org not readable)
+  stock-psi-intact      IntAct human interactions   no terms found in the files or FTP tree (the IntAct licence page needs a browser)
+  stock-gtex            GTEx median gene TPM        no terms found (www.gtexportal.org not readable)
+  stock-hpo-annotation  HPO phenotype.hpoa          points to https://hpo.jax.org/app/license (not readable)
+
+Not in this asset, by decision D-7 of the testbed plan: OMIM, DisGeNET and KEGG data. `python -m rdfc2im cache
+check-release` accepts only groups flagged redistributable; the flag does not say whether the licence was verified,
+which is why the last block above is listed apart.

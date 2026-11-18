@@ -1478,7 +1478,7 @@ Where each value of the manifest comes from:
 | Last-Modified | the raw group's `META.json` `last_modified.<id>` (what the server sent at the download) | none |
 | fetched at (UTC) | the raw group's `saved_at` (written right after the download) | the cache group's `saved_at` |
 | size, sha256 | the cached raw file (sha256 computed, cached by path, size and mtime) | each cached TSV |
-| licence, redistributable | `stock_sources.yaml` | not recorded |
+| licence (name, status, URL, date read, wording, conditions), redistributable | `stock_sources.yaml` (stock reactome: `other_licences.yaml`) | `sources.yaml`: the upstream's licence and `rdfportal_licence` (RDF Portal's own data set page); docs/LICENCES.md [im-9n4.45] |
 | scope | `idsets/idsets.json` (panel size), `--gene-identifiers` | the cache group's `scope` (none, panel, full, pmid) |
 | filter | `stock_sources.yaml` `filter`, in one sentence | none (the SPARQL query is the cut) |
 | records read, kept | `field_counts.py` over the raw file and over the filtered file the loader read, with `subset_raw.py`'s record definitions; the filter's own JSON line from the build log as `filter_log` where the log has one | rows per cached table |
@@ -1978,8 +1978,9 @@ check-release` on the extracted content.
 * `cached_raw_data-2026-11-18b.tar.gz`: the panel cache with the `hpo` and `bluegenes-tools-patched` groups added (16 groups, top directory
   `cached_raw_data/`); restore with `tar -xzf` in the repository root.
 * `stock_filtered-2026-11-18.tar.gz`: the 13 redistributable filtered stock groups under `filtered-cache/`, with
-  `LICENCES-stock-filtered.txt` (Human Protein Atlas is CC BY-SA 4.0 share-alike, IntAct CC BY 4.0, BioGRID MIT; several licences
-  are recorded as unverified). Extract into the directory above `RDFC2IM_STOCK_FILTERED_CACHE`. Not in it: groups for whole-file
+  `LICENCES-stock-filtered.txt` (as first prepared it said Human Protein Atlas was CC BY-SA 4.0 share-alike; that was wrong, the
+  Atlas states CC BY 4.0. im-9n4.45 read every source's own licence statement: corrected text in `docs/LICENCES-stock-filtered.txt`,
+  and `stock-panther`, `stock-psi-intact`, `stock-gtex`, `stock-hpo-annotation` have no readable terms, so hold them back; see docs/LICENCES.md). Extract into the directory above `RDFC2IM_STOCK_FILTERED_CACHE`. Not in it: groups for whole-file
   sources (interpro-go, psi-mi-ontology, uniprot-keywords, orphanet), which stay raw groups in `stock_ut/cache`.
 * `cached_raw_data_allgenes-2026-11-18.tar.gz`: the two RDF groups that differ in an all-genes build (`ncbigene`, `hgnc`, scope=full).
   `hgnc` holds HGNC's own `main_see_also_omim.tsv` (OMIM ids as HGNC publishes them, no OMIM data).
