@@ -19,7 +19,7 @@ from reading the script.
 
 ## What you get
 
-A 113-gene food/drug-metabolism demonstration HumanMine:
+A 114-gene food/drug-metabolism demonstration HumanMine (113 genes plus PAX6):
 
 - **Nine rdfc2im-generated sources** - `go`, `ncbigene`, `reactome`, `hgnc`, `ensembl`,
   `uniprot`, `clinvar`, `gwascatalog`, `pubmed` - all loaded through the stock
@@ -282,6 +282,36 @@ test-live` 17/17. The war holds only 5.1.1 `intermine-*`/`bio-*` jars.
 (`publish_intermine` 202 s, `integrate_sources` 150 s, `postprocess` 82 s, `build_dbmodel` 43 s,
 `build_webapp` 10 s), `make test-live` 17/17, `template.do` returns 200 with a full page and the
 mine's log has no `JasperException`.
+
+Panel of 114 genes (2026-11-18, im-9n4.5, decision D-4): PAX6 (NCBI 5080), the fixture gene of
+`[mines.humanmine.gene]` in mine-tests, was added to `curation/demo_gene_panel.txt`; no other
+mine-tests or BlueGenes Cypress fixture is a human gene outside the panel. New `genes_md5`
+`17702eff6e8f3e08801a2d9877bc2aa1` (was `68ac89b6b78ea87e72dc7323f02ee490`). The panel-scoped
+sources (`ncbigene hgnc ensembl uniprot clinvar gwascatalog`, `pubmed` through its cited-PMID list
+`pmids_md5` `5d346e5be740dceeaf8ab924bcd8f299`) and `gene-id-lookup` were fetched afresh into a new cache directory,
+`cached_raw_data.panel-2026-11-18/` (`go`, `reactome` and the other unscoped groups copied unchanged):
+`--only rdfc2im_pipeline --sources "ncbigene hgnc ensembl uniprot clinvar gwascatalog pubmed"
+--cache-dir ...`, 1,968 s (clinvar 21 min, gwascatalog 2 min, no endpoint errors), after which
+`tools/full-build.sh --use-cached-data --intermine-src ... --stack-name ut` took 547 s on 6.0.0
+(`publish_intermine` 197 s, `integrate_sources` 136 s, `postprocess` 79 s, `rdfc2im_pipeline` 57 s,
+`build_dbmodel` 27 s, `build_webapp` 14 s). `make test-live` 20/20, no expectation changed.
+
+| Class | 113 genes | 114 genes |
+|---|---|---|
+| Gene | 113 | 114 |
+| Protein | 13,546 | 13,591 |
+| Pathway | 2,883 | 2,883 |
+| Publication | 6,781 | 6,896 |
+| Allele | 53,105 | 59,031 |
+| GWASResult | 23,201 | 30,832 |
+| Gene-pathway rows | 450 | 455 |
+| Pathway-protein rows | 50,283 | 50,283 |
+| OntologyTerm | 79,874 | 79,904 |
+| all objects (`intermineobject`) | 331,474 | 346,735 |
+
+PAX6 in the mine: 46 proteins, 996 alleles, 5 pathways; Ensembl id ENSG00000007372. The release
+tarball for CI is `cached_raw_data-2026-11-18.tar.gz` (the groups of the `demo-data-2026-11-16`
+asset, from the new directory); it is not uploaded until the asset is approved.
 
 #### When the InterMine catalog moves to 6.0.0
 

@@ -1,8 +1,8 @@
-# Demo gene panel: food & drug metabolism, 113 HGNC symbols.
+# Demo gene panel: food & drug metabolism, 114 HGNC symbols (113 plus the mine-tests fixture gene).
 #
 # Chosen for a fast, coherent demo build (~113 genes vs. the full ~193,000-gene
 # genome) rather than a full-scale load. Every symbol below was verified present
-# in out/ncbigene/raw/main.tsv before use. None of these 113 genes are among the
+# in out/ncbigene/raw/main.tsv before use. None of the first 113 genes are among the
 # 255 NCBI/Ensembl id pairs flagged in STATUS.md's D14 - this panel is unaffected
 # by that ambiguity regardless of how/whether it gets resolved.
 #
@@ -31,3 +31,6 @@ APOE APOB APOA5 APOC3 LPL FADS1 FADS2 SREBF1 SREBF2 INSIG1 ABCG5 ABCG8 SCARB1 CY
 
 # Taste / appetite / food intake - 11
 TAS2R38 TAS1R2 TAS1R3 LEP LEPR MC4R INSR INS SLC2A1 SLC2A2 SLC30A8
+
+# Fixture gene of the mine tests ([mines.humanmine.gene] in mine-tests/mines.toml), NCBI 5080 - 1
+PAX6
