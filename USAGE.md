@@ -269,7 +269,8 @@ python3 tools/field_counts.py count --format tab|gff3|xml|obo|fasta --in FILE [.
 * `pages` output is deterministic: the same manifest and mapping files give byte-identical pages.
 * The licence rows of a page (name, status, link, date read, wording, conditions, redistributable) come from the licence
   keys of `stock_sources.yaml`, `sources.yaml` and `other_licences.yaml` (stock reactome); docs/LICENCES.md is the table of
-  all of them and says how a record is refreshed [im-9n4.45].
+  all of them and says how a record is refreshed [im-9n4.45]. `sources.yaml`'s optional `data_set_licence` is the URL
+  the RDF items write to `DataSet.licence` (items.py).
 
 A stock mapping file says, for each input file of a loader (`files[].id` as in `stock_sources.yaml`): its `format`, how
 to count it (`comment`, `skip_lines`, `header_line` N / `first` / `match:TEXT`, `record_key` for XML), where the file

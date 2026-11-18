@@ -17,7 +17,9 @@ writes: [DataSource, DataSet, InteractionTerm, Organism, Gene, Publication, Inte
          Interaction, InteractionDetail, InteractionRegion, Location]
 # Notes:
 # - DataSource and DataSet come from the constructor (PsiConverter.java:80-81). The DataSet licence written is
-#   https://www.apache.org/licenses/LICENSE-2.0, not CC BY 4.0 as stock_sources.yaml says.
+#   https://creativecommons.org/licenses/by/4.0/ (CC BY 4.0, as IntAct states for its data), fixed in intermine
+#   6e1209b48c (maint-2026); a build from earlier code writes https://www.apache.org/licenses/LICENSE-2.0, a
+#   software licence.
 # - An InteractionTerm MI:0117 (binding site) is always made (PsiConverter.java:84).
 # - Gene: for 9606 the config says identifier = primaryIdentifier, datasource = ensembl
 #   (psi-intact_config.properties:23-24). See interactor/xref below.
@@ -98,11 +100,11 @@ files:
       - key: "entrySet/entry/experimentList/experimentDescription/hostOrganismList/hostOrganism"
         name: host organism
         description: organism or system the experiment was done in (in vivo, in vitro, cell line)
-        maps_to: []
-        status: not loaded
-        reason: "code bug: meant for InteractionExperiment.hostOrganism, never set"
+        maps_to: [InteractionExperiment.hostOrganism]
+        status: loaded
+        reason: ""
         code: PsiConverter.java:239-240, 393-400
-        note: "startElement sets attName 'hostOrganism' on hostOrganism, but every child element resets attName to null (PsiConverter.java:208), so the fullName end test never matches. The converter's own test target has no hostOrganism either."
+        note: "The fullName of the experiment's host organism goes to InteractionExperiment.hostOrganism; the host organisms of single participants are ignored. Fixed in intermine 9ee7a6fb37 (maint-2026): before it the fullName end test never matched, because every child element reset attName (PsiConverter.java:208), so the field stayed empty. Needs a build that includes that commit."
       - key: "entrySet/entry/experimentList/experimentDescription/interactionDetectionMethod/xref/primaryRef/@id"
         name: interaction detection method
         description: PSI-MI term of the detection method, e.g. MI:0019

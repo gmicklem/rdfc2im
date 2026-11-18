@@ -1,35 +1,77 @@
-Filtered stock-source data for the rdfc2im hybrid HumanMine testbed (corrected 2026-11-18, im-9n4.45)
-=====================================================================================================
+Filtered stock-source data for the rdfc2im hybrid HumanMine testbed (corrected 2026-11-18, second pass, im-9n4.45)
+==================================================================================================================
 
 Each directory stock-<source>/ is a subset of an upstream file, cut to the human genes (and the ids that tie to
-them) the build needs by tools/subset_raw.py: the data were changed by filtering. Nothing here is original to this
-project; each part stays under its upstream licence and must be credited to it. META.json in each group records
-a short licence key. The licence of each source was read from the source's own page or file on 2026-11-18; the
-record, with the links and wording, is rdfc2im/data/stock_sources.yaml and docs/LICENCES.md.
+them) the build needs by tools/subset_raw.py: the data were changed by filtering (rows left out; no row was edited).
+Nothing here is original to this project; each part stays under its upstream licence and must be credited to it.
+META.json in each group records a short licence key. The licence of each source was read from the source's own page
+or file on 2026-11-18; the record, with the links and wording, is rdfc2im/data/stock_sources.yaml and docs/LICENCES.md.
 
-Verified (the source states the licence)
-  stock-uniprot, stock-uniprot-fasta   UniProt Swiss-Prot human   CC BY 4.0  (c) UniProt Consortium
-  stock-mgi-identifiers                MGI marker list            CC BY 4.0  credit Mouse Genome Informatics
-  stock-biogrid                        BioGRID human interactions MIT        keep this notice; cite Stark et al., Nucleic Acids Res 2006;34:D535-9
-  stock-protein-atlas, stock-protein-atlas-rna
-                                       Human Protein Atlas        CC BY 4.0  cite a primary publication AND "Human Protein Atlas proteinatlas.org";
-                                       (not share-alike: the earlier version of this file said CC BY-SA 4.0, wrongly)
-  stock-atlas-express                  Expression Atlas, Illumina Body Map (E-MTAB-513)   CC BY 4.0
-                                       cite "Expression Atlas in 2026 ... (Nucleic Acids Research, 10 December 2025)"
+This archive has no stock-panther group: PANTHER's terms could not be read, so its data are not redistributed here.
 
-Partly verified
-  stock-go-annotation                  GOA human annotation       "may be copied and redistributed freely, without advance permission, provided that
-                                       this copyright statement is reproduced with each copy": GOA - GO Annotation. Copyright 2018 (C) The European
-                                       Bioinformatics Institute.
-  stock-ncbi-gff                       NCBI RefSeq GRCh38 annotation   NCBI FTP notice: "ALL DATA HERE IS PUBLIC, NON-SENSITIVE, UNRESTRICTED SCIENTIFIC
-                                       DATA SHARING AMONG SCIENTIFIC COMMUNITIES" (NCBI's policy page was not readable)
+UniProt (stock-uniprot, stock-uniprot-fasta)
+  UniProt Swiss-Prot human entries, filtered.  CC BY 4.0, (c) UniProt Consortium.
+  https://ftp.ebi.ac.uk/pub/databases/uniprot/current_release/knowledgebase/complete/README
+  "We have chosen to apply the Creative Commons Attribution 4.0 International (CC BY 4.0) License
+  (https://creativecommons.org/licenses/by/4.0/) to all copyrightable parts of our databases."
 
-Licence not verified: hold these groups out of the published asset until their terms are read
-  stock-panther         PANTHER orthologues         no terms found (www.pantherdb.org not readable)
-  stock-psi-intact      IntAct human interactions   no terms found in the files or FTP tree (the IntAct licence page needs a browser)
-  stock-gtex            GTEx median gene TPM        no terms found (www.gtexportal.org not readable)
-  stock-hpo-annotation  HPO phenotype.hpoa          points to https://hpo.jax.org/app/license (not readable)
+MGI (stock-mgi-identifiers)
+  MGI marker list MRK_List2.rpt, filtered.  CC BY 4.0.  Credit Mouse Genome Informatics.
+  https://www.informatics.jax.org/mgihome/other/copyright.shtml
 
-Not in this asset, by decision D-7 of the testbed plan: OMIM, DisGeNET and KEGG data. `python -m rdfc2im cache
-check-release` accepts only groups flagged redistributable; the flag does not say whether the licence was verified,
-which is why the last block above is listed apart.
+BioGRID (stock-biogrid)
+  BioGRID human interactions, filtered.  MIT licence: keep this notice.  Cite Stark C et al., BioGRID: a general
+  repository for interaction datasets, Nucleic Acids Res 2006;34:D535-9.
+  https://downloads.thebiogrid.org/BioGRID/Latest-Release/
+
+Human Protein Atlas (stock-protein-atlas, stock-protein-atlas-rna)
+  CC BY 4.0 (not share-alike).  Cite a primary publication AND "Human Protein Atlas proteinatlas.org"; for data taken
+  from the site also cite the data and its URL.
+  https://www.proteinatlas.org/about/licence
+
+Expression Atlas (stock-atlas-express)
+  Illumina Body Map (E-MTAB-513).  CC BY 4.0.  Cite "Expression Atlas in 2026: enabling FAIR and open expression data
+  through community collaboration and integration (Nucleic Acids Research, 10 December 2025)".
+  https://www.ebi.ac.uk/gxa/licence.html
+
+Gene Ontology annotation (stock-go-annotation)
+  GOA human GAF, filtered.  CC BY 4.0, GO Consortium.  Gene Ontology data from the GAF file dated 2026-05-28 is made available under the terms of the CC BY 4.0 licence, https://creativecommons.org/licenses/by/4.0/,
+  with its disclaimer of warranties. Cite Ashburner et al., Nat Genet 2000;25:25-9 and The Gene Ontology Consortium,
+  The Gene Ontology knowledgebase in 2026, Nucleic Acids Res 2025 (doi 10.1093/nar/gkaf1292).
+  https://geneontology.org/docs/go-citation-policy/
+  Also, from the EMBL-EBI GOA README, which must travel with the copy: "GOA - GO Annotation. Copyright 2018 (C) The
+  European Bioinformatics Institute."  (https://ftp.ebi.ac.uk/pub/databases/GO/goa/HUMAN/README)
+
+NCBI RefSeq annotation (stock-ncbi-gff)
+  GRCh38 RefSeq GFF3, filtered.  NCBI "places no restrictions on the use or distribution of the data contained
+  therein"; no licence is named.  Source: National Library of Medicine, National Center for Biotechnology
+  Information.  Some records may carry rights claimed by their submitters, which NCBI cannot waive.
+  https://www.ncbi.nlm.nih.gov/home/about/policies/
+
+IntAct (stock-psi-intact)
+  IntAct human interactions, PSI-MI XML, filtered.  CC BY 4.0: "you are free to use, reproduce and adapt our data
+  providing you give appropriate credit". Credit EMBL-EBI IntAct; publications to cite are listed at
+  https://www.ebi.ac.uk/intact/about#publications .  (The Apache-2.0 licence on the IntAct pages covers IntAct's
+  software, not the data.)
+  https://raw.githubusercontent.com/Intact-portal/intact-portal-documentation/master/about/license-privacy.md
+
+GTEx (stock-gtex)
+  GTEx v8 median gene TPM, filtered.  GTEx Portal Data License.  The data used here were obtained from the GTEx Portal
+  (https://www.gtexportal.org/) on 2026-11-18 (release v8; "The data used for the analyses described in this manuscript
+  were obtained from: the GTEx Portal on MM/DD/YY and/or dbGaP accession number phs000424.vN.pN on MM/DD/YYYY.").
+  This is not the most current GTEx data: these files do not reflect the most current/accurate data available from
+  the GTEx Portal. The GTEx Portal has not endorsed this product.  No warranties; see the licence page.
+  https://www.gtexportal.org/home/license
+
+Human Phenotype Ontology (stock-hpo-annotation)
+  genes_to_phenotype.txt and phenotype.hpoa, filtered (rows for the gene panel and its diseases; no row altered).
+  This product uses the Human Phenotype Ontology (files dated 2026-09-02). Find out more at
+  http://www.human-phenotype-ontology.org .  The HPO licence requires the Human Phenotype Ontology Consortium to be
+  acknowledged and cited, the date or version of displayed files to be shown, and that "neither the content of the
+  HPO file(s) nor the logical relationships embedded within the HPO file(s) be altered in any way". Changes to HPO
+  are suggested through its issue tracker, not made here.
+  https://hpo.jax.org/license
+
+Not in this archive: PANTHER (stock-panther: terms not readable), OMIM, DisGeNET and KEGG (decision D-7 of the testbed
+plan). `python -m rdfc2im cache check-release` accepts only groups flagged redistributable; the flag does not say
+whether the licence was verified: docs/LICENCES.md and licence_status in rdfc2im/data/stock_sources.yaml do.

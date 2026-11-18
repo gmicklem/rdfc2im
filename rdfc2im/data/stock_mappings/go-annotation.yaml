@@ -105,15 +105,17 @@ files:
       - key: "col:8"
         name: With (or) From
         description: identifiers supporting the evidence (UniProtKB:P12345, ...)
-        maps_to: [GOEvidence.withText]
+        maps_to: [GOEvidence.withText, GOEvidence.with, Protein.primaryAccession]
         status: loaded
         reason: ""
         code: GoConverter.java:281, 383-389, 444-489
         note: >-
-          Stored as text. The converter also tries to make GOEvidence.with objects, but only for the
-          prefixes 'UniProt' (Protein) and 'FB' (Gene, fly only); the human GAF writes 'UniProtKB:',
-          which is not one of them, so GOEvidence.with stays empty for human rows. Also part of the
-          key that merges rows into one GOAnnotation.
+          Stored as text (GOEvidence.withText), and as objects: both the 'UniProt:' and the 'UniProtKB:'
+          prefix make a "with" Protein (keyed by primaryAccession alone, no organism), a stub when the
+          protein is not otherwise loaded; 'FB:' makes a Gene for fly only; other prefixes are kept as
+          text only. Fixed in intermine 079ef219c2 (maint-2026); a build from an earlier intermine
+          (the running demo mine) loads only the text, because the human GAF writes 'UniProtKB:', which
+          the old code did not recognise. Also part of the key that merges rows into one GOAnnotation.
       - key: "col:9"
         name: Aspect
         description: GO aspect (P, F or C)
