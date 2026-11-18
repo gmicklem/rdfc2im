@@ -77,6 +77,12 @@
 #   --stock-local DIR   Local copies of stock data: DIR/<source>/<raw file name>. Used instead of a
 #                       download when present; the only way in for a source that is not
 #                       redistributable (OMIM: D-7). Also RDFC2IM_STOCK_LOCAL.
+#   --jbrowse2-src DIR  The jbrowse2 bluegenes-tool checkout (also env JBROWSE2_SRC): stage_artifacts then
+#                       runs tools/stage-bluegenes-tools.sh, which writes the patched BlueGenes tool set to
+#                       <artifacts>/bluegenes-tools-patched and installs it to <artifacts>/bluegenes-tools
+#                       (BUILD.md, "The patched BlueGenes tool set"). Without it stage_artifacts is as before.
+#   --with-front        After the stack is up, start the aligner and nginx front (trial/front/up.sh). Off by
+#                       default.
 #   -h, --help          This text.
 #
 # Every side-effecting external command (gradle, docker, psql, curl) is emitted through `run`,
@@ -195,6 +201,8 @@ REACTOME_LEVELS=${REACTOME_LEVELS:-default}
 STOCK_SOURCES=${STOCK_SOURCES:-}
 STOCK_LOCAL=${RDFC2IM_STOCK_LOCAL:-}
 RESOLVER_SCOPE=taxon
+JBROWSE2_SRC=${JBROWSE2_SRC:-}
+WITH_FRONT=0
 DRY_RUN=0
 LIST_PHASES=0
 FROM_PHASE=""
@@ -295,6 +303,8 @@ while [ $# -gt 0 ]; do
     --stock-sources) STOCK_SOURCES=$2; shift ;;
     --stock-local) STOCK_LOCAL=$2; shift ;;
     --resolver-scope) RESOLVER_SCOPE=$2; shift ;;
+    --jbrowse2-src) JBROWSE2_SRC=$2; shift ;;
+    --with-front) WITH_FRONT=1 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "unknown option: $1" >&2; usage; exit 2 ;;
   esac
@@ -1548,10 +1558,10 @@ webapp.path=humanmine
 # live: it calls getServerName(props.getProperty("webapp.deploy.url")) with a null deployUrl,
 # which NPEs on deployUrl.contains("//") and fails the whole project's configuration (blocking
 # :dbmodel:builddb too, same class of problem as the gretty fix above). The code LOOKS like it
-# should skip this via `if (props.hasProperty("webapp.hostname")) ... else getServerName(...)`,
+# should skip this via \`if (props.hasProperty("webapp.hostname")) ... else getServerName(...)\`,
 # but that's a Groovy trap: Properties.hasProperty(key) is the Groovy MOP method (does this
 # OBJECT have a declared field/property with this name?), not Properties.containsKey(key) - it
-# is FALSE for every loaded entry, always, regardless of what's in the file, so the `else`
+# is FALSE for every loaded entry, always, regardless of what's in the file, so the \`else\`
 # branch always runs and webapp.hostname (tried first, see prior commit) can never help. Setting
 # webapp.deploy.url instead works because THAT one is read with the real, correct
 # Properties.getProperty(key) API. This build never runs a cargo task at all (deployment goes
@@ -1913,6 +1923,13 @@ GRADLE
 phase_stage_artifacts() {
   run env TRIAL_HOME="$TRIAL_HOME" PG_PORT="$PG_PORT" SOLR_PORT="$SOLR_PORT" \
       ${ARTIFACTS_DIR:+RDFC2IM_ARTIFACTS="$ARTIFACTS_DIR"} sh tools/trial-stage.sh
+  # The patched BlueGenes tool set (BUILD.md, "The patched BlueGenes tool set"): only with --jbrowse2-src
+  # (or env JBROWSE2_SRC), the one input that is not in cached_raw_data/.
+  if [ -n "$JBROWSE2_SRC" ]; then
+    local art=${ARTIFACTS_DIR:-$HERE/trial/artifacts}
+    run tools/stage-bluegenes-tools.sh --jbrowse2-src "$JBROWSE2_SRC" --src-cache "$RAW_CACHE_DIR/bluegenes-tools/data" \
+      --out "$art/bluegenes-tools-patched" --install-to "$art/bluegenes-tools"
+  fi
 }
 
 phase_start_mine_stack() {
@@ -1920,6 +1937,8 @@ phase_start_mine_stack() {
   # The webapp reads the database once, at startup - postprocessing and the war it's serving
   # must both be in place before this, and it must run again after either changes.
   run docker restart "$MINE_CONTAINER" "$BG_CONTAINER"
+  # --with-front: the aligner and the nginx front on the BlueGenes origin (trial/front/README.md)
+  [ "$WITH_FRONT" -eq 0 ] || run trial/front/up.sh
 }
 
 phase_apply_templates() {

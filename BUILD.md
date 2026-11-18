@@ -645,9 +645,11 @@ tools/stage-bluegenes-tools.sh --jbrowse2-src ../jbrowse2/bluegenes-tool --out $
   versions, patch ids and sha256), so a build can also restore it and run `--install-to` alone with `--out`
   pointing at the restored `data/` (install checks every tarball against `patches.json`).
 
-Phase `stage_artifacts` should call it after `tools/trial-stage.sh`, once, for the BlueGenes container's tool
-directory, e.g. `tools/stage-bluegenes-tools.sh --jbrowse2-src "$JBROWSE2_SRC" --out "$RDFC2IM_ARTIFACTS/bluegenes-tools-patched"
---install-to "$RDFC2IM_ARTIFACTS/bluegenes-tools"` (and mount that directory at BlueGenes' `BLUEGENES_TOOL_PATH`).
+Phase `stage_artifacts` calls it after `tools/trial-stage.sh` when `--jbrowse2-src DIR` (or env `JBROWSE2_SRC`) is
+given, with `--src-cache $RAW_CACHE_DIR/bluegenes-tools/data`, `--out <artifacts>/bluegenes-tools-patched` and
+`--install-to <artifacts>/bluegenes-tools` (`<artifacts>` is `RDFC2IM_ARTIFACTS`, default `trial/artifacts`); without
+the option nothing changes. The command it runs is, for the BlueGenes container's tool directory, e.g. `tools/stage-bluegenes-tools.sh --jbrowse2-src "$JBROWSE2_SRC" --out "$RDFC2IM_ARTIFACTS/bluegenes-tools-patched"
+--install-to "$RDFC2IM_ARTIFACTS/bluegenes-tools"` (and mount that directory at BlueGenes' `BLUEGENES_TOOL_PATH`; `trial/docker-compose.yml` does not do that yet).
 The MSA viewer still needs the aligner container and a `/align-sequence` route on the BlueGenes origin
 (sequence-alignment-service), and the protein visualizer and JBrowse 2 tool need the mine's protein/location data.
 
@@ -1026,3 +1028,7 @@ on :15001 with host networking). It is not part of `trial/docker-compose.yml`, s
 jar moves to :15011 (stop any bare jar on :15001 first), run `trial/front/up.sh` (idempotent;
 needs network for the first imjs fetch, and builds the aligner image on first use). `trial/front/down.sh` removes it.
 See `trial/front/README.md`.
+
+`tools/full-build.sh --with-front` (off by default) runs `trial/front/up.sh` at the end of `start_mine_stack`, after the
+restart of the mine and BlueGenes containers. The front's ports and container names are its own (compose project
+`rdfc2im-ut-front`, origin `localhost:15001`), not derived from `--stack-name`.
