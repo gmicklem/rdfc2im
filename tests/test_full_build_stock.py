@@ -289,8 +289,9 @@ def test_the_mine_properties_name_the_resolver_root_and_stale_caches_go(tmp_path
 
 
 def test_ncbi_gff_is_cut_with_its_neighbour_genes_and_its_chromosome_lengths(tmp_path):
-    """[im-9n4.9] subset_stock_data filters the GFF with --keep-types gene, then writes the lengths
-    Items XML from the filtered file; stage_src_data links that into its own directory."""
+    """[im-9n4.9] subset_stock_data filters the GFF (panel closure only: the table leaves keep_types
+    off), then writes the lengths Items XML from the filtered file; stage_src_data links that into
+    its own directory."""
     src = _fake_intermine_60(tmp_path)
     plan = _plan(tmp_path, "--only", "subset_stock_data", "--intermine-src", src, "--stock-sources", "ncbi-gff")
     if plan is None:
@@ -298,7 +299,7 @@ def test_ncbi_gff_is_cut_with_its_neighbour_genes_and_its_chromosome_lengths(tmp
     cmds = _cmds(plan, "subset_stock_data")
     stock = str(tmp_path / "stock")
     filt = next(c for c in cmds if "subset_raw.py filter --format gff3" in c)
-    assert filt.endswith(f"--ids {stock}/idsets/entrez.txt --keep-types gene"), filt
+    assert filt.endswith(f"--ids {stock}/idsets/entrez.txt"), filt
     lengths = [i for i, c in enumerate(cmds) if "subset_raw.py chromosome-lengths" in c]
     assert lengths and lengths[0] > cmds.index(filt)
     assert cmds[lengths[0]].endswith(

@@ -239,14 +239,18 @@ def test_file_rows_say_how_each_file_is_made_and_staged(tmp_path):
 
 
 def test_ncbi_gff_rows_keep_gene_rows_and_derive_the_chromosome_lengths():
-    """[im-9n4.9] The GFF row asks for every `gene` row (keep_types), and a last `derived` row makes
-    the lengths file from the filtered GFF into the same filtered group, staged in its own directory
-    for the ncbi-gff-lengths source."""
+    """[im-9n4.9] A last `derived` row makes the lengths file from the filtered GFF into the same
+    filtered group, staged in its own directory for the ncbi-gff-lengths source; keep_types (the
+    neighbour gene rows) travels in field 17 when the table sets it (off: its cost, BUILD.md)."""
     t = stock.load_table()
     rows = [r.split("\t") for r in stock.file_rows(t, ["ncbi-gff"], "/S", "/S/cache")]
     assert [r[1] for r in rows] == ["gff", "chromosome-lengths"]
     g, d = rows
-    assert g[7:9] == ["gff3", "entrez"] and g[13] == "filtered" and g[16] == "gene"
+    assert g[7:9] == ["gff3", "entrez"] and g[13] == "filtered" and g[16] == "-"
+    t2 = copy.deepcopy(t)
+    t2["ncbi-gff"]["files"][0]["filter"]["keep_types"] = ["gene"]
+    assert stock.file_rows(t2, ["ncbi-gff"], "/S", "/S/cache")[0].split("\t")[16] == "gene"
+    assert stock.cache_meta(t2, "ncbi-gff")[0] != stock.cache_meta(t, "ncbi-gff")[0]
     assert d[2] == "derived" and d[4] == "/S/subset/ncbi-gff/gff/GRCh38_latest_genomic.gff"
     assert d[7] == "chromosome-lengths" and d[12:16] == [
         "/S/subset/ncbi-gff/chromosome-lengths", "derived", "human/gff/lengths", "chromosome_lengths.xml"]

@@ -148,8 +148,13 @@ sources:
       to the chromosome names 1-22, X, Y (NcbiGffGFF3SeqHandler); MT (NC_012920.1) is not mapped,
       so its genes would get no location, and rows on alt and unplaced scaffolds (NT_, NW_) are
       dropped by the record handler. The filter keeps every ##sequence-region line, the panel genes
-      (Dbxref GeneID) with their Parent closure (transcripts, exons, CDS), and every other `gene`
-      row on its own (keep_types: the neighbours a genome browser shows, D-1). Keys: Gene on
+      (Dbxref GeneID) with their Parent closure (transcripts, exons, CDS). `keep_types: [gene]` in
+      the filter would also keep every other gene row (the neighbours a genome browser shows, D-1):
+      measured 18 Nov 2026 it adds 41,955 Genes and, through create-gene-flanking-features (20
+      regions per gene), 0.84 million GeneFlankingRegions: 2.18 million objects instead of
+      0.37 million, Postgres 4.3 GB instead of 2.0, integrate +45 s, postprocess +270 s (the
+      search index most), and 2 duplicate symbols (RefSeq names some tRNA genes alike); left off
+      until the thin genome comes from the RDF side (BUILD.md, "Locations and gene models"). Keys: Gene on
       primaryIdentifier (the Entrez id, from Dbxref GeneID), Chromosome on primaryIdentifier and
       organism, both what the rdfc2im sources write, so it merges loaded after them in project.xml
       order (no load_first). No loader sets Chromosome.length from a GFF, so
@@ -163,7 +168,7 @@ sources:
         size: 77807126
         last_modified: "2024-08-27"
         stage_as: GRCh38_latest_genomic.gff
-        filter: {format: gff3, ids: entrez, keep_types: [gene]}
+        filter: {format: gff3, ids: entrez}
 
   ncbi-fasta:
     type: fasta

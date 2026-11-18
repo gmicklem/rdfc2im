@@ -605,3 +605,89 @@ def test_one_protein_per_accession_and_one_gene_per_identifier():
             if v is not None:
                 (dups if v in seen else seen).add(v)
         assert not dups, f"{len(dups)} duplicate {view}: {sorted(dups)[:10]}"
+
+
+# ----------------------------------------------------------------- stock ncbi-gff (--stock-sources) [im-9n4.9]
+GFF_DATA_SET = "ncbi-gff"                    # project.xml gff3.dataSetTitle
+RDF_GENE_DATA_SET = "NCBI Gene (RDF Portal)"  # the panel genes: rdfc2im's ncbigene source
+# GRCh38 chromosome lengths (the RefSeq GFF's ##sequence-region lines; identical to HumanMine's own
+# refSeqs.json, checked 18 Nov 2026)
+GRCH38_LENGTHS = {
+    "1": 248956422, "2": 242193529, "3": 198295559, "4": 190214555, "5": 181538259, "6": 170805979,
+    "7": 159345973, "8": 145138636, "9": 138394717, "10": 133797422, "11": 135086622, "12": 133275309,
+    "13": 114364328, "14": 107043718, "15": 101991189, "16": 90338345, "17": 83257441, "18": 80373285,
+    "19": 58617616, "20": 64444167, "21": 46709983, "22": 50818468, "X": 156040895, "Y": 57227415}
+# Panel genes the GRCh38 primary assembly does not carry: GSTT1 is annotated only on the alternate
+# locus NT_187633.1 (the primary chr22 has the deletion allele), whose rows the loader drops.
+NO_PRIMARY_LOCATION = {"GSTT1"}
+PAX6 = ("PAX6", "5080", "11", 31789026, 31817961)
+
+
+def stock_gff_loaded() -> bool:
+    try:
+        return bool(query_rows("DataSet.name", "DataSet.name", "=", GFF_DATA_SET))
+    except Exception:
+        return False
+
+
+def _gff_skip():
+    if not mine_up():
+        return _skip(f"live checks off or no mine at {MINE_BASE} (make test-live)")
+    if not stock_gff_loaded():
+        return _skip("mine built without --stock-sources ncbi-gff")
+    return None
+
+
+def test_every_panel_gene_has_a_chromosome_location():
+    """Gene.chromosomeLocation for the panel (T1.4 gate): what JBrowse and the report page's
+    location read. The only exceptions are genes the primary assembly lacks."""
+    if (s := _gff_skip()) is not None:
+        return s
+    rows = query_rows_q(
+        '<query model="genomic" view="Gene.symbol Gene.chromosomeLocation.start Gene.chromosome.primaryIdentifier">'
+        '<join path="Gene.chromosomeLocation" style="OUTER"/><join path="Gene.chromosome" style="OUTER"/>'
+        f'<constraint path="Gene.dataSets.name" op="=" value="{RDF_GENE_DATA_SET}"/></query>')
+    assert len(rows) >= 100, f"only {len(rows)} panel genes"
+    missing = {r[0] for r in rows if r[1] is None}
+    assert missing == NO_PRIMARY_LOCATION, f"panel genes without a location: {sorted(missing)}"
+    assert all(r[2] in GRCH38_LENGTHS for r in rows if r[1] is not None)
+
+
+def test_chromosomes_have_their_grch38_lengths_and_no_refseq_names():
+    """Chromosome.length comes from the GFF's ##sequence-region lines (ncbi-gff-lengths), one
+    Chromosome per name: the loader's 1..22, X, Y merged with the rdfc2im ones, no NC_ accession
+    names and no MT (the loader maps none)."""
+    if (s := _gff_skip()) is not None:
+        return s
+    rows = query_rows("Chromosome.primaryIdentifier Chromosome.length", "Chromosome.organism.taxonId", "=", "9606")
+    names = [r[0] for r in rows]
+    assert len(names) == len(set(names)), f"duplicate chromosomes: {sorted(names)}"
+    assert {r[0]: r[1] for r in rows} == GRCH38_LENGTHS, rows
+
+
+def test_the_example_gene_model_has_transcripts_and_exons():
+    """PAX6 at HumanMine's coordinates, with its RefSeq transcripts and exons (HumanMine, RefSeq
+    2021: 53 transcripts, 637 exons)."""
+    if (s := _gff_skip()) is not None:
+        return s
+    sym, pid, chrom, start, end = PAX6
+    loc = query_rows("Gene.primaryIdentifier Gene.chromosome.primaryIdentifier Gene.chromosomeLocation.start "
+                     "Gene.chromosomeLocation.end Gene.chromosomeLocation.strand", "Gene.symbol", "=", sym)
+    assert loc == [[pid, chrom, start, end, "-1"]], loc
+    tx = query_rows("Gene.transcripts.primaryIdentifier", "Gene.symbol", "=", sym)
+    ex = query_rows("Gene.transcripts.exons.primaryIdentifier", "Gene.symbol", "=", sym)
+    assert len(tx) >= 40 and len({r[0] for r in ex}) >= 300, (len(tx), len(ex))
+
+
+def test_jbrowse_serves_the_chromosomes_and_the_example_gene():
+    """/service/jbrowse/config/9606/seq/refSeqs.json lists the chromosomes with a length > 0
+    (Config.serveRefSeqs; it was a 404 "No Chromosomes on 9606" before), and a features request
+    for PAX6's region returns the gene."""
+    if (s := _gff_skip()) is not None:
+        return s
+    refs = _get_json(f"{MINE_BASE}/service/jbrowse/config/9606/seq/refSeqs.json")
+    assert {r["name"]: r["end"] - r["start"] for r in refs} == GRCH38_LENGTHS, refs
+    sym, pid, chrom, start, end = PAX6
+    feats = _get_json(f"{MINE_BASE}/service/jbrowse/9606/features/{chrom}?start={start}&end={end}&type=Gene")
+    names = {f.get("symbol") or f.get("name") for f in feats.get("features", [])}
+    assert sym in names, feats
