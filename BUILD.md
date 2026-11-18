@@ -1980,10 +1980,12 @@ check-release` on the extracted content.
 * `stock_filtered-2026-11-18.tar.gz`: the 13 redistributable filtered stock groups under `filtered-cache/`, with
   `LICENCES-stock-filtered.txt` (as first prepared it said Human Protein Atlas was CC BY-SA 4.0 share-alike; that was wrong, the
   Atlas states CC BY 4.0. im-9n4.45 read every source's own licence statement: corrected text in `docs/LICENCES-stock-filtered.txt`,
-  and `stock-panther`, `stock-psi-intact`, `stock-gtex`, `stock-hpo-annotation` have no readable terms, so hold them back; see docs/LICENCES.md). Extract into the directory above `RDFC2IM_STOCK_FILTERED_CACHE`. Not in it: groups for whole-file
+  and the second pass (im-9n4.45, 18 Nov) read the terms of all but PANTHER: leave `stock-panther` out, the other twelve groups may be published with the notice; see docs/LICENCES.md, "Release assets"). Extract into the directory above `RDFC2IM_STOCK_FILTERED_CACHE`. Not in it: groups for whole-file
   sources (interpro-go, psi-mi-ontology, uniprot-keywords, orphanet), which stay raw groups in `stock_ut/cache`.
 * `cached_raw_data_allgenes-2026-11-18.tar.gz`: the two RDF groups that differ in an all-genes build (`ncbigene`, `hgnc`, scope=full).
   `hgnc` holds HGNC's own `main_see_also_omim.tsv` (OMIM ids as HGNC publishes them, no OMIM data).
+  Both are verified (NCBI: no restrictions; HGNC: CC0); the notice text is in `docs/LICENCES-panel-cache.txt`. That file is also
+  the notice for the published panel cache (release `demo-data-2026-11-18`), which had none.
 
 ## Persistence, and what does not survive
 

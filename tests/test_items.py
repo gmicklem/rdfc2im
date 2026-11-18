@@ -182,6 +182,26 @@ def test_data_source_gets_a_url_when_the_source_config_declares_one(tmp_path):
     assert 'name="url"' not in xml2
 
 
+def test_data_set_gets_the_upstream_licence_when_the_source_config_declares_one(tmp_path):
+    """DataSet.licence [im-9n4.45]: the ten RDF data sets showed an empty licence. data_set_licence in
+    sources.yaml is optional; a source with none (an unverified licence) writes no licence."""
+    m = make_model(tmp_path)
+    xmls = []
+    for n, cfg in enumerate(({"data_set_licence": "https://creativecommons.org/licenses/by/4.0/"}, {})):
+        out = tmp_path / f"o{n}"; (out / "tsv").mkdir(parents=True)
+        (out / "columns.tsv").write_text(textwrap.dedent("""\
+        table\tposition\tcolumn\tvariable\tim_class\tim_field\ttransform\tfilter\tvalue\tkind\tvia\tstatus\trequired
+        main\t0\tid\tid\tGene\tprimaryIdentifier\t\t\t\tliteral\t\tsure\tyes
+        main\t1\tc\t\tOrganism\ttaxonId\t\t\t9606\tconst\t\tsure\tno
+        """))
+        (out / "tsv" / "main.tsv").write_text("Gene.primaryIdentifier\tOrganism.taxonId\n1\t9606\n")
+        emit_items(m, str(out), "t", dict({"data_source_name": "GO", "data_set_title": "GO set"}, **cfg),
+                   log=lambda *a: None)
+        xmls.append((out / "items" / "t.xml").read_text())
+    assert 'name="licence" value="https://creativecommons.org/licenses/by/4.0/"' in xmls[0]
+    assert 'name="licence"' not in xmls[1]
+
+
 def test_items_links_and_merging(tmp_path):
     m = make_model(tmp_path)
     out = tmp_path / "out"; (out / "tsv").mkdir(parents=True)

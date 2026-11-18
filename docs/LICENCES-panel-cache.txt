@@ -1,0 +1,82 @@
+Raw-data cache of the rdfc2im hybrid HumanMine demo, 114-gene panel (release demo-data-2026-11-18); notice written
+2026-11-18, second pass, im-9n4.45
+==============================================================================================================
+
+Each directory is a cache group: a fetch of an upstream source, cut to the gene panel where the group says scope=panel
+in its META.json (the data were changed by filtering or by re-writing RDF query results as tables; rows were left out,
+none was edited). Nothing here is original to this project; each group stays under its upstream licence and must be
+credited to it. The licence of each source was read from the source's own page or file on 2026-11-18; the record with
+links and wording is rdfc2im/data/sources.yaml, stock_sources.yaml, other_licences.yaml and docs/LICENCES.md.
+
+uniprot
+  UniProtKB (RDF Portal), human Swiss-Prot entries for the panel.  CC BY 4.0, (c) UniProt Consortium; the data were filtered.
+  https://ftp.ebi.ac.uk/pub/databases/uniprot/current_release/knowledgebase/complete/README
+
+go
+  Gene Ontology (go-basic and its tables).  CC BY 4.0, GO Consortium.  Gene Ontology data from the GO release in the
+  group is made available under the terms of the CC BY 4.0 licence, https://creativecommons.org/licenses/by/4.0/, with
+  its disclaimer of warranties. Cite Ashburner et al., Nat Genet 2000;25:25-9 and The Gene Ontology Consortium, The
+  Gene Ontology knowledgebase in 2026, Nucleic Acids Res 2025 (doi 10.1093/nar/gkaf1292).
+  https://geneontology.org/docs/go-citation-policy/
+
+reactome, reactome-uniprot-map
+  Reactome pathways and UniProt2Reactome.txt.  CC0 1.0 ("All data in the Reactome database and files derived from that
+  data are licensed under the Creative Commons Public Domain Dedication (CC0)"); no attribution required, given as courtesy.
+  https://reactome.org/license
+
+hgnc
+  HGNC gene nomenclature (RDF Portal), panel genes.  CC0 1.0: "all data is released under the Creative Commons Public
+  Domain (CC0) License". Attribution is recommended: Seal RL et al., Genenames.org: the HGNC and PGNC resources in 2026,
+  Nucleic Acids Research; or HGNC (RRID:SCR_002827).
+  https://www.genenames.org/about/license/
+
+ncbigene, gene-id-lookup, grch38-chromosome-lengths
+  NCBI Gene (RDF Portal) and NCBI gene_info for the ID resolver, panel genes.  NCBI "places no restrictions on the use or
+  distribution of the data contained therein"; no licence is named.  Source: National Library of Medicine, National Center
+  for Biotechnology Information.  Some records may carry rights claimed by their submitters, which NCBI cannot waive.
+  The chromosome lengths (grch38-chromosome-lengths) are the GRCh38 sequence lengths as served by the HumanMine JBrowse
+  configuration; no licence is stated there.
+  https://www.ncbi.nlm.nih.gov/home/about/policies/
+
+clinvar
+  ClinVar (RDF Portal), panel genes.  NCBI's general policy places no restrictions on use or distribution (see above);
+  ClinVar's own data-use page (https://www.ncbi.nlm.nih.gov/clinvar/docs/maintenance_use/) could not be read. Source:
+  NCBI ClinVar, National Library of Medicine.
+
+pubmed
+  PubMed records for the panel's cited articles (RDF Portal).  NLM Terms and Conditions: Source: National Library of
+  Medicine, acknowledged "in a clear and conspicuous manner". This product is not endorsed by NLM, NIH or HHS and does not
+  use the PubMed wordmark or logo. This copy is a snapshot taken on 2026-11-18 and does not reflect the most current
+  data available from NLM. Some abstracts may be protected by copyright.
+  https://www.nlm.nih.gov/databases/download.html  and  https://ftp.ncbi.nlm.nih.gov/pubmed/baseline/README.txt
+
+hpo
+  Human Phenotype Ontology (hp), the whole ontology re-written as tables (terms, alternative ids, synonyms, SNOMED CT
+  cross-references, superclasses); nothing left out or changed.  This product uses the Human Phenotype Ontology (version
+  information as in the cache). Find out more at http://www.human-phenotype-ontology.org .  The HPO licence requires the
+  Human Phenotype Ontology Consortium to be acknowledged and cited, the date or version of displayed files to be shown,
+  and that "neither the content of the HPO file(s) nor the logical relationships embedded within the HPO file(s) be altered
+  in any way".
+  https://hpo.jax.org/license
+
+gwascatalog
+  GWAS Catalog associations as served by TogoVar (RDF Portal).  "The NHGRI-EBI GWAS Catalog and all its contents are
+  available under the general Terms of Use for EMBL-EBI Services. Summary statistics are made available under CC0 unless
+  otherwise stated." Cite the GWAS Catalog. TogoVar's own terms could not be read.
+  https://www.ebi.ac.uk/gwas/docs/about
+
+ensembl
+  Ensembl genes (RDF Portal), panel genes.  The terms of Ensembl's disclaimer page (https://www.ensembl.org/info/about/
+  legal/disclaimer.html) were NOT read: the page could not be reached on 2026-11-18. Nothing read forbids a copy; the
+  EMBL-EBI terms of use say EMBL-EBI "imposes no additional restriction on the use of the contributed data than those
+  provided by the data owner". Source: Ensembl, EMBL-EBI.  If these terms are not acceptable, remove this group.
+
+bluegenes-tools, bluegenes-tools-patched
+  The 18 BlueGenes tool npm packages (MIT x16, LGPL-3.0 x1, LGPL-2.1 x1); the patched set is the same packages with
+  small changes listed in META.json. Keep each package's licence notice. The LGPL text goes beside
+  cytoscape-interaction-network-viewer (LGPL-3.0) and protvista (LGPL-2.1, no LICENSE file in the package); the source of
+  both is available from their npm pages.
+
+humanmine-model
+  The HumanMine data model (humanmine_model.xml and .json), part of the InterMine/HumanMine software; it is not data
+  from any source above and no separate licence was read for it in this pass.

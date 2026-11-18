@@ -17,15 +17,17 @@ reactome:
 
 ncbi-gene-info:
   # the ID resolver's gene_info files (ftp.ncbi.nlm.nih.gov/gene/DATA/GENE_INFO/), cache group gene-id-lookup
-  licence: "NCBI FTP notice: unrestricted public data (no licence named)"
-  licence_status: partial
-  licence_url: "https://ftp.ncbi.nlm.nih.gov/README.ftp"
+  licence: "No restrictions by NCBI (NCBI data-use policy; no licence named)"
+  licence_status: verified
+  licence_url: "https://www.ncbi.nlm.nih.gov/home/about/policies/"
   licence_checked: "2026-11-18"
-  licence_quote: "NOTE: ALL DATA HERE IS PUBLIC, NON-SENSITIVE, UNRESTRICTED SCIENTIFIC DATA SHARING AMONG SCIENTIFIC COMMUNITIES."
+  licence_quote: "NCBI itself places no restrictions on the use or distribution of the data contained therein."
   licence_conditions:
-    - "The notice names no licence and asks for no attribution; gene/DATA/README and the file header state none either. NCBI's data-use policy page (https://www.ncbi.nlm.nih.gov/home/about/policies/) is on a host the sandbox blocks (www.ncbi.nlm.nih.gov), so it was not read."
+    - "No licence is named and NCBI asks for no attribution for the data. The policy (Molecular Data Usage) adds: \"some submitters of the original data (or the country of origin of such data) may claim patent, copyright, or other intellectual property rights in all or a portion of the data\"; NCBI \"cannot provide comment or unrestricted permission concerning the use, copying, or distribution of the information contained in the molecular databases\"."
+    - "For NCBI's own web pages (public domain): \"it is requested that in any subsequent use of this work, NLM be given appropriate acknowledgment\". Giving that acknowledgement is cheap and the notice files do it."
+    - "The server notice (https://ftp.ncbi.nlm.nih.gov/README.ftp) agrees: \"ALL DATA HERE IS PUBLIC, NON-SENSITIVE, UNRESTRICTED SCIENTIFIC DATA SHARING AMONG SCIENTIFIC COMMUNITIES.\""
   redistributable: true
-  redistributable_reason: "The server notice says the data are unrestricted; the policy page was not readable."
+  redistributable_reason: "NCBI places no restrictions on use or distribution of its molecular data; third-party claims on single records are the submitters' (NCBI cannot grant them)."
 
 bluegenes-tools:
   # the 18 npm packages of cache group bluegenes-tools (bluegenes-tools-patched: 19 packages, two of them patched
