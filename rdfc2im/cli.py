@@ -216,7 +216,7 @@ def _add_stock_parser(sub):
                         help="local copies: DIR/<source>/<raw file name> (full-build.sh --stock-local)")
     ss = p.add_subparsers(dest="stock_cmd", required=True)
     ss.add_parser("list", parents=[common])
-    for name in ("check", "jars", "files", "postprocess", "size"):
+    for name in ("check", "jars", "files", "postprocess", "size", "resolver"):
         c = ss.add_parser(name, parents=[common])
         c.add_argument("names", nargs="*", help="stock source names (space or comma separated)")
         if name == "check":
@@ -225,6 +225,8 @@ def _add_stock_parser(sub):
             c.add_argument("--taxon", default="9606")
         if name in ("check", "postprocess"):
             c.add_argument("--project-xml", default=None, help="default: the workspace's project_xml")
+        if name == "resolver":
+            c.add_argument("--taxon", default="9606")
         if name == "jars":
             c.add_argument("--im-version", required=True, help="the --intermine-src checkout's version")
         if name == "files":
@@ -282,6 +284,8 @@ def run_stock(a, ws) -> int:
             rows = stock.jar_rows(table, names, a.im_version)
         elif a.stock_cmd == "files":
             rows = stock.file_rows(table, names, a.stock_dir, a.raw_cache, a.local)
+        elif a.stock_cmd == "resolver":
+            rows = stock.resolver_rows(table, names, a.taxon.split(",")[0])
         elif a.stock_cmd == "postprocess":
             px = a.project_xml or ws.get("project_xml")
             rows = stock.postprocess_rows(table, names, px if px and os.path.exists(px) else None)

@@ -361,7 +361,7 @@ def test_gene_panel_is_panel_sized():
     """
     if not mine_up():
         return _skip(f"live checks off or no mine at {MINE_BASE} (make test-live)")
-    rows = query_rows("Gene.primaryIdentifier", "Gene.primaryIdentifier", "!=", "__none__")
+    rows = query_rows("Gene.primaryIdentifier", "Gene.organism.taxonId", "=", "9606")   # panther adds partner genes of other taxa
     assert 0 < len(rows) < 1000, (
         f"expected a panel-sized Gene table, got {len(rows)} - is a source unscoped?")
 
@@ -756,7 +756,7 @@ def test_the_go_enrichment_widget_is_served_and_enriches_a_list_of_panel_genes()
 
     try:
         r = call(f"{MINE_BASE}/service/lists?" + urllib.parse.urlencode({"name": name, "type": "Gene", "format": "json"}),
-                 b"CYP2D6\nCYP2C9\nCYP2C19\nCYP3A4\nCYP1A2\nPAX6", "POST")
+                 b"1565\n1559\n1557\n1576\n1544\n5080", "POST")
         assert r["wasSuccessful"] and r["listSize"] == 6, r
         e = call(f"{MINE_BASE}/service/list/enrichment?" + urllib.parse.urlencode(
             {"widget": "go_enrichment_for_gene", "list": name, "correction": "Holm-Bonferroni", "maxp": "0.05",
@@ -767,3 +767,54 @@ def test_the_go_enrichment_widget_is_served_and_enriches_a_list_of_panel_genes()
             call(f"{MINE_BASE}/service/lists?" + urllib.parse.urlencode({"name": name, "format": "json"}), None, "DELETE")
         except Exception:
             pass
+
+
+# ----------------------------------------------------------------- stock panther, mgi-identifiers [im-9n4.12]
+PANTHER_DATA_SET = "Panther orthologue and paralogue predictions"   # PantherConverter's data set title
+
+
+def stock_panther_loaded() -> bool:
+    try:
+        return bool(query_rows("DataSet.name", "DataSet.name", "=", PANTHER_DATA_SET))
+    except Exception:
+        return False
+
+
+def _panther_skip():
+    if not mine_up():
+        return _skip(f"live checks off or no mine at {MINE_BASE} (make test-live)")
+    if not stock_panther_loaded():
+        return _skip("mine built without --stock-sources panther")
+    return None
+
+
+def test_the_example_genes_have_homologues_in_the_partner_organisms():
+    """PAX6 (Entrez 5080) has 12 here (HumanMine 10): mouse, rat, zebrafish (3), fly (5), worm (2)."""
+    if (s := _panther_skip()) is not None:
+        return s
+    rows = query_rows("Gene.homologues.homologue.primaryIdentifier Gene.homologues.homologue.organism.taxonId",
+                      "Gene.primaryIdentifier", "=", "5080")
+    assert len(rows) >= 10 and {r[1] for r in rows} >= {"10090", "7227", "7955", "6239"}, rows
+    assert len(query_rows("Gene.homologues.homologue.primaryIdentifier", "Gene.primaryIdentifier", "=", EXAMPLE_GENE_ID)) >= 20
+
+
+def test_mouse_partner_genes_have_their_mgi_symbols_and_every_gene_has_an_organism():
+    """Panther makes partner genes from an id alone; mgi-identifiers (cut to those genes) adds symbol and name."""
+    if (s := _panther_skip()) is not None:
+        return s
+    rows = query_rows("Gene.homologues.homologue.symbol Gene.homologues.homologue.primaryIdentifier", "Gene.primaryIdentifier", "=", "5080")
+    assert ("Pax6", "MGI:97490") in {tuple(r) for r in rows}, rows
+    nameless = query_rows_q('<query model="genomic" view="Gene.primaryIdentifier"><join path="Gene.organism" style="OUTER"/>'
+                            '<constraint path="Gene.organism" op="IS NULL"/></query>')
+    assert nameless == [], nameless[:5]
+
+
+def test_no_gene_is_duplicated_across_the_homologue_organisms():
+    """One Gene per primaryIdentifier (the panther and mgi-identifiers keys) and one per symbol within a taxon."""
+    if (s := _panther_skip()) is not None:
+        return s
+    rows = query_rows("Gene.primaryIdentifier Gene.symbol Gene.organism.taxonId", "Gene.primaryIdentifier", "CONTAINS", "")
+    ids = [r[0] for r in rows]
+    assert len(ids) == len(set(ids)), "duplicate Gene.primaryIdentifier"
+    syms = [(r[2], r[1]) for r in rows if r[1]]
+    assert len(syms) == len(set(syms)), "duplicate Gene.symbol within a taxon"

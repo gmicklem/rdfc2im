@@ -595,6 +595,43 @@ panel. `go_enrichment_for_gene` and the `GOAnnotation` model are what it restore
   `prepare_mine_checkout`'s delete finds it too. The same run warns `Resolver file does not exist: .../resolver/wormid`
   (WormBase resolver, not used for human).
 
+#### Homologues: panther and mgi-identifiers [im-9n4.12]
+
+`--stock-sources "... go-annotation interpro-go panther mgi-identifiers"` on the ut stack, same panel.
+
+* **Downloads** (once): `RefGenomeOrthologs.tar.gz` 5.9 MB (PANTHER 19), `MRK_List2.rpt` 78.8 MB (MGI, 16 Nov 2026), and
+  NCBI's `Rattus_norvegicus.gene_info.gz` (2.6 MB) and `Danio_rerio.gene_info.gz` (2.2 MB) for the resolver.
+* **Filter.** A PANTHER row is `HUMAN|HGNC=8620|UniProtKB=P26367<TAB>MOUSE|MGI=MGI=97490|UniProtKB=P63015<TAB>LDO<TAB>Euarchontoglires<TAB>PTHR45636`.
+  The tab filter keeps a row when either of columns 1 and 2 holds a panel UniProt accession (`ids: uniprot`, `column: "1,2"`).
+  `subset_raw.py`'s cell matcher knew `db:id` only; it now also strips `db=` (`UniProtKB=P26367`, `MGI=MGI=97490`), with tests.
+  908,678 rows in, **2,289 out**, 113 of the 114 panel genes matched (HNMT, P50135, has no PANTHER row).
+* **Partner genes and symbols.** PantherConverter creates every partner gene from its id alone (`MGI:97490`, `RGD:3258`,
+  `FBgn...`, `ZDB-GENE-...`, `WBGene...`): no symbol. In HumanMine only mouse and rat get one, from `mgi-identifiers`
+  (MRK_List2.rpt) and `rgd-identifiers` (GENES_RAT.txt); fly, worm, zebrafish and yeast partners have a primary identifier
+  only there too. Both identifier loaders read every marker of their genome, so they are cut to the partner genes:
+  `subset_raw.py partner-ids` writes `idsets/mgi.txt` (182 ids) and `idsets/rgd.txt` (170) from the filtered PANTHER file
+  (panther is therefore cut first, `needs: [panther]` on both), and MRK_List2.rpt is filtered on column 1 to those ids
+  (656,902 markers in, 182 out). The cache group of each also records the md5 of its id set.
+  **rgd-identifiers is in the table but not loaded: `download.rgd.mcw.edu` is behind the sandbox firewall (HTTP 403,
+  "Approval required"), so the URL is unverified (`verified: false`) and the 165 rat genes have no symbol.**
+* **Result.** Homologue 3,166 (2,568 orthologue, 598 least diverged), Gene 1,111 (human 114, worm 257, fly 216, mouse 182,
+  rat 165, zebrafish 152, yeast 25), all objects 465,814 (was 458,469). PAX6 has 12 homologues (HumanMine 10: mouse,
+  rat, 3 fish, 5 fly, 2 worm), CYP2D6 67. 0 duplicate `Gene.primaryIdentifier`, 0 duplicate symbol within a taxon, no Gene
+  without an organism. Only the 114 human and 182 mouse genes have a symbol. Integrate 297 s (was about 2 min), postprocess 101 s.
+* **No human partners outside the panel**: the file has no paralogue rows, so every human Gene is a panel gene.
+* **The ID resolver, now with a real consumer.** PantherConverter resolves only human (HGNC id to Entrez id, the primary
+  identifier), rat and zebrafish genes; mouse, fly, worm and yeast ids are never looked up and pass through. When the
+  resolver holds no file for rat or fish the id passes through too (`no resolver available` is logged). With only the
+  human file that is what happened; now `resolver_taxa: [10116, 7955]` makes the build fetch one NCBI file per
+  taxon (cache group `stock-raw-resolver-<taxon>`, `rdfc2im stock resolver`), cut each to its taxon and append it to
+  `resolver/entrez` (HumanMine's own is one multi-species `gene_info`). The log shows `Gene ... does not have xref
+  pattern: ZFIN` for the fish genes without a ZFIN id and `RESOLVER: failed to resolve gene to one identifier, ignoring
+  gene` 16 times (Ensembl-only or ZFIN-less fish ids and one rat id): the converter drops those. Mouse, fly and yeast
+  files are not fetched: nothing here resolves them (go-annotation's `getIdResolverForMOD` asks for them but annotates human
+  proteins only; it logs `No records in gene_info file for species: [10090, 559292]`).
+* **Layout.** Homology now keeps `homologues`; HumanMine's `Gene_Orth2` is not one of its public templates, so the
+  category holds the class table only.
+
 ### The ID-resolver gate [im-9n4.4]
 
 The stock loaders for psi, biogrid, panther, omim and the HumanMine expression sources have no gene filter; the
@@ -604,6 +641,9 @@ table leaves them `filter: none`. What cuts them is the mine's ID resolver: each
 
 * `fetch_stock_data` downloads NCBI's `Homo_sapiens.gene_info.gz` (public domain, 5.2 MB; cache group
   `stock-raw-resolver` in the stock cache, same URL / `Last-Modified` rules as the other raw groups).
+* A source with `resolver_taxa` in the table (panther: rat 10116 and zebrafish 7955) adds NCBI's per-organism file of each
+  taxon (`rdfc2im stock resolver`; cache group `stock-raw-resolver-<taxon>`); each is cut to its taxon and appended to
+  `entrez` [im-9n4.12].
 * `subset_stock_data` runs `subset_raw.py filter --format gene_info --taxon 9606` on it and writes the result
   uncompressed as `$RDFC2IM_STOCK_DIR/resolver/entrez`. The default keeps **every** human gene, because the mine
   holds all human genes as identifiers (deep annotation only for the panel): interaction and orthologue

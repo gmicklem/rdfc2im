@@ -262,11 +262,11 @@ def test_subset_writes_the_all_human_gene_info_as_entrez_in_the_resolver_root(tm
     stock, cmds = tmp_path / "stock", _cmds(plan, "subset_stock_data")
     flt = next(c for c in cmds if "subset_raw.py filter --format gene_info" in c)
     assert f"--in {stock}/cache/stock-raw-resolver/data/Homo_sapiens.gene_info.gz" in flt
-    assert flt.endswith(f"--out {stock}/resolver/entrez --taxon 9606"), flt      # plain text, no --ids (D-1)
+    assert flt.endswith(f"--taxon 9606 --out {stock}/resolver/entrez"), flt      # plain text, no --ids (D-1)
     assert cmds.index(f"mkdir -p {stock}/resolver") < cmds.index(flt)
     plan = _plan(tmp_path, "--only", "subset_stock_data", "--resolver-scope", "panel", *_stock(tmp_path))
     flt = next(c for c in _cmds(plan, "subset_stock_data") if "subset_raw.py filter --format gene_info" in c)
-    assert flt.endswith(f"--taxon 9606 --ids {stock}/idsets/entrez.txt"), flt
+    assert flt.endswith(f"--out {stock}/resolver/entrez --ids {stock}/idsets/entrez.txt"), flt
     rc, out = _run(tmp_path, "--only", "subset_stock_data", "--resolver-scope", "mouse", *_stock(tmp_path))
     assert rc == 2 and "--resolver-scope wants panel or taxon" in out
 
@@ -345,3 +345,28 @@ def test_build_dbmodel_restores_the_two_reduced_files_before_it_reduces_them_aga
     reduce_web = next(i for i, c in enumerate(cmds) if "reduce_mine.py webconfig" in c)
     assert max(web, osc) < builddb < reduce_web, cmds
     assert any(c.startswith("sed -i s|localhost:[0-9]*/solr/|localhost:") and "objectstoresummary" in c for c in cmds[osc:builddb]), cmds
+
+
+def test_panther_adds_rat_and_zebrafish_gene_info_to_the_resolver_and_is_cut_first(tmp_path):
+    """im-9n4.11: PantherConverter resolves human, rat and fish genes; a resolver file of human genes only leaves
+    the others passed through unresolved. One NCBI file per taxon, one cache group each, appended to `entrez`."""
+    args = ("--intermine-src", _fake_intermine_60(tmp_path), "--stock-sources", "panther mgi-identifiers uniprot")
+    plan = _plan(tmp_path, "--only", "fetch_stock_data", *args)
+    if plan is None:
+        return
+    stock = tmp_path / "stock"
+    saves = [c for c in _cmds(plan, "fetch_stock_data") if " cache save stock-raw-resolver" in c]
+    assert [c.split()[5] for c in saves] == ["stock-raw-resolver", "stock-raw-resolver-10116", "stock-raw-resolver-7955"], saves
+    assert any("/GENE_INFO/Mammalia/Rattus_norvegicus.gene_info.gz" in c for c in _cmds(plan, "fetch_stock_data"))
+    plan = _plan(tmp_path, "--only", "subset_stock_data", *args)
+    cmds = _cmds(plan, "subset_stock_data")
+    flts = [c for c in cmds if "subset_raw.py filter --format gene_info" in c]
+    assert [c.split("--taxon ")[1].split()[0] for c in flts] == ["9606", "10116", "7955"], flts
+    assert flts[1].endswith(f"--out {stock}/unpacked/resolver-10116.gene_info")
+    assert any(c.startswith("bash -c cat ") and c.endswith(f">> '{stock}/resolver/entrez'") for c in cmds)
+    # panther is cut before mgi-identifiers, and its partner genes become the id set that file is cut to
+    pan = next(i for i, c in enumerate(cmds) if "stock-panther " in c and "cache save" in c)
+    part = next(i for i, c in enumerate(cmds) if "subset_raw.py partner-ids" in c)
+    mgi = next(i for i, c in enumerate(cmds) if "subset_raw.py filter --format tab" in c and "MRK_List2.rpt" in c)
+    assert pan < part < mgi, cmds
+    assert f"--ids {stock}/idsets/mgi.txt" in cmds[mgi] and "--column 1" in cmds[mgi]

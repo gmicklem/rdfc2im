@@ -12,6 +12,8 @@ reads it only through `rdfc2im stock ...` (cli.run_stock), so bash never parses 
                              it is staged
   stock postprocess NAME...  the postprocesses the selection needs, in HumanMine's order (plan 50 row 12)
   stock meta NAME            `--meta k=v` words for the source's filtered cache group
+  stock resolver NAME...     one row per NCBI gene_info file the ID resolver needs: the --taxon one first, then the
+                             `resolver_taxa` of the selected sources [im-9n4.11]
 
 Rows are tab-separated with '-' for an empty field (bash `read` collapses empty tab fields).
 """
@@ -40,7 +42,16 @@ FORMATS = ("gaf", "gff3", "uniprot-xml", "fasta", "tab", "gene_info")
 NEEDS_IDS = ("gaf", "gff3", "uniprot-xml", "fasta", "tab")
 # entrez..symbol: the panel id sets; chromosomes: the RefSeq accessions of the GRCh38 chromosomes
 # the ncbi-gff loader maps (not panel-dependent; `subset_raw.py idsets` writes it too)
-ID_KINDS = ("entrez", "ensembl", "uniprot", "symbol", "chromosomes", "none")
+ID_KINDS = ("entrez", "ensembl", "uniprot", "symbol", "chromosomes", "mgi", "rgd", "none")
+# mgi, rgd: the partner genes of the panel's PANTHER rows (`subset_raw.py partner-ids`), "MGI:97490" and "3258", for
+# cutting mgi-identifiers' and rgd-identifiers' whole-genome files down to the genes panther will create [im-9n4.11]
+# NCBI's per-organism gene_info files (the ID resolver reads them whole, one taxon at a time): taxon -> path under
+# ftp.ncbi.nlm.nih.gov/gene/DATA/GENE_INFO/. The resolver's own config maps yeast to strain 559292; add it with a
+# source that resolves yeast.
+GENE_INFO_URL = "https://ftp.ncbi.nlm.nih.gov/gene/DATA/GENE_INFO/{}.gene_info.gz"
+GENE_INFO_PATHS = {"9606": "Mammalia/Homo_sapiens", "10090": "Mammalia/Mus_musculus",
+                   "10116": "Mammalia/Rattus_norvegicus", "7955": "Non-mammalian_vertebrates/Danio_rerio",
+                   "7227": "Invertebrates/Drosophila_melanogaster"}
 # The file a `chromosome_lengths` entry writes (tools/subset_raw.py chromosome-lengths), and the
 # format word its row carries in `stock files`.
 LENGTHS_FILE = "chromosome_lengths.xml"
@@ -111,6 +122,9 @@ def validate_table(table: Dict[str, dict]) -> List[str]:
         for n in e.get("needs", []) or []:
             if n not in table:
                 out.append(f"{where}: needs '{n}', which is not in the table")
+        rt = e.get("resolver_taxa", [])
+        if not isinstance(rt, list) or not all(str(t) in GENE_INFO_PATHS for t in rt):
+            out.append(f"{where}: `resolver_taxa` must be a list of taxon ids from {', '.join(GENE_INFO_PATHS)}")
         if not isinstance(e.get("load_first", False), bool):
             out.append(f"{where}: `load_first` must be true or false")
         if not isinstance(e.get("properties", {}) or {}, dict):
@@ -449,6 +463,22 @@ def file_rows(table: Dict[str, dict], names: List[str], stock_dir: str, raw_cach
                              LENGTHS_FORMAT, None, None, "9606", 0,
                              os.path.join(stock_dir, "subset", n, "chromosome-lengths"), "derived",
                              cl["data_dir"].strip("/"), LENGTHS_FILE, None))
+    return rows
+
+
+def resolver_rows(table: Dict[str, dict], names: List[str], taxon: str = "9606") -> List[str]:
+    """taxon, url, raw file name: the gene_info files the mine's ID resolver is built from. The --taxon one is
+    always there (the T0.3 gate); a selected source adds its `resolver_taxa` (panther: the partner organisms its
+    converter resolves, rat and zebrafish). In first-listed order, each once."""
+    taxa = [str(taxon)]
+    for n in names:
+        taxa += [str(t) for t in table[n].get("resolver_taxa") or []]
+    rows = []
+    for t in dict.fromkeys(taxa):
+        if t not in GENE_INFO_PATHS:
+            raise StockError(f"no NCBI gene_info file known for taxon {t} (stock.GENE_INFO_PATHS)")
+        url = GENE_INFO_URL.format(GENE_INFO_PATHS[t])
+        rows.append(_row(t, url, os.path.basename(url)))
     return rows
 
 

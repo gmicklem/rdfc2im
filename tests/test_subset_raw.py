@@ -404,3 +404,38 @@ def test_real_refseq_gff3_sample(tmp_path):
     out, res = filt(tmp_path, "gff3", os.path.join(REAL, "refseq_grch38_sample.gff3"), os.path.join(REAL, "gff3_ids.txt"))
     assert read(out) == read(os.path.join(REAL, "refseq_expected.gff3"))
     assert res["ids_matched"] == 2
+
+
+# ---- PANTHER rows [im-9n4.11]
+
+PANTHER = ("HUMAN|HGNC=8620|UniProtKB=P26367\tMOUSE|MGI=MGI=97490|UniProtKB=P63015\tLDO\tEuarchontoglires\tPTHR45636\n"
+           "HUMAN|HGNC=8620|UniProtKB=P26367\tRAT|RGD=3258|UniProtKB=P63016\tLDO\tEuarchontoglires\tPTHR45636\n"
+           "HUMAN|HGNC=8620|UniProtKB=P26367\tDANRE|ZFIN=ZDB-GENE-041210-244|UniProtKB=G2ZGB0\tO\tEuteleostomi\tPTHR45636\n"
+           "MOUSE|MGI=MGI=1|UniProtKB=Q1\tRAT|RGD=2|UniProtKB=Q2\tLDO\tMuridae\tPTHR0\n"
+           "HUMAN|HGNC=1|UniProtKB=P00001\tMOUSE|MGI=MGI=5|UniProtKB=Q5\tLDO\tEuarchontoglires\tPTHR1\n")
+
+
+def test_panther_cells_match_on_their_db_equals_id_tokens():
+    ids = {"P26367"}
+    assert subset_raw._cell_hit("HUMAN|HGNC=8620|UniProtKB=P26367", ids) == "P26367"
+    assert subset_raw._cell_hit("MOUSE|MGI=MGI=97490|UniProtKB=P63015", ids) is None
+    assert subset_raw._cell_hit("HUMAN|HGNC=8620|UniProtKB=P26367-2", ids) == "P26367"
+
+
+def test_tab_filter_keeps_panther_rows_with_a_panel_gene_in_either_cell(tmp_path):
+    src, dst = tmp_path / "RefGenomeOrthologs", tmp_path / "out"
+    src.write_text(PANTHER)
+    res = subset_raw.filter_tab(str(src), str(dst), {"P26367", "Q2"}, [0, 1])
+    lines = dst.read_text().splitlines()
+    assert res["records_in"] == 5 and res["records_out"] == 4 and len(lines) == 4, lines   # the Q2 row too
+    assert not any("P00001" in l for l in lines)
+
+
+def test_partner_ids_are_the_mgi_and_rgd_ids_of_rows_with_a_panel_gene(tmp_path, capsys):
+    src, ids, out = tmp_path / "RefGenomeOrthologs", tmp_path / "uniprot.txt", tmp_path / "idsets"
+    src.write_text(PANTHER)
+    ids.write_text("P26367\n")
+    assert subset_raw.main(["partner-ids", "--in", str(src), "--ids", str(ids), "--out", str(out)]) == 0
+    assert (out / "mgi.txt").read_text() == "MGI:97490\n"          # col 1 of MRK_List2.rpt
+    assert (out / "rgd.txt").read_text() == "3258\n"               # the bare number of GENES_RAT.txt
+    assert '"mgi": 1' in capsys.readouterr().out
