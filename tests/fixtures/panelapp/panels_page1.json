@@ -1,0 +1,86 @@
+{
+ "count": 5,
+ "next": "https://panelapp.genomicsengland.co.uk/api/v1/panels/?page=2",
+ "previous": null,
+ "results": [
+  {
+   "disease_group": "Endocrinology",
+   "disease_sub_group": "",
+   "hash_id": "569380ac22c1fc251660faf8",
+   "id": 9,
+   "name": "Differences in sex development",
+   "relevant_disorders": [
+    "Disorders of sex development",
+    "R146",
+    "GT771",
+    "TP322"
+   ],
+   "stats": {
+    "number_of_genes": 3,
+    "number_of_regions": 1,
+    "number_of_strs": 0
+   },
+   "status": "public",
+   "types": [
+    {
+     "description": "Rare Disease 100K",
+     "name": "Rare Disease 100K",
+     "slug": "rare-disease-100k"
+    },
+    {
+     "description": "This is a panel for the Genomic Medicine Service for an exome/genome/panel based test that requires a virtual gene panel for rare disease in the Test Directory.",
+     "name": "GMS Rare Disease Virtual",
+     "slug": "gms-rare-disease-virtual"
+    },
+    {
+     "description": "This panel has undergone review by a NHSE GMS disease specialist group and processes to be signed-off for use within the GMS.",
+     "name": "GMS signed-off",
+     "slug": "gms-signed-off"
+    },
+    {
+     "description": "This panel type is used for GMS panels that are not virtual (i.e. could be a wet lab test)",
+     "name": "GMS Rare Disease",
+     "slug": "gms-rare-disease"
+    }
+   ],
+   "version": "4.41",
+   "version_created": "2026-11-05T18:35:09.212346Z"
+  },
+  {
+   "disease_group": "Cancer susceptibility",
+   "disease_sub_group": "",
+   "hash_id": "594a71908f620375d17ea6b2",
+   "id": 59,
+   "name": "Haematological malignancies cancer susceptibility",
+   "relevant_disorders": [
+    "Haemonc",
+    "Haematological malignancies pertinent cancer susceptibility"
+   ],
+   "stats": {
+    "number_of_genes": 3,
+    "number_of_regions": 0,
+    "number_of_strs": 0
+   },
+   "status": "public",
+   "types": [
+    {
+     "description": "Cancer Germline 100K",
+     "name": "Cancer Germline 100K",
+     "slug": "cancer-germline-100k"
+    },
+    {
+     "description": "This is a panel used for WGS germline analysis for the GMS.",
+     "name": "GMS Cancer Germline Virtual",
+     "slug": "gms-cancer-germline-virtual"
+    },
+    {
+     "description": "This panel has undergone review by a NHSE GMS disease specialist group and processes to be signed-off for use within the GMS.",
+     "name": "GMS signed-off",
+     "slug": "gms-signed-off"
+    }
+   ],
+   "version": "5.1",
+   "version_created": "2026-05-06T16:02:21.284533Z"
+  }
+ ]
+}

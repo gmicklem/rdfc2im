@@ -1319,6 +1319,45 @@ the mine's userprofile database, so a rebuild removes them until `--report-layou
 tool was dropped from the layout of the ut demo; give it the front, `--tools-url http://localhost:15001`. After a rebuild
 that is meant to show JBrowse 2, `trial/front/gen-jbrowse-config.sh` regenerates the JBrowse 2 config from the mine.
 
+## Genomics England gene lists, and where `apply_public_lists` calls them [im-9n4.21]
+
+`tools/panelapp_lists.py` (USAGE.md, "Genomics England gene lists") makes HumanMine's `PL_GenomicsEngland_GenePanel:<Panel_name>`
+lists from the PanelApp. It reads the PanelApp and, in `resolve`, a mine's `/service/ids` (a read-only job); it never
+writes to a mine. T2.3's phase `apply_public_lists` (after `apply_templates`; not written yet, and `tools/full-build.sh`
+is not changed by this task) is meant to call it like this:
+
+```
+python3 -m rdfc2im cache restore panelapp $RAW_CACHE_DIR/panelapp-data    # or: tools/panelapp_lists.py fetch --out DIR
+python3 tools/panelapp_lists.py lists   --in DIR --out $WORK/lists --mine $MINE
+python3 tools/panelapp_lists.py resolve --in DIR --mine $MINE --out $WORK/resolve.json      # the unresolved report
+# then, per $WORK/lists/index.json entry with genes > 0, as the superuser:
+#   POST $MINE/service/lists?name=<name>&type=Gene&description=<description>&tags=Genomics England gene panel;im:public
+#        &extraValue=H. sapiens&replaceExisting=true      (Authorization: Token ...; body text/plain, one identifier per line)
+```
+
+What the upload needs to know (read from the web service code, `ListUploadService`/`ListInput`; not yet exercised):
+
+* `replaceExisting=true` deletes a list of that name first, so a re-run replaces and does not duplicate; without it an
+  existing name is a 400. `tags` is semicolon-separated; the `im:` tag needs the superuser. A list that came out of a
+  name change (`replaces` in the list definition) is retired by deleting the old name (`DELETE /service/lists?name=`).
+* The upload treats identifiers like `/service/ids` does: a match on a key field is added; a match that the service
+  files under an issue (a synonym match, `OTHER`; a gene matched twice, `DUPLICATE`) is *not* added unless the request
+  says `add=OTHER` (and so on) and is returned as unmatched. Measured on the demo mine (18 Nov 2026): every HGNC id
+  resolves as `OTHER` ("searching synonyms for all types"), every Ensembl GRCh38 id as a `MATCH` (`secondaryIdentifier`),
+  symbols mostly `MATCH`. So upload either Ensembl ids (one gene each, 4,307 of 4,308 distinct genes; RMRP's differs in
+  the mine) or, per gene, the Entrez `primaryIdentifier` that `resolve` chose (`resolve.json.genes.tsv`, all 4,308),
+  which should be a key match and need no `add` (not tested: nothing was uploaded). Do not upload symbols: 29 gene entries are ambiguous and 6 genes resolve to a
+  different gene than the HGNC id names.
+* Empty lists (panels with no Green gene) cannot be uploaded; skip them (`index.tsv` has `genes` 0).
+* The `--mine` option of `lists` reads `GET /service/lists` anonymously to mark lists the mine already has.
+
+The cached group `panelapp` (`rdfc2im cache save panelapp DIR`) is `redistributable=false`. The PanelApp site says its
+data is "publicly accessible ... also available for the scientific and clinical communities" and links Terms of Use
+(`/media/files/GEL_-_PanelApp_Terms_of_Use_December_2019.pdf`, on `prod-media-panelapp.genomicsengland.co.uk`), but the
+sandbox's firewall blocked that host, so the terms themselves were **not read**, and the API's OpenAPI document names
+a terms URL (`/policies/terms/`) that answers 404. Nothing states a rate limit. Until someone reads the PDF, the group is
+kept out of release assets (`cache check-release` reports it) and `panelapp` is not on `RELEASE_ALLOWED_UNFLAGGED`.
+
 ## Watching a build
 
 Every log line goes to the terminal and to `.build-logs/build-<run-id>.log` (in the repository,

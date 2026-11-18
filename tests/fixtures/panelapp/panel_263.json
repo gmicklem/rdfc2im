@@ -1,0 +1,191 @@
+{
+ "disease_group": "Neurology and neurodevelopmental disorders",
+ "disease_sub_group": "Neurodegenerative disorders",
+ "genes": [
+  {
+   "confidence_level": "3",
+   "entity_name": "ALS2",
+   "entity_type": "gene",
+   "evidence": [
+    "Expert Review Green",
+    "Expert",
+    "Radboud University Medical Center, Nijmegen",
+    "Illumina TruGenome Clinical Sequencing Services"
+   ],
+   "gene_data": {
+    "alias": [],
+    "alias_name": [
+     "alsin"
+    ],
+    "biotype": "protein_coding",
+    "ensembl_genes": {
+     "GRch37": {
+      "82": {
+       "ensembl_id": "ENSG00000003393",
+       "location": "2:202565277-202645912"
+      }
+     },
+     "GRch38": {
+      "90": {
+       "ensembl_id": "ENSG00000003393",
+       "location": "2:201700554-201781189"
+      }
+     }
+    },
+    "gene_name": "ALS2, alsin Rho guanine nucleotide exchange factor",
+    "gene_symbol": "ALS2",
+    "hgnc_date_symbol_changed": "1992-11-19",
+    "hgnc_id": "HGNC:443",
+    "hgnc_release": "2017-11-03T00:00:00",
+    "hgnc_symbol": "ALS2",
+    "omim_gene": [
+     "606352"
+    ]
+   },
+   "mode_of_inheritance": "BIALLELIC, autosomal or pseudoautosomal",
+   "mode_of_pathogenicity": "",
+   "penetrance": "Complete",
+   "phenotypes": [
+    "Amyotrophic lateral sclerosis 2, juvenile, OMIM:205100",
+    "Primary lateral sclerosis, juvenile, OMIM:606353"
+   ],
+   "publications": [
+    "25474699",
+    "24503148",
+    "23881933"
+   ],
+   "tags": [],
+   "transcript": null
+  },
+  {
+   "confidence_level": "3",
+   "entity_name": "ANG",
+   "entity_type": "gene",
+   "evidence": [
+    "Expert Review Green",
+    "Radboud University Medical Center, Nijmegen",
+    "Illumina TruGenome Clinical Sequencing Services"
+   ],
+   "gene_data": {
+    "alias": [
+     "RNASE5",
+     "RAA1"
+    ],
+    "alias_name": [
+     "ribonuclease A family member 5"
+    ],
+    "biotype": "protein_coding",
+    "ensembl_genes": {
+     "GRch37": {
+      "82": {
+       "ensembl_id": "ENSG00000214274",
+       "location": "14:21152336-21167130"
+      }
+     },
+     "GRch38": {
+      "90": {
+       "ensembl_id": "ENSG00000214274",
+       "location": "14:20684177-20698971"
+      }
+     }
+    },
+    "gene_name": "angiogenin",
+    "gene_symbol": "ANG",
+    "hgnc_date_symbol_changed": "1989-05-23",
+    "hgnc_id": "HGNC:483",
+    "hgnc_release": "2017-11-03T00:00:00",
+    "hgnc_symbol": "ANG",
+    "omim_gene": [
+     "105850"
+    ]
+   },
+   "mode_of_inheritance": "MONOALLELIC, autosomal or pseudoautosomal, imprinted status unknown",
+   "mode_of_pathogenicity": "",
+   "penetrance": "Complete",
+   "phenotypes": [
+    "Amyotrophic Lateral Sclerosis, Dominant",
+    "Amyotrophic lateral sclerosis 9, 611895",
+    "familial amyotrophic lateral sclerosis (ALS9)"
+   ],
+   "publications": [
+    "PMID: 26753798 - meta-analysis reporting that the rs11701 SNP is not associated with ALS",
+    "PMID: 26255299 - meta-analysis concluding that the K17I variant increases the risk for ALS and familial ALS but not sporadic ALS in Caucasian patients",
+    "PMID: 25907842 - 31 Chinese Han families with familial amyotrophic lateral sclerosis were screened but no ANG gene variants were found, suggesting it is a rare cause of ALS in this population",
+    "PMID: 25372031 functional investigation of ANG variants."
+   ],
+   "tags": [],
+   "transcript": null
+  },
+  {
+   "confidence_level": "2",
+   "entity_name": "NEFH",
+   "entity_type": "gene",
+   "evidence": [
+    "Expert Review Amber",
+    "Expert list"
+   ],
+   "gene_data": {
+    "alias": [],
+    "alias_name": null,
+    "biotype": "protein_coding",
+    "ensembl_genes": {
+     "GRch37": {
+      "82": {
+       "ensembl_id": "ENSG00000100285",
+       "location": "22:29876219-29887379"
+      }
+     },
+     "GRch38": {
+      "90": {
+       "ensembl_id": "ENSG00000100285",
+       "location": "22:29480230-29491390"
+      }
+     }
+    },
+    "gene_name": "neurofilament heavy",
+    "gene_symbol": "NEFH",
+    "hgnc_date_symbol_changed": "1988-08-31",
+    "hgnc_id": "HGNC:7737",
+    "hgnc_release": "2017-11-03T00:00:00",
+    "hgnc_symbol": "NEFH",
+    "omim_gene": [
+     "162230"
+    ]
+   },
+   "mode_of_inheritance": "MONOALLELIC, autosomal or pseudoautosomal, imprinted status unknown",
+   "mode_of_pathogenicity": "",
+   "penetrance": "Incomplete",
+   "phenotypes": [
+    "susceptibility to amyotrophic lateral sclerosis (ALS)"
+   ],
+   "publications": [
+    "PMID: 24488689"
+   ],
+   "tags": [],
+   "transcript": null
+  }
+ ],
+ "hash_id": "55d30b0322c1fc2ff2a5bf7b",
+ "id": 263,
+ "name": "Amyotrophic lateral sclerosis/motor neuron disease",
+ "regions": [],
+ "relevant_disorders": [
+  "Amyotrophic lateral sclerosis or motor neuron disease"
+ ],
+ "stats": {
+  "number_of_genes": 3,
+  "number_of_regions": 0,
+  "number_of_strs": 0
+ },
+ "status": "public",
+ "strs": [],
+ "types": [
+  {
+   "description": "Rare Disease 100K",
+   "name": "Rare Disease 100K",
+   "slug": "rare-disease-100k"
+  }
+ ],
+ "version": "1.75",
+ "version_created": "2026-06-26T10:08:37.512281Z"
+}

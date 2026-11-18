@@ -1,0 +1,244 @@
+{
+ "disease_group": "Endocrinology",
+ "disease_sub_group": "",
+ "genes": [
+  {
+   "confidence_level": "3",
+   "entity_name": "AMH",
+   "entity_type": "gene",
+   "evidence": [
+    "Expert Review Green",
+    "NHS GMS"
+   ],
+   "gene_data": {
+    "alias": [
+     "MIS"
+    ],
+    "alias_name": null,
+    "biotype": "protein_coding",
+    "ensembl_genes": {
+     "GRch37": {
+      "82": {
+       "ensembl_id": "ENSG00000104899",
+       "location": "19:2249308-2252072"
+      }
+     },
+     "GRch38": {
+      "90": {
+       "ensembl_id": "ENSG00000104899",
+       "location": "19:2249309-2252073"
+      }
+     }
+    },
+    "gene_name": "anti-Mullerian hormone",
+    "gene_symbol": "AMH",
+    "hgnc_date_symbol_changed": "1986-01-01",
+    "hgnc_id": "HGNC:464",
+    "hgnc_release": "2017-11-03",
+    "hgnc_symbol": "AMH",
+    "omim_gene": [
+     "600957"
+    ]
+   },
+   "mode_of_inheritance": "BIALLELIC, autosomal or pseudoautosomal",
+   "mode_of_pathogenicity": "",
+   "penetrance": null,
+   "phenotypes": [
+    "Persistent Mullerian duct syndrome, type I, 261550"
+   ],
+   "publications": [
+    "28528332"
+   ],
+   "tags": [],
+   "transcript": null
+  },
+  {
+   "confidence_level": "3",
+   "entity_name": "AMHR2",
+   "entity_type": "gene",
+   "evidence": [
+    "Expert Review Green",
+    "NHS GMS"
+   ],
+   "gene_data": {
+    "alias": [
+     "MISR2",
+     "MISRII"
+    ],
+    "alias_name": [
+     "Muellerian inhibiting substance type II receptor"
+    ],
+    "biotype": "protein_coding",
+    "ensembl_genes": {
+     "GRch37": {
+      "82": {
+       "ensembl_id": "ENSG00000135409",
+       "location": "12:53817639-53825318"
+      }
+     },
+     "GRch38": {
+      "90": {
+       "ensembl_id": "ENSG00000135409",
+       "location": "12:53423855-53431534"
+      }
+     }
+    },
+    "gene_name": "anti-Mullerian hormone receptor type 2",
+    "gene_symbol": "AMHR2",
+    "hgnc_date_symbol_changed": "1997-07-22",
+    "hgnc_id": "HGNC:465",
+    "hgnc_release": "2017-11-03",
+    "hgnc_symbol": "AMHR2",
+    "omim_gene": [
+     "600956"
+    ]
+   },
+   "mode_of_inheritance": "BIALLELIC, autosomal or pseudoautosomal",
+   "mode_of_pathogenicity": "",
+   "penetrance": null,
+   "phenotypes": [
+    "Persistent Mullerian duct syndrome, type II, 261550"
+   ],
+   "publications": [
+    "28528332"
+   ],
+   "tags": [],
+   "transcript": null
+  },
+  {
+   "confidence_level": "2",
+   "entity_name": "DMRT1",
+   "entity_type": "gene",
+   "evidence": [
+    "Expert Review Amber",
+    "UKGTN"
+   ],
+   "gene_data": {
+    "alias": [
+     "DMT1",
+     "CT154"
+    ],
+    "alias_name": [
+     "DM domain expressed in testis 1"
+    ],
+    "biotype": "protein_coding",
+    "ensembl_genes": {
+     "GRch37": {
+      "82": {
+       "ensembl_id": "ENSG00000137090",
+       "location": "9:841690-969090"
+      }
+     },
+     "GRch38": {
+      "90": {
+       "ensembl_id": "ENSG00000137090",
+       "location": "9:841690-969090"
+      }
+     }
+    },
+    "gene_name": "doublesex and mab-3 related transcription factor 1",
+    "gene_symbol": "DMRT1",
+    "hgnc_date_symbol_changed": "1998-08-13",
+    "hgnc_id": "HGNC:2934",
+    "hgnc_release": "2017-11-03T00:00:00",
+    "hgnc_symbol": "DMRT1",
+    "omim_gene": [
+     "602424"
+    ]
+   },
+   "mode_of_inheritance": "MONOALLELIC, autosomal or pseudoautosomal, NOT imprinted",
+   "mode_of_pathogenicity": "Loss-of-function variants (as defined in pop up message) DO NOT cause this phenotype - please provide details in the comments",
+   "penetrance": "Complete",
+   "phenotypes": [
+    "46 XY differences of sex development, MONDO:0020040"
+   ],
+   "publications": [
+    "11870074",
+    "26139570",
+    "24934491",
+    "27711951",
+    "28295047",
+    "31745530",
+    "33057194",
+    "36110220",
+    "39936125"
+   ],
+   "tags": [
+    "Q3_26_promote_green"
+   ],
+   "transcript": null
+  }
+ ],
+ "hash_id": "569380ac22c1fc251660faf8",
+ "id": 9,
+ "name": "Differences in sex development",
+ "regions": [
+  {
+   "chromosome": "11",
+   "confidence_level": "3",
+   "entity_name": "ISCA-37401-Loss",
+   "entity_type": "region",
+   "evidence": [
+    "Expert Review Green",
+    "ClinGen"
+   ],
+   "gene_data": null,
+   "grch37_coordinates": null,
+   "grch38_coordinates": [
+    31781961,
+    32489442
+   ],
+   "haploinsufficiency_score": "3",
+   "mode_of_inheritance": "MONOALLELIC, autosomal or pseudoautosomal, imprinted status unknown",
+   "mode_of_pathogenicity": null,
+   "penetrance": null,
+   "phenotypes": [
+    "Wilms tumor, aniridia, genitourinary anomalies and mental retardation syndrome",
+    "194072"
+   ],
+   "publications": [],
+   "required_overlap_percentage": 60,
+   "tags": [],
+   "triplosensitivity_score": "",
+   "type_of_variants": "cnv_loss",
+   "verbose_name": "11p13 (WAGR syndrome) region Loss"
+  }
+ ],
+ "relevant_disorders": [
+  "Disorders of sex development",
+  "R146",
+  "GT771",
+  "TP322"
+ ],
+ "stats": {
+  "number_of_genes": 3,
+  "number_of_regions": 1,
+  "number_of_strs": 0
+ },
+ "status": "public",
+ "strs": [],
+ "types": [
+  {
+   "description": "Rare Disease 100K",
+   "name": "Rare Disease 100K",
+   "slug": "rare-disease-100k"
+  },
+  {
+   "description": "This is a panel for the Genomic Medicine Service for an exome/genome/panel based test that requires a virtual gene panel for rare disease in the Test Directory.",
+   "name": "GMS Rare Disease Virtual",
+   "slug": "gms-rare-disease-virtual"
+  },
+  {
+   "description": "This panel type is used for GMS panels that are not virtual (i.e. could be a wet lab test)",
+   "name": "GMS Rare Disease",
+   "slug": "gms-rare-disease"
+  },
+  {
+   "description": "This panel has undergone review by a NHSE GMS disease specialist group and processes to be signed-off for use within the GMS.",
+   "name": "GMS signed-off",
+   "slug": "gms-signed-off"
+  }
+ ],
+ "version": "4.41",
+ "version_created": "2026-11-05T18:35:09.212346Z"
+}

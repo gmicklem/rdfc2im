@@ -1,0 +1,177 @@
+{
+ "disease_group": "Dermatological disorders",
+ "disease_sub_group": "Sun-exposure related conditions",
+ "genes": [
+  {
+   "confidence_level": "3",
+   "entity_name": "ALAS2",
+   "entity_type": "gene",
+   "evidence": [
+    "Expert Review Green",
+    "Radboud University Medical Center, Nijmegen",
+    "Expert list"
+   ],
+   "gene_data": {
+    "alias": [],
+    "alias_name": [
+     "sideroblastic/hypochromic anemia"
+    ],
+    "biotype": "protein_coding",
+    "ensembl_genes": {
+     "GRch37": {
+      "82": {
+       "ensembl_id": "ENSG00000158578",
+       "location": "X:55035488-55057497"
+      }
+     },
+     "GRch38": {
+      "90": {
+       "ensembl_id": "ENSG00000158578",
+       "location": "X:55009055-55031064"
+      }
+     }
+    },
+    "gene_name": "5'-aminolevulinate synthase 2",
+    "gene_symbol": "ALAS2",
+    "hgnc_date_symbol_changed": "1989-05-25",
+    "hgnc_id": "HGNC:397",
+    "hgnc_release": "2017-11-03T00:00:00",
+    "hgnc_symbol": "ALAS2",
+    "omim_gene": [
+     "301300"
+    ]
+   },
+   "mode_of_inheritance": "X-LINKED: hemizygous mutation in males, monoallelic mutations in females may cause disease (may be less severe, later onset than males)",
+   "mode_of_pathogenicity": "Loss-of-function variants (as defined in pop up message) DO NOT cause this phenotype - please provide details in the comments",
+   "penetrance": "Complete",
+   "phenotypes": [
+    "Protoporphyria, erythropoietic, X-linked, OMIM:300752"
+   ],
+   "publications": [
+    "PMID: 18760763",
+    "23263862"
+   ],
+   "tags": [],
+   "transcript": null
+  },
+  {
+   "confidence_level": "0",
+   "entity_name": "CLPX",
+   "entity_type": "gene",
+   "evidence": [
+    "Other"
+   ],
+   "gene_data": {
+    "alias": [],
+    "alias_name": null,
+    "biotype": "protein_coding",
+    "ensembl_genes": {
+     "GRch37": {
+      "82": {
+       "ensembl_id": "ENSG00000166855",
+       "location": "15:65440557-65477680"
+      }
+     },
+     "GRch38": {
+      "90": {
+       "ensembl_id": "ENSG00000166855",
+       "location": "15:65148219-65185342"
+      }
+     }
+    },
+    "gene_name": "caseinolytic mitochondrial matrix peptidase chaperone subunit",
+    "gene_symbol": "CLPX",
+    "hgnc_date_symbol_changed": "2000-03-14",
+    "hgnc_id": "HGNC:2088",
+    "hgnc_release": "2017-11-03",
+    "hgnc_symbol": "CLPX",
+    "omim_gene": [
+     "615611"
+    ]
+   },
+   "mode_of_inheritance": "MONOALLELIC, autosomal or pseudoautosomal, NOT imprinted",
+   "mode_of_pathogenicity": "Other",
+   "penetrance": "unknown",
+   "phenotypes": [
+    "28874591"
+   ],
+   "publications": [],
+   "tags": [],
+   "transcript": null
+  },
+  {
+   "confidence_level": "3",
+   "entity_name": "FECH",
+   "entity_type": "gene",
+   "evidence": [
+    "Expert Review Green",
+    "Eligibility statement prior genetic testing",
+    "Expert list",
+    "Radboud University Medical Center, Nijmegen",
+    "UKGTN",
+    "Illumina TruGenome Clinical Sequencing Services"
+   ],
+   "gene_data": {
+    "alias": [],
+    "alias_name": [
+     "protoporphyria"
+    ],
+    "biotype": "protein_coding",
+    "ensembl_genes": {
+     "GRch37": {
+      "82": {
+       "ensembl_id": "ENSG00000066926",
+       "location": "18:55215515-55254004"
+      }
+     },
+     "GRch38": {
+      "90": {
+       "ensembl_id": "ENSG00000066926",
+       "location": "18:57548283-57586772"
+      }
+     }
+    },
+    "gene_name": "ferrochelatase",
+    "gene_symbol": "FECH",
+    "hgnc_date_symbol_changed": "1990-05-14",
+    "hgnc_id": "HGNC:3647",
+    "hgnc_release": "2017-11-03T00:00:00",
+    "hgnc_symbol": "FECH",
+    "omim_gene": [
+     "612386"
+    ]
+   },
+   "mode_of_inheritance": "BIALLELIC, autosomal or pseudoautosomal",
+   "mode_of_pathogenicity": "",
+   "penetrance": "Complete",
+   "phenotypes": [
+    "Erythropoietic Protoporphyria",
+    "Protoporphyria, erythropoietic, autosomal recessive, 177000"
+   ],
+   "publications": [],
+   "tags": [],
+   "transcript": null
+  }
+ ],
+ "hash_id": "553f9599bb5a1616e5ed45af",
+ "id": 91,
+ "name": "Erythropoietic protoporphyria, mild variant",
+ "regions": [],
+ "relevant_disorders": [],
+ "stats": {
+  "number_of_genes": 3,
+  "number_of_regions": 0,
+  "number_of_strs": 0
+ },
+ "status": "public",
+ "strs": [],
+ "types": [
+  {
+   "description": "Rare Disease 100K",
+   "name": "Rare Disease 100K",
+   "slug": "rare-disease-100k"
+  }
+ ],
+ "version": "1.4",
+ "version_created": "2025-11-23T17:02:58.898590Z"
+}

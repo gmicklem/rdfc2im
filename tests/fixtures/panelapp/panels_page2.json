@@ -1,0 +1,78 @@
+{
+ "count": 5,
+ "next": null,
+ "previous": "https://panelapp.genomicsengland.co.uk/api/v1/panels/?page=1",
+ "results": [
+  {
+   "disease_group": "Dermatological disorders",
+   "disease_sub_group": "Sun-exposure related conditions",
+   "hash_id": "553f9599bb5a1616e5ed45af",
+   "id": 91,
+   "name": "Erythropoietic protoporphyria, mild variant",
+   "relevant_disorders": [],
+   "stats": {
+    "number_of_genes": 3,
+    "number_of_regions": 0,
+    "number_of_strs": 0
+   },
+   "status": "public",
+   "types": [
+    {
+     "description": "Rare Disease 100K",
+     "name": "Rare Disease 100K",
+     "slug": "rare-disease-100k"
+    }
+   ],
+   "version": "1.4",
+   "version_created": "2025-11-23T17:02:58.898590Z"
+  },
+  {
+   "disease_group": "Neurology and neurodevelopmental disorders",
+   "disease_sub_group": "Motor Disorders of the CNS",
+   "hash_id": "55ad019f22c1fc7042059038",
+   "id": 165,
+   "name": "Hereditary spastic paraplegia",
+   "relevant_disorders": [],
+   "stats": {
+    "number_of_genes": 5,
+    "number_of_regions": 0,
+    "number_of_strs": 1
+   },
+   "status": "public",
+   "types": [
+    {
+     "description": "Rare Disease 100K",
+     "name": "Rare Disease 100K",
+     "slug": "rare-disease-100k"
+    }
+   ],
+   "version": "1.316",
+   "version_created": "2025-11-23T17:21:10.041104Z"
+  },
+  {
+   "disease_group": "Neurology and neurodevelopmental disorders",
+   "disease_sub_group": "Neurodegenerative disorders",
+   "hash_id": "55d30b0322c1fc2ff2a5bf7b",
+   "id": 263,
+   "name": "Amyotrophic lateral sclerosis/motor neuron disease",
+   "relevant_disorders": [
+    "Amyotrophic lateral sclerosis or motor neuron disease"
+   ],
+   "stats": {
+    "number_of_genes": 3,
+    "number_of_regions": 0,
+    "number_of_strs": 0
+   },
+   "status": "public",
+   "types": [
+    {
+     "description": "Rare Disease 100K",
+     "name": "Rare Disease 100K",
+     "slug": "rare-disease-100k"
+    }
+   ],
+   "version": "1.75",
+   "version_created": "2026-06-26T10:08:37.512281Z"
+  }
+ ]
+}

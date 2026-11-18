@@ -171,6 +171,44 @@ leaves a half-written file.
 
 Tests: `tests/test_subset_raw.py`, with fixtures and the sources of the real samples in `tests/fixtures/subset_raw/`.
 
+## Genomics England gene lists (tools/panelapp_lists.py) [im-9n4.21]
+
+HumanMine has public lists `PL_GenomicsEngland_GenePanel:<Panel_name>`, made in December 2021 from the Genomics England
+PanelApp (Green genes only). `tools/panelapp_lists.py` (standard library only) makes them again from whatever the
+PanelApp serves today. It fetches, maps and reports; it writes to no mine. Uploading the lists is phase
+`apply_public_lists` (BUILD.md, "Genomics England gene lists").
+
+```
+python3 tools/panelapp_lists.py fetch   --out DIR [--cache-dir CACHE]    # every current panel, raw JSON + META.json
+python3 tools/panelapp_lists.py lists   --in DIR --out LISTS [--mine URL] [--select all|100k] [--keep-2021-names]
+python3 tools/panelapp_lists.py resolve --in DIR --mine URL --out FILE [--organism "H. sapiens"] [--select all|100k]
+```
+
+* `fetch` walks `https://panelapp.genomicsengland.co.uk/api/v1/panels/` (100 a page, `next`), `.../panels/signedoff/`
+  and `.../panels/<id>/` for each panel: 445 requests (433 panels), sequential, at most two a second, User-Agent
+  `rdfc2im-panelapp-lists/1.0`, back-off on 429 and 5xx; the whole fetch took about 9 minutes and the raw JSON is 108 MB. `DIR` gets `panels/<id>.json` (raw), `panels-index.json`, `signedoff-index.json` and `META.json` (fetch
+  date, counts, each panel's id, name, version, `version_created`). A rerun into the same `DIR` fetches only the
+  panels whose version changed (`--no-resume` fetches all). `--cache-dir` saves `DIR` as the rdfc2im cache group
+  `panelapp`, `redistributable=false` (BUILD.md says why).
+* `lists` writes `LISTS/lists/<name>.json` (`:` as `__`), `index.json` and `index.tsv`. A list is: name, type `Gene`,
+  tags `Genomics England gene panel` and `im:public`, a description (the 2021 text, "Decemeber" corrected, plus
+  `Panel <id>, version <v> (created <date>), fetched <date>`), the panel, `replaces` (the 2021 list name, for the 17
+  panels renamed since) and the Green genes with HGNC id, symbol and Ensembl GRCh38 id. Naming rule: the panel name with
+  spaces as `_` and every other character kept, except `/` as `_`; the test reproduces 154 of the 171 names of 2021
+  and the other 17 are the renamed panels. STRs and regions are counted, not listed. `--select 100k` keeps the
+  panels of type `rare-disease-100k`, which is what the 2021 set was. `--mine` marks which lists the mine already has
+  (one anonymous `GET /service/lists`).
+* `resolve` asks the mine's id resolution service (`POST /service/ids`, poll, read, delete the job; read-only) three
+  times, once per identifier type, over the distinct identifiers of all panels (1000 a job): HGNC id, Ensembl GRCh38
+  id, symbol. `FILE` (JSON) has the counts for each type alone and for the chain HGNC id, then Ensembl id, then symbol,
+  overall and per panel; `FILE.genes.tsv` gives, per distinct gene, the mine
+  gene the chain chose (object id, Entrez `primaryIdentifier`, symbol); `FILE.unresolved.tsv` lists every gene that is unresolved, ambiguous (several genes),
+  resolved only by a fallback identifier, or placed on different genes by different identifiers, with the outcome per
+  identifier type and the reasons PanelApp's own data suggests. If the mine does not answer it waits (up to 40
+  minutes); an outage is never reported as a result.
+
+Tests: `tests/test_panelapp_lists.py` (recorded panels in `tests/fixtures/panelapp/`, no network).
+
 ## Not yet exercised
 
 `linkml-validate` is not wired into `check`. (`fetch` against the real endpoints and a real
