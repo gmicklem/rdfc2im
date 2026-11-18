@@ -990,11 +990,12 @@ tools/stage-bluegenes-tools.sh --jbrowse2-src ../jbrowse2/bluegenes-tool --out $
   and gives the same bytes).
 * Patches (ids in `patches.json`): `rcsb-v1-to-v2` (protein visualizer, bundle and source), `msa-same-origin`
   (the aligner address becomes `""`, so the tool POSTs to `/align-sequence` on the BlueGenes origin),
-  `msa-array-at-crash`, `msa-legacy-wheel`, `jbrowse2-same-origin` (the JBrowse 2 tool's `config.json`
+  `msa-array-at-crash`, `msa-legacy-wheel`, `msa-skip-no-sequence` [im-9n4.32] (see below), `jbrowse2-same-origin` (the JBrowse 2 tool's `config.json`
   `jbrowse2Url` `https://jbrowse2.intermine.org/` becomes `/jbrowse2/`, the front's route; HumanMine's own copy
-  has `https://www.humanmine.org/jbrowse2/`), and `version-bump` to `<version>-patched.1` for the three patched
-  packages (the JBrowse 2 tool is packed from source first, then patched like the others, so its version is
-  `0.1.0-patched.1`). Each edit names its anchor text and how often it must occur; any other count aborts with exit 1, so a
+  has `https://www.humanmine.org/jbrowse2/`), and `version-bump` to `<version>-patched.1` for the patched
+  packages, except the MSA viewer, whose patch list grew and which is `2.1.1-patched.2` (`PATCHED_SUFFIXES` in
+  `bgtools.py`; the protein visualizer stays `2.1.1-patched.1`; the JBrowse 2 tool is packed from source first,
+  then patched like the others, so its version is `0.1.0-patched.1`). Each edit names its anchor text and how often it must occur; any other count aborts with exit 1, so a
   silent no-op cannot happen.
 * Output: 19 tarballs, `SHA256SUMS`, `patches.json`, byte-identical for the same inputs. The esyn viewer, which
   HumanMine does not list, is left out and removed from `--install-to` if present.
@@ -1007,6 +1008,18 @@ given, with `--src-cache $RAW_CACHE_DIR/bluegenes-tools/data`, `--out <artifacts
 `--install-to <artifacts>/bluegenes-tools` (`<artifacts>` is `RDFC2IM_ARTIFACTS`, default `trial/artifacts`); without
 the option nothing changes. The command it runs is, for the BlueGenes container's tool directory, e.g. `tools/stage-bluegenes-tools.sh --jbrowse2-src "$JBROWSE2_SRC" --out "$RDFC2IM_ARTIFACTS/bluegenes-tools-patched"
 --install-to "$RDFC2IM_ARTIFACTS/bluegenes-tools"` (and mount that directory at BlueGenes' `BLUEGENES_TOOL_PATH`; `trial/docker-compose.yml` does not do that yet).
+The `msa-skip-no-sequence` patch: upstream, the MSA viewer asks for each of the gene's proteins' sequence by
+accession and gives up for the whole panel at the first protein with none ("No protein found for UniProtKB
+accession ..."), so it never calls the aligner. With the patch such a protein is dropped (the sequence query
+resolves `null` instead of rejecting; bundle and shipped source are edited alike). With no sequence left the
+panel says "No protein sequences are available for this gene, so there is nothing to align." (plain text, not
+matched by the browser suite's error-text check) and the aligner is not called; with one left the viewer shows
+it unaligned, as upstream does for a gene with a single protein. Today only the Swiss-Prot canonical proteins and
+their isoforms have sequences in a hybrid mine (the RDF TrEMBL proteins carry none until the uniprot source maps
+`core:sequence`), so the viewer aligns exactly those: PAX6 gets P26367 and P26367-2, CYP2D6 gets P10635 and
+P10635-2, in about 2.5 s from page load (one sequence query per protein, 47 and 59, issued together). Once the
+TrEMBL proteins get sequences the viewer will align all of them (47 and 59); whether to restrict it to
+Swiss-Prot or canonical proteins, as HumanMine effectively does, is an open decision and is not implemented.
 The MSA viewer still needs the aligner container and a `/align-sequence` route on the BlueGenes origin
 (sequence-alignment-service), and the protein visualizer and JBrowse 2 tool need the mine's protein/location data.
 
