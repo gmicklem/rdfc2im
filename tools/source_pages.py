@@ -218,6 +218,8 @@ def _loaded_table(src, out):
         for ds, c, n in rows:
             out.append(f"| {cell(ds)} | {c} | {fmt_n(n)} |")
         for c, n in sorted((src.get("loaded_unlinked") or {}).items()):
+            if c in ("DataSet", "DataSource"):     # every source writes them; their mine totals say nothing here
+                continue
             out.append(f"| (no link to a data set: all sources, whole mine) | {c} | {fmt_n(n)} |")
         out.append("")
     else:
