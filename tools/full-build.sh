@@ -800,17 +800,23 @@ phase_rdfc2im_pipeline() {
       # with zero actual matches - confirmed live, silently produced an empty cited_pmids.txt, which
       # made cli.py's `if pmids and pmid_field` (falsy on []) fall through to an unrestricted,
       # LIMIT-0 fetch of all of PubMed instead of the intended PMID-scoped one.
+      #
+      # The grep takes every 4-9 digit attribute value, not only Publication.pubMedId: on the panel 6,890
+      # numbers of which 3,930 are PMIDs (the rest masses, identifiers, years, pages). `length` lines are
+      # left out so that uniprot's sequence lengths [im-9n4.32] do not change the set, and with it
+      # pmids_md5 and the cached pubmed group. Taking pubMedId alone is the real fix; it changes which
+      # PubMed records load and needs the pubmed group fetched again, so it is a task of its own.
       if [ "${SCOPE_MODE[hgnc]}" = full ] && [[ " $SOURCES " == *" hgnc "* ]]; then
         # --gene-identifiers all: hgnc holds every human gene (about 23,500 papers); the PMIDs stay the
         # panel's, read from the panel genes' cut of its items (subset_raw.py panel_items) [im-9n4.40]
         local hgnc_cut="$TRIAL_HOME/hgnc-panel-items.xml"
         run python3 tools/subset_raw.py panel-items --genes "$GENE_PANEL" --in out/hgnc/items/hgnc.xml \
           --out "$hgnc_cut" --lookup-dir "$LOOKUP_DIR" --taxon "$TAXON"
-        run bash -c "grep -ahoE '\"[0-9]{4,9}\"' '$hgnc_cut' out/{uniprot,gwascatalog,reactome}/items/*.xml 2>/dev/null \
-                      | tr -d '\"' | sort -u > '$pmid_file'"
+        run bash -c "grep -ahv '<attribute name=\"length\"' '$hgnc_cut' out/{uniprot,gwascatalog,reactome}/items/*.xml 2>/dev/null \
+                      | grep -aoE '\"[0-9]{4,9}\"' | tr -d '\"' | sort -u > '$pmid_file'"
       else
-        run bash -c "grep -ahoE '\"[0-9]{4,9}\"' out/{hgnc,uniprot,gwascatalog,reactome}/items/*.xml 2>/dev/null \
-                      | tr -d '\"' | sort -u > '$pmid_file'"
+        run bash -c "grep -ahv '<attribute name=\"length\"' out/{hgnc,uniprot,gwascatalog,reactome}/items/*.xml 2>/dev/null \
+                      | grep -aoE '\"[0-9]{4,9}\"' | tr -d '\"' | sort -u > '$pmid_file'"
       fi
     fi
     local meta; meta=$(cache_meta_for "$src")
