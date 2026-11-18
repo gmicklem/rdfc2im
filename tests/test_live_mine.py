@@ -587,6 +587,86 @@ def test_swissprot_isoforms_point_at_their_canonical_protein():
     assert not bad, f"{len(bad)} isoforms with no canonical protein or no sequence: {bad[:5]}"
 
 
+# ----------------------------------------------------------------- RDF UniProt sequences [im-9n4.32]
+RDF_UNIPROT_DATA_SET = "UniProtKB, Swiss-Prot and TrEMBL (RDF Portal)"   # sources.yaml uniprot data_set_title
+
+
+def _rdf_uniprot_proteins():
+    """Every protein of the RDF uniprot data set (TrEMBL included) with its sequence, or None
+    when the mine's RDF proteins carry no sequences (built before im-9n4.32)."""
+    rows = query_rows_q(
+        '<query model="genomic" view="Protein.primaryAccession Protein.length Protein.isFragment Protein.md5checksum '
+        'Protein.sequence.length Protein.sequence.md5checksum Protein.sequence.residues" '
+        'sortOrder="Protein.primaryAccession asc"><join path="Protein.sequence" style="OUTER"/>'
+        f'<constraint path="Protein.dataSets.name" op="=" value="{RDF_UNIPROT_DATA_SET}"/></query>')
+    return rows if sum(1 for r in rows if r[6]) > 300 else None
+
+
+def test_every_rdf_uniprot_protein_has_its_own_canonical_sequence():
+    """Each RDF UniProt protein (Swiss-Prot and TrEMBL, 1,547 for the panel) has one sequence, the
+    entry's canonical one: its length is the protein's length, its md5 is the md5 of its residues,
+    and the fragment flag is set either way. Before im-9n4.32 only the 254 stock proteins had one,
+    and the MSA viewer aligned two sequences for a gene with 47 proteins."""
+    if not mine_up():
+        return _skip(f"live checks off or no mine at {MINE_BASE} (make test-live)")
+    rows = _rdf_uniprot_proteins()
+    if rows is None:
+        return _skip("the RDF uniprot proteins carry no sequences (mine built before im-9n4.32)")
+    import hashlib
+    bad = [r[:6] for r in rows if not r[6] or r[1] != r[4] or r[4] != len(r[6]) or r[2] is None
+           or hashlib.md5(r[6].encode()).hexdigest() != r[5]]
+    assert not bad, f"{len(bad)} RDF proteins without their own sequence or with a wrong length/md5/flag: {bad[:5]}"
+    assert any(r[2] for r in rows) and any(r[2] is False for r in rows), "no fragments, or nothing but fragments"
+
+
+def test_proteins_with_the_same_sequence_stay_separate_proteins():
+    """Stock uniprot keys Protein on md5checksum+organism. A TrEMBL entry with exactly a Swiss-Prot
+    entry's sequence (20 on the panel) must stay its own protein, sharing the sequence object: the
+    RDF source writes no Protein.md5checksum and merges proteins on the accession only."""
+    if not mine_up():
+        return _skip(f"live checks off or no mine at {MINE_BASE} (make test-live)")
+    rows = _rdf_uniprot_proteins()
+    if rows is None:
+        return _skip("the RDF uniprot proteins carry no sequences (mine built before im-9n4.32)")
+    stock = {r[0]: r[1] for r in query_rows_q(
+        '<query model="genomic" view="Protein.primaryAccession Protein.md5checksum">'
+        f'<constraint path="Protein.dataSets.name" op="=" value="{SWISSPROT_DATA_SET}"/></query>')} \
+        if stock_uniprot_loaded() else {}
+    rdf_only = [r for r in rows if r[0] not in stock]
+    assert rdf_only and not [r[0] for r in rdf_only if r[3]], "an RDF-only protein has an md5checksum"
+    by_md5 = {}
+    for r in rows:
+        by_md5.setdefault(r[5], set()).add(r[0])
+    shared = [a for a in by_md5.values() if len(a) > 1]
+    assert shared, "no two panel entries share a sequence - the check has nothing to check"
+    if stock:
+        assert any(a & set(stock) and a - set(stock) for a in shared), \
+            "no TrEMBL entry shares a Swiss-Prot entry's sequence - expected 20 on the panel"
+    bad = [r[0] for r in rows if r[0] in stock and stock[r[0]] and stock[r[0]] != r[5]]
+    assert not bad, f"{len(bad)} stock proteins whose sequence is not their own: {bad[:5]}"
+
+
+def test_every_sequence_belongs_to_a_protein_and_the_example_genes_have_all_theirs():
+    """No Sequence stands unreferenced (the RDF one of a Swiss-Prot entry merges into stock's on
+    md5checksum, sources.yaml own_keys), and every protein of PAX6 and CYP2D6 has a sequence, which
+    is what the MSA viewer on the gene page aligns."""
+    if not mine_up():
+        return _skip(f"live checks off or no mine at {MINE_BASE} (make test-live)")
+    if _rdf_uniprot_proteins() is None:
+        return _skip("the RDF uniprot proteins carry no sequences (mine built before im-9n4.32)")
+    seqs = {r[0] for r in query_rows_q('<query model="genomic" view="Sequence.md5checksum"></query>')}
+    used = {r[0] for r in query_rows_q('<query model="genomic" view="Protein.sequence.md5checksum"></query>')}
+    assert seqs == used, f"{len(seqs - used)} sequences no protein points at: {sorted(seqs - used)[:5]}"
+    for gene, at_least in (("PAX6", 40), ("CYP2D6", 50)):
+        rows = query_rows_q(
+            '<query model="genomic" view="Gene.symbol Gene.proteins.primaryAccession Gene.proteins.sequence.length">'
+            '<join path="Gene.proteins.sequence" style="OUTER"/>'
+            f'<constraint path="Gene.symbol" op="=" value="{gene}"/>'
+            '<constraint path="Gene.organism.taxonId" op="=" value="9606"/></query>')
+        assert len(rows) >= at_least, f"{gene}: only {len(rows)} proteins"
+        assert all(r[2] for r in rows), f"{gene}: proteins without a sequence: {[r[1] for r in rows if not r[2]][:5]}"
+
+
 def test_the_example_protein_has_features_comments_and_keywords():
     """The stock loader's own content: features, comments and keywords (none come from RDF)."""
     if not mine_up():

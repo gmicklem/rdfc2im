@@ -30,8 +30,8 @@ gaps:
     - text: "Only E-MTAB-513 (FPKM) is loaded; HumanMine's frozen E-MTAB-62 (arrayexpress-atlas) is the owner's local copy and is not available here."
       from: stock_sources.yaml notes; BUILD.md "Known gaps"
   rdf:uniprot:
-    - text: "TrEMBL protein sequences are not loaded: the RDF uniprot source does not map core:sequence; only Swiss-Prot canonical proteins and isoforms (stock uniprot and uniprot-fasta) have one."
-      from: BUILD.md "Known gaps"
+    - text: "Each entry's canonical sequence is loaded (TrEMBL included, fragments flagged), but not the isoform sequences the RDF also holds; Swiss-Prot isoforms come from stock uniprot-fasta. Entries only this source loads have no Protein.md5checksum (left out on purpose) and no Protein.primaryIdentifier."
+      from: BUILD.md "TrEMBL sequences from RDF"
   rdf:hgnc:
     - text: "Where NCBI and HGNC disagree on a symbol or an Ensembl id, HGNC gives way to NCBI; at full scope hgnc brings 25,899 Publication stubs without titles."
       from: EXPERT_TO_CHECK.md 11

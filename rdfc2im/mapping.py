@@ -27,7 +27,7 @@ from typing import Dict, List, Optional, Tuple
 import yaml
 
 from .model import InterMineModel
-from .rdfconfig import RdfConfig, Subject, Predicate, ObjectVar, load_config
+from .rdfconfig import RdfConfig, Subject, Predicate, ObjectVar, load_config, add_predicates
 from .sssom import read_sssom, write_sssom
 
 HERE = os.path.dirname(__file__)
@@ -692,6 +692,7 @@ def three_way_merge(fresh: List[dict], disk: List[dict], base: List[dict], keyf,
 def translate(model: InterMineModel, config_dir: str, out_dir: str, knowledge: Knowledge,
               source_cfg: Optional[dict] = None) -> dict:
     cfg = load_config(config_dir)
+    added = add_predicates(cfg, (source_cfg or {}).get("model_additions"))
     os.makedirs(out_dir, exist_ok=True)
     subj_path = os.path.join(out_dir, "mapping_subjects.tsv")
     subj_base = os.path.join(out_dir, ".mapping_subjects.base.tsv")
@@ -737,7 +738,7 @@ def translate(model: InterMineModel, config_dir: str, out_dir: str, knowledge: K
 
     return {"cfg": cfg, "builder": b, "rows": merged, "subjects": merged_subj,
             "preserved": n_edits, "subject_edits": n_subj_edits, "stale": len(stale),
-            "node_by_key": node_by_key, "messages": b.messages}
+            "node_by_key": node_by_key, "messages": added + b.messages}
 
 
 def _row_dict(r: Row) -> dict:

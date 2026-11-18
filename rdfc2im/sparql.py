@@ -54,12 +54,19 @@ def const_rows(rows: List[dict], table: str, include_guess: bool) -> List[dict]:
 
 class QueryBuilder:
     def __init__(self, cfg, node_by_key: Dict[Tuple[str, str, str], Node], types: str = "root",
-                 distinct: bool = True, use_from: bool = True):
+                 distinct: bool = True, use_from: bool = True,
+                 node_constraints: Optional[Dict[str, List[str]]] = None):
         self.cfg = cfg
         self.node_by_key = node_by_key
         self.types = types
         self.distinct = distinct
         self.use_from = use_from
+        # sources.yaml `node_constraints`: subject name -> SPARQL lines emitted in that node's own
+        # block wherever a query reaches it ({var} = the node's variable, {root} = the root's).
+        # Inside an OPTIONAL they narrow what the OPTIONAL binds, never the rows: UniProt's
+        # core:sequence names every isoform of an entry and sometimes another entry's canonical
+        # sequence, and only one is the entry's own canonical sequence [im-9n4.32].
+        self.node_constraints = node_constraints or {}
         self.messages: List[str] = []
 
     def build(self, table: str, qrows: List[dict], limit: int = 0) -> Tuple[str, List[str], Dict[str, str]]:
@@ -153,7 +160,10 @@ class QueryBuilder:
         if node.parent is not None:
             lines.append(f"{pad}?{node.parent.var} {node.pred.curie} ?{node.var} .")
         lines += [pad + t for t in self._type_triple(node)]
-        own = [r for r in leaves.get(node.display, []) if r.get("predicate") != "-self-"]
+        for c in self.node_constraints.get(node.display, []):
+            root_var = node.root.var if node.root else node.var
+            lines.append(pad + c.replace("{var}", node.var).replace("{root}", root_var))
+        own =[r for r in leaves.get(node.display, []) if r.get("predicate") != "-self-"]
         # a link column whose sub-node is emitted below is bound there already
         own = [r for r in own if not (r.get("kind") == "link" and any(c.display in nodes and c.objvar == r["column"] for c in node.children))]
         for r in own:

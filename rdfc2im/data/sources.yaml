@@ -16,6 +16,12 @@
 #   consts:    constant columns appended to every table of the source (Class.field: value)
 #   roots:     which model.yaml subjects start a table set (default: the first subject)
 #   data_source_name / data_set_title: what the delimited loader writes into DataSource/DataSet
+#   model_additions: predicates the upstream model.yaml lacks, per subject, in model.yaml's own grammar
+#              (rdfconfig.add_predicates); they then get mapping rows like any other
+#   node_constraints: SPARQL lines emitted in a subject's own block of every query that reaches it
+#              ({var} = its variable, {root} = the root's); inside an OPTIONAL they narrow what it binds
+#   own_keys:  the keys this source merges each class on (project.source_keys): the type's keys of
+#              that class cut to these fields, or this key alone where no keys file declares one
 #   data_set_licence: optional URL written to DataSet.licence (items.py [im-9n4.45]): the licence page or text the
 #              upstream states, only where the licence_status of the record is verified or partial; none for
 #              ensembl and gwascatalog (unverified). The record itself is licence_url / licence_quote above.
@@ -144,6 +150,29 @@ uniprot:
   rdfportal_licence_note: "Same as upstream."
   consts: {Organism.taxonId: "9606"}
   gene_scope_field: symbol
+  # Sequences [im-9n4.32].  rdf-config's model gives a sequence node only rdf:value, core:mass and
+  # core:name; the data also states core:md5Checksum (the same md5 stock uniprot stores: P10635
+  # c71ffc3c...) and core:fragment ("single" or "multiple", on 376 of the panel's 1,548 canonical
+  # sequences; absent on a complete one).  Checked on RDF Portal's SIB mirror, 18 Nov 2026.
+  model_additions:
+    SimpleSequence:
+      - core:md5Checksum?:
+          - seq_md5: "a1c452186d610c734d3e3c69a5600db1"
+      - core:fragment?:
+          - seq_fragment: "single"
+  # core:sequence names every isoform of an entry (P26367-1 Simple_Sequence, -2 Modified_Sequence,
+  # -3 Unknown_Sequence) and, for 1 panel entry, another entry's canonical sequence (P01308 ->
+  # F8WCM5-1, typed Simple_Sequence and External_Sequence).  The entry's own canonical sequence is
+  # the Simple_Sequence named isoforms:<its accession>-N; exactly one per panel entry.
+  node_constraints:
+    SimpleSequence:
+      - "?{var} a core:Simple_Sequence ."
+      - 'FILTER(STRSTARTS(STR(?{var}), CONCAT(REPLACE(STR(?{root}), "/uniprot/", "/isoforms/"), "-")))'
+  # Protein merges on its accession only, never on md5checksum+organism (stock uniprot's key, which
+  # the type's keys file carries): a TrEMBL entry with the same sequence as a Swiss-Prot entry is a
+  # different protein.  This source writes no Protein.md5checksum either.  Sequence merges on its
+  # md5: a canonical Swiss-Prot sequence is the object stock uniprot stored, not a second copy.
+  own_keys: {Protein: [primaryAccession], Sequence: [md5checksum]}
   scope: good
 go:
   replaces: [go]

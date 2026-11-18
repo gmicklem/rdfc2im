@@ -233,7 +233,7 @@ def _write_guide(ddir, per, ws, sources_cfg, out):
          "Only identifier columns should be `yes`.",
          "- `value`: fix the variable to a constant in the query (`taxonomy:9606`, `\"Homo sapiens\"`). For a `-const-` row it is the constant written to the TSV.",
          "- `transform`: applied when cleaning the fetched TSV; comma-separated chain. `iri_localname` (`.../GO_0008150` -> `GO_0008150`), "
-         "`replace:_:\\:` (then -> `GO:0008150`), `prefix:HGNC:`, `strip_prefix:x`, `regex:^(\\d{4})` (first group), `split:,` (explode into several rows), `lower`, `upper`, `int`.",
+         "`replace:_:\\:` (then -> `GO:0008150`), `prefix:HGNC:`, `strip_prefix:x`, `regex:^(\\d{4})` (first group), `split:,` (explode into several rows), `lower`, `upper`, `int`, `default:false` (an empty value becomes `false`).",
          "- `filter`: `regex:^R-HSA-`, `nonempty`, `equals:Pubmed`. A value that fails the filter is blanked; if the column is `required=yes` the whole row is dropped.",
          "", "`role` (subjects rows): `root` = this subject starts a table set (its identifier is the row key); `node` = reached "
          "from a root; `skip` = ignore the subject and everything under it.", "",

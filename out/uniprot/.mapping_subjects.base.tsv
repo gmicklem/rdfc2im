@@ -5,7 +5,7 @@ SubmittedNameNode	Protein	node	guess	knowledge	core:Structured_Name	core:submitt
 AlternativeNameNode	Synonym	node	guess	knowledge	core:Structured_Name	core:alternativeName*	up:A6NJT0#SIPA55C636CCF9151AA	alternative full names -> Synonym.value on the Protein
 Gene	Gene	node	sure	knowledge+java:UniProtConverter	core:Gene	core:encodedBy?	up:Q9BYF1#gene-MD59FDF2659357792822CB85F383B26B8FE	UniProt gene node; skos:prefLabel is the gene symbol used to link Protein->Gene
 Component	Component	node	sure	name	core:Part	core:component*	up:Q9BYF1#SIPDFC0265AEF6A17B9	subject name is the model class Component
-SimpleSequence	Sequence	node	guess	knowledge	core:Simple_Sequence	core:sequence	isoforms:Q9NYF8-1	rdf:value -> Sequence.residues; core:mass -> Protein.molecularWeight (term)
+SimpleSequence	Sequence	node	sure	java:UniprotConverter	core:Simple_Sequence	core:sequence	isoforms:Q9NYF8-1	rdf:value -> Sequence.residues; core:mass -> Protein.molecularWeight (term); the entry's canonical sequence only (sources.yaml node_constraints)
 ModifiedSequence		node	todo		core:Modificated_Sequence	core:sequence*	isoforms:Q9NYF8-2	no term/knowledge/name match - bind by hand or set role=skip
 ExternalSequence		node	todo		core:External_Sequence	core:sequence*	isoforms:L0R6Q1-1	no term/knowledge/name match - bind by hand or set role=skip
 UnknownSequence		node	todo		core:Unknown_Sequence	core:sequence*	isoforms:52757-2	no term/knowledge/name match - bind by hand or set role=skip
