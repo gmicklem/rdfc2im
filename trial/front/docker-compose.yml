@@ -1,0 +1,32 @@
+# Aligner + nginx front for the ut demo BlueGenes (see README.md). Own compose project,
+# separate from the mine stack (rdfc2im-ut), so a rebuild of that stack leaves these alone:
+#   docker compose -f trial/front/docker-compose.yml -p rdfc2im-ut-front up -d --build
+# or just ./up.sh, which also fetches imjs and checks the BlueGenes jar port.
+#
+# Environment:
+#   ALIGNER_SRC    directory of the sequence-alignment-service checkout (required)
+#   IMJS_DIR       directory holding imjs/im.min.js (up.sh fills it; required)
+#   ALIGNER_HTTP_PORT   loopback port of the aligner (default 13000; nginx.conf expects 13000)
+name: rdfc2im-ut-front
+services:
+  aligner:
+    container_name: rdfc2im-ut-front-aligner
+    build:
+      context: ${ALIGNER_SRC:?set ALIGNER_SRC}
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - 127.0.0.1:${ALIGNER_HTTP_PORT:-13000}:3000
+  nginx:
+    container_name: rdfc2im-ut-front-nginx
+    image: nginx:alpine
+    restart: unless-stopped
+    # Host networking: the container reaches the BlueGenes jar (a plain process on the sandbox
+    # host, 127.0.0.1:15011) and the aligner's published port without any bridge/gateway
+    # address, and listens on the host's :15001 directly.
+    network_mode: host
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ${IMJS_DIR:?set IMJS_DIR}:/usr/share/nginx/vendor/imjs:ro
+    depends_on:
+      - aligner
