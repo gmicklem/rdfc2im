@@ -1969,7 +1969,7 @@ HumanMine's own CYP2D6: 2 proteins, 22 domain regions, 96 UniProt features.
 * CDS/UTR per gene: CDS and MRNA exist (604) but the gene collections `CDSs`, `UTRs`, `introns` are empty (the ncbi-gff loader, im-9n4.9).
 * OMIM disease names: OMIM is licensed and kept out (plan 50 D-7, T1.10).
 * RGD symbols: closed by im-9n4.35 (see "Partner genes and symbols"); the milestone build above did not have them. Its licence wording is still unverified.
-* TrEMBL protein sequences: the RDF `uniprot` source does not map `core:sequence`; only Swiss-Prot canonical proteins and isoforms have one.
+* TrEMBL protein sequences: closed by im-9n4.32 (see "TrEMBL sequences from RDF" below).
 * GTEx eQTL: only the median-TPM file is loaded; `Gene_SigSNP` is dropped from the layout (plan 50, T1.10 optional).
 
 **Release assets** (prepared, not uploaded; the owner approves uploads): all three are checked with `python -m rdfc2im cache
@@ -1986,6 +1986,118 @@ check-release` on the extracted content.
   `hgnc` holds HGNC's own `main_see_also_omim.tsv` (OMIM ids as HGNC publishes them, no OMIM data).
   Both are verified (NCBI: no restrictions; HGNC: CC0); the notice text is in `docs/LICENCES-panel-cache.txt`. That file is also
   the notice for the published panel cache (release `demo-data-2026-11-18`), which had none.
+
+## TrEMBL sequences from RDF [im-9n4.32]
+
+Until im-9n4.32 the RDF `uniprot` source loaded the panel's 1,547 UniProt entries (Swiss-Prot and TrEMBL, linked to
+genes by symbol) without sequences; only the 114 Swiss-Prot canonical proteins (stock uniprot) and their 140 isoforms
+(uniprot-fasta) had one, so the MSA viewer aligned two sequences for PAX6 (47 proteins) and CYP2D6 (59).
+
+**What is loaded.** For each entry, its own canonical sequence: `rdf:value` -> `Sequence.residues` (linked by
+`Protein.sequence`), `core:md5Checksum` -> `Sequence.md5checksum`, `core:fragment` -> `Protein.isFragment` ("single" or
+"multiple" -> true; absent -> false, transform `default:false`), and `Sequence.length` / `Protein.length` = the number of
+residues (`items.complete_sequences`: the RDF states no length). `core:mass` already gave `Protein.molecularWeight`.
+
+* **Which sequence.** `core:sequence` names every isoform of an entry (P26367-1 `Simple_Sequence`, -2
+  `Modified_Sequence` `basedOn` -1, -3 `Unknown_Sequence`) and, for P01308, another entry's canonical sequence
+  (F8WCM5-1, typed `Simple_Sequence` and `External_Sequence`). The entry's own is the `Simple_Sequence` named
+  `isoforms:<accession>-N`: sources.yaml `node_constraints` puts that type triple and a `STRSTARTS` filter inside the
+  OPTIONAL that reaches the node. Exactly one per panel entry (1,547 of 1,547); it also gives P01308 one molecular
+  weight instead of two (items conflicts 11 -> 10, the rest are `Protein.name`).
+* **Predicates rdf-config's model lacks.** Its UniProt model gives a sequence node only `rdf:value`, `core:mass` and
+  `core:name`; `core:md5Checksum` and `core:fragment` are added by sources.yaml `model_additions`
+  (`rdfconfig.add_predicates`), then mapped in knowledge.yaml like any other row.
+* **Isoforms.** The RDF holds the isoform sequences too (140 `Modified_Sequence` nodes of 63 panel entries, as many as the
+  varsplic FASTA gives; the 2 `External_Sequence` and 1 `Unknown_Sequence` nodes are other entries' or have none), but this source models proteins by accession, not isoform; they stay with
+  uniprot-fasta.
+* **Fragments.** 376 of the 1,547 canonical sequences (all "single"; no "multiple" on the panel).
+
+**Keys: one Protein per accession.** Stock uniprot keys Protein on `md5checksum, organism`, and the type's keys file
+(`humanmine-items_keys.properties`) carries that key for every RDF source. On the panel 36 md5s are shared by 72 entries:
+20 TrEMBL entries have exactly a Swiss-Prot canonical's sequence (A3KPE2 = P02656, A0A384NPN7 = P05091, ...), 9 a
+Swiss-Prot isoform's (F1T0F8 = P26367-2, ...), the rest TrEMBL with TrEMBL. Had this source written
+`Protein.md5checksum`, those 20 would have merged into the Swiss-Prot proteins. So:
+
+* `Protein.md5checksum` is not written (stock's 254 values are the only ones), and sources.yaml `own_keys` gives the
+  source its own keys file (`humanmine-uniprot_keys.properties`) with Protein keyed on `primaryAccession` only.
+* `Sequence` has no key in any keys file, so a Swiss-Prot entry's RDF sequence would have stood, orphaned, beside the one
+  stock stored (Protein.sequence resolves to stock's by priority); this is why `rdf:value` was dropped before.
+  `own_keys` keys this source's Sequence on `md5checksum` (`project.source_keys` now names a key no file declares): stock
+  stores one Sequence per md5 and loads first, so the RDF item merges into it. Identical sequences share one Sequence,
+  as in stock. uniprot-fasta (later, keys Protein on accession, no Sequence key) still makes its own isoform Sequences.
+
+**Fetch.** Only `out/uniprot/queries/main.sparql` changed. Count query first (1 request, 3 s): 1,547 rows, 658,052
+residues. Then the allgenes cache copied to `repos/rdfc2im/cached_raw_data.trembl-seq-2026-11-18` (`tools/copy_tree.py`,
+136 files, every group verified), the uniprot group restored and `main` alone fetched again: 1,547 rows, 963,910 B, one
+page, 12.4 s, 18 Nov 2026 21:58 UTC; the group saved back with the same meta (13 files, 14,448,719 B). The other 12 tables
+are the 18 Nov 00:34 ones. A cache group records scope, taxon and panel but not the query, so the old group restored for
+the new query would have loaded the sequence columns empty: `rdfc2im tsv` now exits non-zero when a raw table lacks a
+column its query selects. **The canonical driver** (`fb-env-ut-hybrid.sh`) must point `DRIVE_CACHE_DIR` at a cache whose
+uniprot group holds the new `main` table: `cached_raw_data.trembl-seq-2026-11-18`, or the allgenes cache with that one
+group copied in; every other group is identical. The panel release asset `cached_raw_data-*.tar.gz` needs the same group.
+
+**The cited-PMID set.** The pubmed scope is every 4-9 digit attribute value of the hgnc (panel cut), uniprot,
+gwascatalog and reactome items; the new lengths of 1,000 and over joined it, `pmids_md5` changed and the cached pubmed
+group was refused (the first run stopped at `rdfc2im_pipeline`). `length` lines are now left out: the set is again the
+6,890 numbers the cached group was fetched for. Only 3,930 of them are `pubMedId` values (the rest are masses,
+identifiers, years, pages); taking `pubMedId` alone is the fix, left for a task of its own since it changes the PubMed
+records loaded and needs the pubmed group fetched again.
+
+**Build** (`drive-ut-9n4.32.sh`, the canonical driver with this worktree, the cache above and `pages-9n4.32`; resumed at
+`rdfc2im_pipeline` after the PMID fix): `rdfc2im_pipeline` 111 s, `integrate_sources` 934 s (9n4.35: 786 s;
+humanmine-uniprot 22 s against 21 s, the rest is run-to-run variation), `postprocess` 201 s (169 s; create-search-index 59
+s and 55 s, it runs twice as before; autocomplete 18 s), `apply_public_lists` 183 s, `write_source_manifest` 551 s. Lowest
+available memory 5.5 GB in integrate, 4.3 GB at the start of `build_webapp` (the ut mine was stopped before the build: 9.9
+GB available at the start). `/` 4.2 GB free before and after.
+
+| | before | after |
+|---|---|---|
+| Protein | 22,630 | 22,630 |
+| with `sequence` (and `length`) | 254 | 1,687 |
+| with a sequence and no stock record (TrEMBL, Swiss-Prot fragments) | 0 | 1,433 |
+| `isFragment` true / false | 0 / 254 | 376 / 1,311 |
+| with `md5checksum` | 254 | 254 |
+| Sequence objects (distinct md5) | 254 (254) | 1,651 (1,642: 9 RDF sequences equal a varsplic isoform's) |
+| Sequences shared by two or more proteins / referenced by none | 0 / 0 | 36 / 0 |
+| duplicate `primaryAccession`; `Protein.length` != `sequence.length`; dangling `sequence` | 0; 0; 0 | 0; 0; 0 |
+| canonical / isoforms / isoforms with `canonicalProtein` / dangling | 114 / 140 / 140 / 0 | 114 / 140 / 140 / 0 |
+| UniProtFeature; Gene-Protein pairs | 8,105; 21,950 | 8,105; 21,950 |
+| all objects | 1,120,890 | 1,122,286 |
+| Postgres `humanmine-production` | 2,238 MB | 2,209 MB (a fresh database) |
+| PAX6 proteins with a sequence (fragments, length) | 2 of 47 | 47 of 47 (34; 12-473) |
+| CYP2D6 proteins with a sequence (fragments, length) | 2 of 59 | 59 of 59 (2; 117-520) |
+
+The 254 stock proteins have exactly the records they had (md5, sequence md5 and length, length, isFragment,
+isUniprotCanonical, canonicalProtein, feature count), and no protein gained or lost a gene. The RDF UniProt data set
+carries its licence (CC BY 4.0, im-9n4.45).
+
+**How it looks** (Chromium 1600 px wide; screenshots in `repos/.sandbox-disk/rdfc2im/screenshots-9n4.32/`):
+
+| | PAX6 before | PAX6 after | CYP2D6 before | CYP2D6 after | HumanMine PAX6 / CYP2D6 |
+|---|---|---|---|---|---|
+| rows aligned | 2 | 47 | 2 | 59 | 5 / 2 |
+| page load to alignment drawn | 1.9 s | 7.2 s | 2.4 s | 3.9 s | 9.5 s / 10.8 s |
+| sequence queries (one per protein) | 47 | 47 | 59 | 59 | 5 / 2 |
+| `/align-sequence` POST: request, response, time | 895 B, 949 B, 0.08 s | 13 kB, 26 kB, 3.3 s | 980 B, 1 kB, 0.1 s | 27 kB, 34 kB, 1.7 s | 2 kB, 0.6 s / 1 kB, 0.4 s |
+
+* The panel is 294 px tall whatever the number of sequences and shows 15 rows at a time; the rest are reached by
+  dragging inside the alignment (the mouse wheel does nothing; enlarging the panel from its corner does not show more
+  rows). Labels are accessions only, so nothing tells a Swiss-Prot entry from a TrEMBL fragment.
+* PAX6 (`PAX6-msa.png`, `-dragged-right`, `-dragged-down`): fragments dominate. In the first 55 columns 5 of the first
+  15 rows are only gaps (Q8IVH0, Q6RYC5, A0A1W2PSB5 ...), and further on short fragments (the shortest 12 residues) sit as
+  islands in long gap runs; the full-length entries line up cleanly. Readable for someone looking for a particular
+  fragment, a lot of grey for anyone wanting the gene's protein.
+* CYP2D6 (`CYP2D6-msa.png`, `-dragged-down`): dozens of near-identical full-length TrEMBL entries (most of them
+  A0ACI8...), so the panel looks like the canonical sequence repeated; variant columns stand out, and one entry
+  (A0ACI8QI16) runs off into a different C-terminus. Two fragments.
+* The aligner (`trial/front`, 127.0.0.1:13000) copes: no timeout or error, 3.3 s for PAX6's 47 sequences.
+* Protein Visualizer (`*-protein-visualizer.png`): unchanged, it shows the canonical entry's PDB structures (2CUE/6PAX
+  for PAX6, 2F9Q ... for CYP2D6). Proteins table (`*-proteins-table.png`): TrEMBL rows now have a length; their
+  Primary Identifier stays NO VALUE (only stock sets it).
+* HumanMine (`*-humanmine.png`): PAX6 5 rows (P26367, P26367-2 and three full-length TrEMBL), CYP2D6 2. Stock loads
+  no fragments (`loadfragments` false) and drops a TrEMBL entry whose sequence another entry already has.
+
+Whether to show only reviewed proteins by default is the owner's decision; nothing filters them here.
 
 ## Persistence, and what does not survive
 
