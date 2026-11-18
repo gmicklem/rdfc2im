@@ -11,6 +11,13 @@ Outputs (in out/_mine/):
                                  `alongside` sits right after its stock source, and fields written
                                  by more than one source get an entry
   links_report.txt               per source: classes, links (via) and their reverse references
+
+With `stock` (a hybrid build's --stock-sources, rdfc2im/data/stock_sources.yaml) the named stock
+<source> entries are checked against the table and get their data property and organism
+properties rewritten from it (stock.apply_to_project); their integrate-order constraints are
+checked against the final order. They stay where HumanMine's own project.xml has them, as every
+stock source rdfc2im does not replace already does; tools/reduce_mine.py `sources` is what keeps
+or drops them for a reduced mine.
 """
 from __future__ import annotations
 import copy
@@ -58,7 +65,7 @@ def gen_project(out_root: str, project_out: str, model: InterMineModel, type_nam
                 extensions_xml: Optional[str], source_version: Optional[str] = None,
                 priorities: Optional[str] = None,
                 priorities_override: Optional[str] = None, only: Optional[List[str]] = None,
-                log=print) -> dict:
+                log=print, stock: Optional[List[str]] = None, stock_table: Optional[str] = None) -> dict:
     os.makedirs(project_out, exist_ok=True)
     report: List[str] = []
     new_sources: List[etree._Element] = []
@@ -180,6 +187,8 @@ def gen_project(out_root: str, project_out: str, model: InterMineModel, type_nam
             while at < len(kids) and kids[at].get("name") in alongside:
                 at += 1                     # keep earlier supplements of the same source in order
             sources_el.insert(at, el)
+        if stock:
+            _apply_stock(sources_el, stock, stock_table, out_root, only, sources_cfg, log)
         etree.indent(root, space="  ")
         tree.write(os.path.join(project_out, "project.xml"), pretty_print=True, xml_declaration=True, encoding="UTF-8")
         etree.indent(replaced_el, space="  ")
@@ -187,6 +196,9 @@ def gen_project(out_root: str, project_out: str, model: InterMineModel, type_nam
             fh.write(b"<!-- original HumanMine sources superseded by an rdf-config load (rdfc2im project) -->\n")
             fh.write(etree.tostring(replaced_el, pretty_print=True))
     else:
+        if stock:
+            from .stock import StockError
+            raise StockError("stock sources need HumanMine's project.xml (project_xml in rdfc2im.yaml)")
         root = etree.Element("project", type="bio")
         se = etree.SubElement(root, "sources")
         for el in new_sources:
@@ -281,6 +293,23 @@ def gen_project(out_root: str, project_out: str, model: InterMineModel, type_nam
     log(f"project: {len(new_sources)} items sources, {len(replaced_names)} originals replaced, "
         f"{len(all_classes)} classes keyed -> {project_out}")
     return {"sources": len(new_sources), "replaced": replaced_names, "classes": all_classes, "report": report}
+
+
+def _apply_stock(sources_el, names: List[str], table_path: Optional[str], out_root: str,
+                 only: Optional[List[str]], sources_cfg: dict, log=print) -> None:
+    """The stock half of gen_project: see the module docstring. Raises StockError."""
+    from . import stock as st
+    table = st.load_table(table_path)
+    unknown = [n for n in names if n not in table]
+    if unknown:
+        raise st.StockError(f"unknown stock source(s) {', '.join(unknown)} - not in stock_sources.yaml")
+    problems = st.apply_to_project(sources_el, table, names)
+    order = [s.get("name") for s in sources_el if isinstance(s.tag, str) and s.tag == "source"]
+    problems += st.order_problems(order, table, names, st.replaced_by(source_dirs(out_root, only), sources_cfg))
+    if problems:
+        raise st.StockError("; ".join(problems))
+    log("project: stock sources kept and rewritten from stock_sources.yaml: "
+        + ", ".join(n for n in order if n in names))
 
 
 def _parse_priority(line: str):
