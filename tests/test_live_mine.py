@@ -498,3 +498,110 @@ def test_classic_ui_webconfig_is_valid():
     assert "webconfig-model.xml file is not valid" not in body, (
         "classic UI reports an invalid webconfig-model.xml - trim the widgets referencing "
         "classes/paths this build does not load (tools/reduce_mine.py webconfig)")
+
+
+# ----------------------------------------------------------------- stock UniProt (--stock-sources) [im-9n4.6]
+SWISSPROT_DATA_SET = "Swiss-Prot data set"   # UniprotConverter's own data set title
+
+
+def stock_uniprot_loaded() -> bool:
+    """The mine was built with the stock uniprot source: only its additions give Protein the
+    isUniprotCanonical attribute. Without it these checks have nothing to check and skip."""
+    try:
+        cls = _get_json(f"{MINE_BASE}/service/model?format=json")["model"]["classes"]["Protein"]
+    except Exception:
+        return False
+    return "isUniprotCanonical" in cls.get("attributes", {})
+
+
+def query_rows_q(xml: str):
+    """query_rows for a whole <query> (several constraints, outer joins)."""
+    url = f"{MINE_BASE}/service/query/results?query={urllib.parse.quote(xml)}&format=json"
+    payload = _get_json(url)
+    if not payload.get("wasSuccessful", False):
+        raise AssertionError(f"query failed: {payload.get('error')!r}\n  {xml}")
+    return payload["results"]
+
+
+def _swissprot_proteins(canonical: bool):
+    return query_rows_q(
+        '<query model="genomic" view="Protein.primaryAccession Protein.uniprotAccession Protein.isFragment '
+        'Protein.canonicalProtein.primaryAccession Protein.sequence.length Protein.sequence.residues" '
+        'sortOrder="Protein.primaryAccession asc">'
+        '<join path="Protein.canonicalProtein" style="OUTER"/><join path="Protein.sequence" style="OUTER"/>'
+        f'<constraint path="Protein.dataSets.name" op="=" value="{SWISSPROT_DATA_SET}"/>'
+        f'<constraint path="Protein.isUniprotCanonical" op="=" value="{str(canonical).lower()}"/></query>')
+
+
+def test_stock_uniprot_gives_a_swissprot_data_set():
+    """The stock UniProt loader ran beside rdfc2im's uniprot (sources.yaml `alongside: [uniprot]`).
+
+    Until im-9n4.6 the alongside declaration was not true: phase 7 kept only humanmine-items and
+    reactome, so the DataSets listed only the RDF UniProt set.
+    """
+    if not mine_up():
+        return _skip(f"live checks off or no mine at {MINE_BASE} (make test-live)")
+    if not stock_uniprot_loaded():
+        return _skip("mine built without --stock-sources uniprot")
+    rows = query_rows("DataSet.name DataSet.dataSource.name", "DataSet.name", "=", SWISSPROT_DATA_SET)
+    assert rows == [[SWISSPROT_DATA_SET, "UniProt"]], rows
+
+
+def test_swissprot_canonical_proteins_have_their_sequence():
+    """Every Swiss-Prot canonical protein carries its sequence, is not a fragment, and is its own
+    UniProt accession (the MSA viewer reads sequence.residues; it was empty before im-9n4.6).
+    Canonical entries have no canonicalProtein, as on HumanMine (P10635 there has none)."""
+    if not mine_up():
+        return _skip(f"live checks off or no mine at {MINE_BASE} (make test-live)")
+    if not stock_uniprot_loaded():
+        return _skip("mine built without --stock-sources uniprot")
+    rows = _swissprot_proteins(True)
+    assert len(rows) >= 100, f"only {len(rows)} Swiss-Prot canonical proteins for the panel"
+    assert EXAMPLE_PROTEIN in {r[0] for r in rows}
+    bad = [r[:5] for r in rows if not r[5] or r[4] != len(r[5]) or r[2] is not False or r[1] != r[0] or r[3]]
+    assert not bad, f"{len(bad)} canonical proteins without sequence or with wrong flags: {bad[:5]}"
+
+
+def test_swissprot_isoforms_point_at_their_canonical_protein():
+    """Each isoform names its canonical protein (Protein.canonicalProtein, which the protein
+    visualizer selects) and has the sequence uniprot-fasta loads from the varsplic file."""
+    if not mine_up():
+        return _skip(f"live checks off or no mine at {MINE_BASE} (make test-live)")
+    if not stock_uniprot_loaded():
+        return _skip("mine built without --stock-sources uniprot")
+    rows = _swissprot_proteins(False)
+    assert rows, "no Swiss-Prot isoforms"
+    assert f"{EXAMPLE_PROTEIN}-2" in {r[0] for r in rows}
+    bad = [r[:5] for r in rows if r[3] != r[0].split("-")[0] or r[1] != r[3] or not r[5]]
+    assert not bad, f"{len(bad)} isoforms with no canonical protein or no sequence: {bad[:5]}"
+
+
+def test_the_example_protein_has_features_comments_and_keywords():
+    """The stock loader's own content: features, comments and keywords (none come from RDF)."""
+    if not mine_up():
+        return _skip(f"live checks off or no mine at {MINE_BASE} (make test-live)")
+    if not stock_uniprot_loaded():
+        return _skip("mine built without --stock-sources uniprot")
+    for view in ("Protein.features.type", "Protein.comments.type", "Protein.keywords.name"):
+        rows = query_rows(f"Protein.primaryAccession {view}", "Protein.primaryAccession", "=", EXAMPLE_PROTEIN)
+        assert rows and any(r[1] for r in rows), f"{EXAMPLE_PROTEIN} has no {view}"
+
+
+def test_one_protein_per_accession_and_one_gene_per_identifier():
+    """Stock uniprot keys Protein on md5checksum+organism and Gene on the XML's GeneID; rdfc2im's
+    hgnc and uniprot key Protein on primaryAccession and link genes by symbol (plan 50 risk 3).
+    The merge must leave one object per key."""
+    if not mine_up():
+        return _skip(f"live checks off or no mine at {MINE_BASE} (make test-live)")
+    for view, path in (("Protein.primaryAccession", "Protein.primaryAccession"),
+                       ("Gene.primaryIdentifier", "Gene.primaryIdentifier"),
+                       ("Gene.symbol", "Gene.organism.taxonId")):
+        op, value = ("=", "9606") if path.endswith("taxonId") else ("IS NOT NULL", "")
+        rows = query_rows_q(f'<query model="genomic" view="{view}">'
+                            f'<constraint path="{path}" op="{op}"{f" value={chr(34)}{value}{chr(34)}" if value else ""}/>'
+                            '</query>')
+        seen, dups = set(), set()
+        for (v,) in rows:
+            if v is not None:
+                (dups if v in seen else seen).add(v)
+        assert not dups, f"{len(dups)} duplicate {view}: {sorted(dups)[:10]}"
