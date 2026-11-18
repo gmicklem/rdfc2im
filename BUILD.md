@@ -749,7 +749,7 @@ made when the directory is missing.
 
 | Source | Upstream file | Filter | Rows in / out | Loads |
 |---|---|---|---|---|
-| protein-atlas | `normal_ihc_data.tsv` (zip, 5.6 MB) + `rdfc2im/data/hpa_tissue_to_organ.tsv` | Ensembl id, column 1, header kept | 1,179,586 / 8,390 (90 of 115 ids) | ProteinAtlasExpression 8,390, Tissue 48, TissueGroup 15 |
+| protein-atlas | `normal_ihc_data.tsv` (zip, 5.6 MB) + `rdfc2im/data/hpa_tissue_to_organ.tsv` | Ensembl id, column 1, header kept | 1,179,586 / 8,390 (90 of 115 ids) | ProteinAtlasExpression 8,390, Tissue 48, TissueGroup 15 (14 from the next rebuild: Retina moved to Brain) |
 | protein-atlas-rna | `rna_tissue_consensus.tsv` (zip) | same | 1,026,292 / 5,814 (114) | RNASeqResult 5,814 |
 | gtex | v8 `..._gene_median_tpm.gct.gz` | same, 3 header lines kept, Ensembl version stripped | 56,200 / 114 (114) | RNASeqResult 6,156 (114 x 54 tissues) |
 | atlas-express | `E-MTAB-513-fpkms.tsv` | same | 58,735 / 114 | AtlasExpression 1,824 (114 x 16 assay groups) |
@@ -766,6 +766,8 @@ made when the directory is missing.
   tool's query (`proteinAtlasExpression.tissue.tissueGroup.name`, an inner join through the web service) returns
   nothing: the panel said "No data found!". `rdfc2im/data/hpa_tissue_to_organ.tsv` is a hand-written mapping of the
   48 tissues to the organ systems of HPA's tissue pages, shipped in the repository (table key `repo_file`) and staged as it is.
+  Gos reviewed the grouping on 18 Nov 2026 and accepted it with one change: Retina is in the Brain group (14 groups,
+  no separate Eye group).
   Check it against HPA before a release.
 * **Levels** in the tool: HPA now says Not detected / Low / Medium / High (the tool's `STRENGTHS` knows exactly these) and the
   heat map colours them; the file also holds a few `Ascending`, `Descending` and `Not representative` (19 rows).
