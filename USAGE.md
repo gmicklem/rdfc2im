@@ -192,7 +192,8 @@ python3 tools/panelapp_lists.py resolve --in DIR --mine URL --out FILE [--organi
   `panelapp`, `redistributable=false` (BUILD.md says why).
 * `lists` writes `LISTS/lists/<name>.json` (`:` as `__`), `index.json` and `index.tsv`. A list is: name, type `Gene`,
   tags `Genomics England gene panel` and `im:public`, a description (the 2021 text, "Decemeber" corrected, plus
-  `Panel <id>, version <v> (created <date>), fetched <date>`), the panel, `replaces` (the 2021 list name, for the 17
+  `Panel <id>, version <v> (created <date>), fetched <date>`, then the attribution and usage limits of the
+  PanelApp Terms of Use, `ATTRIBUTION_TEXT`), the panel, `replaces` (the 2021 list name, for the 17
   panels renamed since) and the Green genes with HGNC id, symbol and Ensembl GRCh38 id. Naming rule: the panel name with
   spaces as `_` and every other character kept, except `/` as `_`; the test reproduces 154 of the 171 names of 2021
   and the other 17 are the renamed panels. STRs and regions are counted, not listed. `--select 100k` keeps the

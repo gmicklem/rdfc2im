@@ -1220,6 +1220,9 @@ def test_a_non_panel_gene_resolves_by_symbol_hgnc_id_and_ensembl_id():
 # --- the public lists of tools/apply_public_lists.py [im-9n4.22, T2.3] --------------------------------------------
 
 RADIAL_LIST = "PL_GenomicsEngland_GenePanel:Radial_dysplasia"
+# the last sentences of every PanelApp list description (tools/panelapp_lists.py ATTRIBUTION_TEXT)
+PANEL_ATTRIBUTION = ("content authored by Genomics England and its contributors, used under the PanelApp Terms of Use "
+                     "(December 2019). Non-commercial use only; not for diagnostic use or medical decision-making.")
 
 
 def _public_lists():
@@ -1248,6 +1251,7 @@ def test_the_genomics_england_lists_are_public_and_tagged_without_duplicates():
     for l in panels:
         assert {"Genomics England gene panel", "im:public"} <= set(l["tags"]), l
         assert l["type"] == "Gene" and l["size"] > 0 and "version" in l["description"], l
+        assert l["description"].endswith(PANEL_ATTRIBUTION), l
     assert all("im:public" in l["tags"] for l in lists)
 
 
