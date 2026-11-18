@@ -172,6 +172,41 @@ def test_own_keys_cut_a_class_and_name_a_key_no_file_declares():
     assert [ln for ln in out2 if ln.startswith("Gene.")] == ["Gene.key_primaryidentifier=primaryIdentifier"]
 
 
+def _tsv(tmp_path, raw_header):
+    """`rdfc2im tsv --source up` on a raw main.tsv with `raw_header`, for a query selecting ?UniProt ?seq."""
+    import contextlib, io
+    from rdfc2im import cli
+    src = tmp_path / "out" / "up"
+    (src / "raw").mkdir(parents=True)
+    (tmp_path / "cfg" / "up").mkdir(parents=True)
+    (tmp_path / "rdfc2im.yaml").write_text("config_root: cfg\nout: out\nsources: [up]\n")
+    (src / "columns.tsv").write_text(
+        "table\tposition\tcolumn\tvariable\tim_class\tim_field\ttransform\tfilter\tvalue\tkind\tvia\tstatus\trequired\troot\n"
+        "main\t0\tUniProt\tUniProt\tProtein\tprimaryAccession\tiri_localname\t\t\tiri\t\tsure\tyes\tProtein\n"
+        "main\t1\tseq\tseq\tSequence\tresidues\t\t\t\tliteral\t\tsure\tno\tProtein\n")
+    vals = {"?UniProt": "<http://purl.uniprot.org/uniprot/P1>", "?seq": '"MKV"', "?seq_mass": '"1"'}
+    (src / "raw" / "main.tsv").write_text("\t".join(raw_header) + "\n" + "\t".join(vals[h] for h in raw_header) + "\n")
+    old = os.getcwd(); os.chdir(tmp_path); err = io.StringIO()
+    try:
+        with contextlib.redirect_stderr(err), contextlib.redirect_stdout(io.StringIO()):
+            rc = cli.main(["tsv", "--source", "up"])
+    finally:
+        os.chdir(old)
+    return rc, err.getvalue()
+
+
+def test_tsv_stops_on_a_raw_table_fetched_for_another_query(tmp_path):
+    """The raw-data cache records scope, taxon and panel, not the query: restored after a mapping
+    change (the uniprot group before im-9n4.32 has no ?seq), the new column would load empty.
+    `rdfc2im tsv` exits non-zero instead, which stops full-build.sh (set -e)."""
+    rc, err = _tsv(tmp_path, ["?UniProt", "?seq_mass"])
+    assert rc != 0 and "up/main lacks seq" in err
+
+
+def test_tsv_passes_a_raw_table_that_has_every_column(tmp_path):
+    assert _tsv(tmp_path, ["?UniProt", "?seq"]) == (0, "")
+
+
 def test_rdf_uniprot_never_merges_a_protein_on_its_sequence():
     """Stock uniprot keys Protein on md5checksum+organism; 20 of the panel's TrEMBL entries have a
     Swiss-Prot entry's sequence (18 Nov 2026), and would merge into it if this source wrote

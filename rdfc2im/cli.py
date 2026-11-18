@@ -458,8 +458,18 @@ def run(a, ws) -> int:
         return 1 if bad else 0
 
     def do_tsv():
+        # A raw table without a column its query now selects was fetched for another query: most
+        # often a cached group restored after the mapping changed (cache meta records the scope,
+        # not the query) [im-9n4.32].  Its column would load empty, silently; stop instead.
+        stale = []
         for s in sources:
-            tsv_source(os.path.join(out, s))
+            for t, st in tsv_source(os.path.join(out, s)).items():
+                if st.get("missing_vars"):
+                    stale.append(f"{s}/{t} lacks {', '.join(st['missing_vars'])}")
+        for msg in stale:
+            print(f"rdfc2im tsv: {msg} - the raw table was fetched for another query; fetch it again "
+                  f"(a cached group must be refetched and saved after a mapping change)", file=sys.stderr)
+        return 1 if stale else 0
 
     def do_items(m):
         n = 0
@@ -489,7 +499,7 @@ def run(a, ws) -> int:
     if cmd == "fetch":
         return do_fetch()
     if cmd == "tsv":
-        do_tsv(); return 0
+        return do_tsv()
     if cmd == "linkml":
         gen_linkml(ws.get("model_json"), ws.get("live_model"), os.path.join("curation", "linkml", "humanmine.yaml")); return 0
     if cmd == "all":
@@ -515,7 +525,8 @@ def run(a, ws) -> int:
         do_translate(m)
         if a.fetch and do_fetch():
             return 1
-        do_tsv()
+        if do_tsv():
+            return 1
         do_items(m)
         do_project(m)
         rc = do_check(m)
