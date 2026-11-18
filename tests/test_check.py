@@ -779,3 +779,53 @@ def test_a_stock_source_without_its_source_entry_or_out_of_order_stops_project(t
         assert "reactome must integrate after panther" in str(e)
     else:
         raise AssertionError("an order constraint against project.xml must be refused")
+
+
+GFF_TABLE = STOCK_TABLE + """  ncbi-gff:
+    type: ncbi-gff
+    jar: intermine
+    licence: public domain
+    redistributable: true
+    data_dir: human/gff/current
+    after: [ncbi-gene]
+    priority_first: [Gene.chromosome]
+    chromosome_lengths: {from: gff, source: ncbi-gff-lengths, data_dir: human/gff/lengths}
+    files:
+      - {id: gff, url: "https://e/g.gff.gz", stage_as: g.gff, filter: {format: gff3, ids: entrez, keep_types: [gene]}}
+"""
+
+
+def test_a_gff_stock_source_gets_its_lengths_loader_and_open_ended_priorities(tmp_path):
+    """[im-9n4.9] ncbi-gff: an items <source> loading Chromosome.length goes right after it; with stock
+    sources every generated priority ends in `*` (a stock loader writing Chromosome.primaryIdentifier
+    and missing from an entry without one stops the load, even with the same value); and
+    priority_first puts the loader first for Gene.chromosome."""
+    from rdfc2im.project import gen_project
+    m, out_root, mine, px = _alongside_setup(tmp_path)
+    (tmp_path / "project.xml").write_text(ALONGSIDE_PROJECT.replace(
+        '<source name="panther" type="panther"/>',
+        '<source name="panther" type="panther"/>\n  <source name="ncbi-gff" type="ncbi-gff"/>'))
+    gen_project(out_root, mine, m, "humanmine-items", "/data", px, {}, None, log=lambda *a: None,
+                source_version="4.3.0", stock=["ncbi-gff"], stock_table=_stock_table(tmp_path, GFF_TABLE))
+    root = etree.parse(os.path.join(mine, "project.xml")).getroot()
+    names = [s.get("name") for s in root.iter("source")]
+    assert names.index("ncbi-gff-lengths") == names.index("ncbi-gff") + 1, names
+    lengths = root.findall(".//source[@name='ncbi-gff-lengths']")[0]
+    assert lengths.get("type") == "humanmine-items" and lengths.get("version") == "4.3.0"
+    assert [p.get("location") for p in lengths.iter("property")] == [
+        "/micklem/data/human/gff/lengths/chromosome_lengths.xml"]
+    prio = open(os.path.join(mine, "genomic_priorities.properties")).read().splitlines()
+    assert "Gene.chromosome = ncbi-gff, *" in prio, prio
+    entries = [ln for ln in prio if "=" in ln and not ln.startswith("#")]
+    assert entries and all(ln.rstrip().endswith("*") or "*," in ln for ln in entries), entries
+    keys = open(os.path.join(mine, "humanmine-items_keys.properties")).read()
+    assert "Organism.key" in keys                         # the lengths items need Organism keys
+
+
+def test_without_stock_sources_generated_priorities_are_unchanged():
+    from rdfc2im.project import merge_priorities
+    out = merge_priorities(None, {"Gene.name": ["humanmine-a", "humanmine-b"]}, {}, {}, {})
+    assert "Gene.name = humanmine-a, humanmine-b" in out.splitlines()
+    out = merge_priorities(None, {"Gene.name": ["humanmine-a", "humanmine-b"]}, {}, {}, {}, open_ended=True,
+                           first={"Gene.name": ["ncbi-gff"]})
+    assert "Gene.name = ncbi-gff, humanmine-a, humanmine-b, *" in out.splitlines()

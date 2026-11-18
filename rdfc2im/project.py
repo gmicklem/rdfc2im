@@ -198,7 +198,19 @@ def gen_project(out_root: str, project_out: str, model: InterMineModel, type_nam
                 at += 1                     # keep earlier supplements of the same source in order
             sources_el.insert(at, el)
         if stock:
-            _apply_stock(sources_el, stock, stock_table, out_root, only, sources_cfg, log)
+            extra_sources = _apply_stock(sources_el, stock, stock_table, out_root, only, sources_cfg, log,
+                                         type_name, source_version)
+            # A lengths source writes Organism and Chromosome items, so its jar's keys file needs
+            # their keys even in a build where no rdfc2im source writes a Chromosome.
+            if extra_sources:
+                for c in ("Organism", "Chromosome"):
+                    if c not in all_classes:
+                        all_classes.append(c)
+                for n in extra_sources:
+                    for f in ("Chromosome.length", "Chromosome.organism", "Chromosome.primaryIdentifier"):
+                        writers.setdefault(f, [])
+                        if n not in writers[f]:
+                            writers[f].append(n)
         etree.indent(root, space="  ")
         tree.write(os.path.join(project_out, "project.xml"), pretty_print=True, xml_declaration=True, encoding="UTF-8")
         etree.indent(replaced_el, space="  ")
@@ -294,8 +306,16 @@ def gen_project(out_root: str, project_out: str, model: InterMineModel, type_nam
     for src in source_dirs(out_root, only):
         for r in sources_cfg.get(src, {}).get("replaces") or []:
             replaced_by.setdefault(r, []).append(f"humanmine-{src}")
+    first: Dict[str, List[str]] = {}
+    if stock:
+        from . import stock as st
+        table = st.load_table(stock_table)
+        for n in stock:
+            for f in table.get(n, {}).get("priority_first") or []:
+                first.setdefault(f, []).append(n)
     text = merge_priorities(priorities if priorities and os.path.exists(priorities) else None,
-                            writers, replaced_by, alongside, alongside_fields)
+                            writers, replaced_by, alongside, alongside_fields,
+                            open_ended=bool(stock), first=first)
     text = _apply_priority_overrides(text, priorities_override)
     with open(os.path.join(project_out, "genomic_priorities.properties"), "w") as fh:
         fh.write(text)
@@ -309,8 +329,10 @@ def gen_project(out_root: str, project_out: str, model: InterMineModel, type_nam
 
 
 def _apply_stock(sources_el, names: List[str], table_path: Optional[str], out_root: str,
-                 only: Optional[List[str]], sources_cfg: dict, log=print) -> None:
-    """The stock half of gen_project: see the module docstring. Raises StockError."""
+                 only: Optional[List[str]], sources_cfg: dict, log=print, type_name: str = "humanmine-items",
+                 source_version: Optional[str] = None) -> List[str]:
+    """The stock half of gen_project: see the module docstring. Raises StockError. Returns the names
+    of the extra <source> entries it added (the chromosome-lengths loaders)."""
     from . import stock as st
     table = st.load_table(table_path)
     unknown = [n for n in names if n not in table]
@@ -318,12 +340,39 @@ def _apply_stock(sources_el, names: List[str], table_path: Optional[str], out_ro
         raise st.StockError(f"unknown stock source(s) {', '.join(unknown)} - not in stock_sources.yaml")
     problems = st.apply_to_project(sources_el, table, names)
     _move_load_first(sources_el, [n for n in names if table[n].get("load_first")], log)
+    added = _add_lengths_sources(sources_el, st.lengths_sources(table, names), type_name, source_version, log)
     order = [s.get("name") for s in sources_el if isinstance(s.tag, str) and s.tag == "source"]
     problems += st.order_problems(order, table, names, st.replaced_by(source_dirs(out_root, only), sources_cfg))
     if problems:
         raise st.StockError("; ".join(problems))
     log("project: stock sources kept and rewritten from stock_sources.yaml: "
         + ", ".join(n for n in order if n in names))
+    return added
+
+
+def _add_lengths_sources(sources_el, lengths, type_name: str, source_version: Optional[str],
+                         log=print) -> List[str]:
+    """One <source> of rdfc2im's own items type per stock source with `chromosome_lengths`, right after
+    it: it loads Chromosome.length (Items XML written by `subset_raw.py chromosome-lengths` from the
+    GFF's ##sequence-region lines) [im-9n4.9]. No stock loader sets the length without the genome FASTA:
+    the GFF3 converter ignores directives and the 9606 `region` rows, and
+    create-chromosome-locations-and-lengths sets only feature locations and lengths. It goes after the
+    GFF source so the Chromosome objects it merges into exist whichever keys made them."""
+    added = []
+    for stock_name, name, location in lengths:
+        kids = [s for s in sources_el if isinstance(s.tag, str) and s.tag == "source"]
+        after = next((s for s in kids if s.get("name") == stock_name), None)
+        if after is None or any(s.get("name") == name for s in kids):
+            continue
+        el = etree.Element("source", name=name, type=type_name)
+        if source_version:
+            el.set("version", source_version)
+        el.append(_prop("src.data.file", location=location))
+        after.addnext(el)
+        added.append(name)
+    if added:
+        log(f"project: chromosome-lengths source(s) {', '.join(added)} added after their GFF source")
+    return added
 
 
 def _move_load_first(sources_el, names: List[str], log=print) -> None:
@@ -409,7 +458,8 @@ def _apply_priority_overrides(text: str, path: Optional[str]) -> str:
 
 def merge_priorities(base: Optional[str], writers: Dict[str, List[str]],
                      replaced_by: Dict[str, List[str]], alongside: Dict[str, List[str]],
-                     alongside_fields: Dict[str, List[str]]) -> str:
+                     alongside_fields: Dict[str, List[str]], open_ended: bool = False,
+                     first: Optional[Dict[str, List[str]]] = None) -> str:
     """HumanMine's genomic_priorities.properties with our sources merged in.
 
     Two sources writing different non-null values into one field stop the build unless the field
@@ -425,7 +475,15 @@ def merge_priorities(base: Optional[str], writers: Dict[str, List[str]],
     A field HumanMine does not configure gets an entry when more than one of our sources writes it
     or an `alongside` source does; the latter ends in `*`, since the stock source's other
     co-writers are unknown here.  Without a base file only those entries are written.
+
+    open_ended (a build with --stock-sources): every entry ends in `*`. What a stock loader writes is
+    unknown here, and a source missing from an entry without `*` stops the load even when its value
+    is the same ("Priority configured for Chromosome.primaryIdentifier does not include source
+    ncbi-gff", SourcePriorityComparator) [im-9n4.9].
+    first: Class.field -> stock sources ranked ahead of everything else for that field (the table's
+    `priority_first`: ncbi-gff for Gene.chromosome, the loader's own coordinates).
     """
+    first = first or {}
     ours_of = {f: list(dict.fromkeys(srcs)) for f, srcs in writers.items()}
     for f, srcs in alongside_fields.items():
         ours_of[f] = list(dict.fromkeys(ours_of.get(f, []) + srcs))
@@ -449,6 +507,13 @@ def merge_priorities(base: Optional[str], writers: Dict[str, List[str]],
                 for st in stocks:
                     out.insert(at, st); at += 1
             out.insert(at, n)
+        return finish(out, fld)
+
+    def finish(out: List[str], fld: str) -> List[str]:
+        lead = [n for n in first.get(fld, []) if n not in replaced_by]
+        out = lead + [n for n in out if n not in lead]
+        if open_ended and "*" not in out:
+            out.append("*")
         return out
 
     lines = ["# genomic_priorities.properties - generated by rdfc2im project from "
@@ -465,12 +530,12 @@ def merge_priorities(base: Optional[str], writers: Dict[str, List[str]],
             new = merge(order, key)
             lines.append(ln if new == order else f"{key} = {', '.join(new)}")
     added = []
-    for fld in sorted(ours_of):
+    for fld in sorted(set(ours_of) | set(first)):
         if fld in done:
             continue
-        srcs = ours_of[fld]
+        srcs = ours_of.get(fld, [])
         supplements = [n for n in srcs if n in alongside]
-        if len(srcs) < 2 and not supplements:
+        if len(srcs) < 2 and not supplements and fld not in first:
             continue
         added.append(f"{fld} = {', '.join(merge(['*'] if supplements else [], fld))}")
     if added:
@@ -675,6 +740,11 @@ def check_project(out_root: str, project_out: str, model: InterMineModel, type_n
         if s.get("type") != type_name:
             continue
         src = name[len("humanmine-"):]
+        if not name.startswith("humanmine-"):
+            # an items source rdfc2im project added for a stock source (chromosome lengths): no
+            # mapping of its own to check
+            soft.append(f"{name}: {type_name} source without a translated rdfc2im source (added for a stock source)")
+            continue
         for c in read_tsv(os.path.join(out_root, src, "columns.tsv")):
             cls, fld = c["im_class"], c["im_field"]
             if not model.has_class(cls) and not _in_additions(project_out, type_name, cls, None):

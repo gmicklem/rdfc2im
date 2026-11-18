@@ -38,7 +38,13 @@ HUMANMINE_BIO_VERSION = "4.3.0"
 # tools/subset_raw.py's interface (plan 50, T0.2)
 FORMATS = ("gaf", "gff3", "uniprot-xml", "fasta", "tab", "gene_info")
 NEEDS_IDS = ("gaf", "gff3", "uniprot-xml", "fasta", "tab")
-ID_KINDS = ("entrez", "ensembl", "uniprot", "symbol", "none")
+# entrez..symbol: the panel id sets; chromosomes: the RefSeq accessions of the GRCh38 chromosomes
+# the ncbi-gff loader maps (not panel-dependent; `subset_raw.py idsets` writes it too)
+ID_KINDS = ("entrez", "ensembl", "uniprot", "symbol", "chromosomes", "none")
+# The file a `chromosome_lengths` entry writes (tools/subset_raw.py chromosome-lengths), and the
+# format word its row carries in `stock files`.
+LENGTHS_FILE = "chromosome_lengths.xml"
+LENGTHS_FORMAT = "chromosome-lengths"
 UNPACK = ("zip", "tar.gz")
 DATA_PROPERTIES = ("src.data.dir", "src.data.file")
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
@@ -99,6 +105,9 @@ def validate_table(table: Dict[str, dict]) -> List[str]:
             v = e.get(key, [])
             if not isinstance(v, list) or not all(isinstance(x, str) and x for x in v):
                 out.append(f"{where}: `{key}` must be a list of names")
+        pf = e.get("priority_first", [])
+        if not isinstance(pf, list) or not all(isinstance(x, str) and re.match(r"^[A-Z]\w*\.\w+$", x) for x in pf):
+            out.append(f"{where}: `priority_first` must be a list of Class.field names")
         for n in e.get("needs", []) or []:
             if n not in table:
                 out.append(f"{where}: needs '{n}', which is not in the table")
@@ -161,8 +170,32 @@ def validate_table(table: Dict[str, dict]) -> List[str]:
                     out.append(f"{fw}: format tab needs `column`")
                 if flt.get("column") and not re.match(r"^\d+(,\d+)*$", str(flt["column"])):
                     out.append(f"{fw}: `column` is 1-based numbers, comma separated")
+                kt = flt.get("keep_types")
+                if kt is not None:
+                    if fmt != "gff3":
+                        out.append(f"{fw}: `keep_types` is for format gff3 only")
+                    if not isinstance(kt, list) or not kt or not all(
+                            isinstance(t, str) and re.match(r"^[A-Za-z0-9_-]+$", t) for t in kt):
+                        out.append(f"{fw}: `keep_types` must be a list of GFF feature types")
                 if multi:
                     out.append(f"{fw}: a member glob unpacks several files; only a single file can be filtered")
+        cl = e.get("chromosome_lengths")
+        if cl is not None:
+            if not isinstance(cl, dict):
+                out.append(f"{where}: `chromosome_lengths` must be a mapping")
+                continue
+            src_f = next((f for f in files if isinstance(f, dict) and f.get("id") == cl.get("from")), None)
+            if src_f is None:
+                out.append(f"{where}: chromosome_lengths `from` must name one of the entry's file ids")
+            elif not isinstance(src_f.get("filter"), dict) or src_f["filter"].get("format") != "gff3":
+                out.append(f"{where}: chromosome_lengths reads a gff3-filtered file; {cl.get('from')} is not one")
+            if not cl.get("source") or not NAME_RE.match(str(cl["source"])) or cl["source"] in table:
+                out.append(f"{where}: chromosome_lengths `source` must be a new project.xml source name")
+            cdir = cl.get("data_dir")
+            if not cdir or str(cdir).startswith("/") or ".." in str(cdir).split("/") \
+                    or str(cdir).strip("/") == str(ddir or "").strip("/"):
+                out.append(f"{where}: chromosome_lengths `data_dir` must be a relative path under "
+                           f"{HUMANMINE_DATA_ROOT}, not the source's own data_dir (its loader reads that)")
     return out
 
 
@@ -354,24 +387,43 @@ def filter_spec(f: dict) -> str:
             parts.append(f"{k}={flt[k]}")
     if flt.get("keep_header"):
         parts.append("keep_header")
+    if flt.get("keep_types"):
+        parts.append("keep_types=" + "+".join(flt["keep_types"]))
     return ",".join(parts)
+
+
+def lengths_sources(table: Dict[str, dict], names: List[str]) -> List[Tuple[str, str, str]]:
+    """(stock source, lengths source name, lengths file location under HUMANMINE_DATA_ROOT) for every
+    selected source with a `chromosome_lengths` entry: the extra humanmine-items <source> that loads
+    Chromosome.length from the GFF's ##sequence-region lines [im-9n4.9]."""
+    out = []
+    for n in names:
+        cl = table[n].get("chromosome_lengths")
+        if cl:
+            out.append((n, cl["source"], f"{HUMANMINE_DATA_ROOT}/{cl['data_dir'].strip('/')}/{LENGTHS_FILE}"))
+    return out
 
 
 def file_rows(table: Dict[str, dict], names: List[str], stock_dir: str, raw_cache: str,
               local_dir: Optional[str] = None) -> List[str]:
-    """One row per upstream file, 16 fields:
+    """One row per upstream file, 17 fields:
 
-      source, file id, origin (download|local), url, raw path, unpack, member,
+      source, file id, origin (download|local|derived), url, raw path, unpack, member,
       format, ids, column, taxon, keep_header (0|1),
       work dir (where filtering/unpacking writes; '-' when the raw file is staged as it is),
-      kind (filtered|whole|asis), stage dir (relative to the data root), stage name ('-' = member names)
+      kind (filtered|whole|asis|derived), stage dir (relative to the data root),
+      stage name ('-' = member names), keep_types (gff3: comma-separated feature types)
 
     `filtered` work dirs are what the source's filtered cache group holds; `whole` ones are files
     used complete but decompressed or unpacked (derived from the raw group again on every build,
-    never cached twice); `asis` files are staged straight from the raw path."""
+    never cached twice); `asis` files are staged straight from the raw path. A `chromosome_lengths`
+    entry adds a last `derived` row for the source: its raw path is the filtered GFF it reads, its
+    format chromosome-lengths, and its work dir sits in the filtered group, so it is cached and
+    restored with it [im-9n4.9]."""
     rows = []
     for n in names:
         e = table[n]
+        works = {}
         for f in e["files"]:
             lp = local_path(local_dir, n, f)
             origin = "local" if lp else "download"
@@ -384,11 +436,19 @@ def file_rows(table: Dict[str, dict], names: List[str], stock_dir: str, raw_cach
                 kind, work = "whole", os.path.join(stock_dir, "whole", n, f["id"])
             else:
                 kind, work = "asis", None
+            works[f["id"]] = (work, f.get("stage_as"))
             fl = flt if isinstance(flt, dict) else {}
             rows.append(_row(n, f["id"], origin, f.get("url"), raw, f.get("unpack"), f.get("member"),
                              fl.get("format"), fl.get("ids"), fl.get("column"), fl.get("taxon"),
                              1 if fl.get("keep_header") else 0, work, kind, e["data_dir"].strip("/"),
-                             f.get("stage_as")))
+                             f.get("stage_as"), ",".join(fl.get("keep_types") or [])))
+        cl = e.get("chromosome_lengths")
+        if cl:
+            work, sname = works[cl["from"]]
+            rows.append(_row(n, "chromosome-lengths", "derived", None, os.path.join(work, sname), None, None,
+                             LENGTHS_FORMAT, None, None, "9606", 0,
+                             os.path.join(stock_dir, "subset", n, "chromosome-lengths"), "derived",
+                             cl["data_dir"].strip("/"), LENGTHS_FILE, None))
     return rows
 
 
@@ -421,7 +481,9 @@ def cache_meta(table: Dict[str, dict], name: str) -> List[str]:
     spec = [{"id": f["id"], "url": f.get("url"), "raw": raw_name(f), "filter": filter_spec(f),
              "unpack": f.get("unpack"), "member": f.get("member"), "stage_as": f.get("stage_as")}
             for f in e["files"] if f.get("filter", "none") != "none"]
-    spec_md5 = hashlib.md5(json.dumps(spec, sort_keys=True).encode()).hexdigest()
+    if e.get("chromosome_lengths"):
+        spec.append({"chromosome_lengths": e["chromosome_lengths"]["from"], "file": LENGTHS_FILE})
+    spec_md5 =hashlib.md5(json.dumps(spec, sort_keys=True).encode()).hexdigest()
     return [f"spec_md5={spec_md5}", f"redistributable={'true' if e['redistributable'] else 'false'}",
             "licence=" + re.sub(r"[^A-Za-z0-9.-]+", "_", str(e["licence"])).strip("_")]
 

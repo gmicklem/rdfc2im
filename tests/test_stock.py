@@ -220,7 +220,8 @@ def test_file_rows_say_how_each_file_is_made_and_staged(tmp_path):
     t = stock.load_table()
     rows = [r.split("\t") for r in stock.file_rows(t, ["uniprot", "panther", "psi-mi-ontology", "biogrid"],
                                                     "/S", "/S/cache")]
-    assert all(len(r) == 16 for r in rows)
+    assert all(len(r) == 17 for r in rows)
+    assert all(r[16] == "-" for r in rows)                    # keep_types: gff3 only
     by = {(r[0], r[1]): r for r in rows}
     u = by[("uniprot", "sprot")]
     assert u[2:5] == ["download", u[3], "/S/cache/stock-raw-uniprot/data/uniprot_sprot_human.xml.gz"]
@@ -235,6 +236,52 @@ def test_file_rows_say_how_each_file_is_made_and_staged(tmp_path):
     o = [r.split("\t") for r in stock.file_rows(t, ["omim"], "/S", "/S/cache", str(tmp_path))]
     assert o[0][2:5] == ["local", "-", str(tmp_path / "omim" / "mimTitles.txt")]
     assert o[1][2] == "download"                                # no local morbidmap.txt
+
+
+def test_ncbi_gff_rows_keep_gene_rows_and_derive_the_chromosome_lengths():
+    """[im-9n4.9] The GFF row asks for every `gene` row (keep_types), and a last `derived` row makes
+    the lengths file from the filtered GFF into the same filtered group, staged in its own directory
+    for the ncbi-gff-lengths source."""
+    t = stock.load_table()
+    rows = [r.split("\t") for r in stock.file_rows(t, ["ncbi-gff"], "/S", "/S/cache")]
+    assert [r[1] for r in rows] == ["gff", "chromosome-lengths"]
+    g, d = rows
+    assert g[7:9] == ["gff3", "entrez"] and g[13] == "filtered" and g[16] == "gene"
+    assert d[2] == "derived" and d[4] == "/S/subset/ncbi-gff/gff/GRCh38_latest_genomic.gff"
+    assert d[7] == "chromosome-lengths" and d[12:16] == [
+        "/S/subset/ncbi-gff/chromosome-lengths", "derived", "human/gff/lengths", "chromosome_lengths.xml"]
+    assert stock.lengths_sources(t, ["uniprot", "ncbi-gff"]) == [
+        ("ncbi-gff", "ncbi-gff-lengths", "/micklem/data/human/gff/lengths/chromosome_lengths.xml")]
+    assert t["ncbi-gff"]["priority_first"] == ["Gene.chromosome"]
+    # the genome FASTA is cut to the mapped chromosomes and needs the GFF
+    f = [r.split("\t") for r in stock.file_rows(t, ["ncbi-fasta"], "/S", "/S/cache")][0]
+    assert f[7:9] == ["fasta", "chromosomes"] and t["ncbi-fasta"]["needs"] == ["ncbi-gff"]
+    m = stock.cache_meta(t, "ncbi-gff")[0]
+    t2 = copy.deepcopy(t)
+    del t2["ncbi-gff"]["chromosome_lengths"]
+    assert stock.cache_meta(t2, "ncbi-gff")[0] != m           # the lengths file is part of the group
+
+
+def test_validation_of_keep_types_lengths_and_priority_first():
+    gff = {"id": "gff", "url": "https://e/x.gff.gz", "stage_as": "x.gff",
+           "filter": {"format": "gff3", "ids": "entrez", "keep_types": ["gene"]}}
+    ok = _entry(type="ncbi-gff", data_dir="human/gff/current", files=[gff],
+                chromosome_lengths={"from": "gff", "source": "gff-lengths", "data_dir": "human/gff/lengths"},
+                priority_first=["Gene.chromosome"])
+    assert stock.validate_table({"ncbi-gff": ok}) == []
+    bad = {
+        "a": _entry(files=[dict(_entry()["files"][0], filter={"format": "gaf", "ids": "uniprot",
+                                                              "keep_types": ["gene"]})]),
+        "b": dict(ok, chromosome_lengths={"from": "nope", "source": "x-lengths", "data_dir": "d/l"}),
+        "c": dict(ok, chromosome_lengths={"from": "gff", "source": "x-lengths", "data_dir": "human/gff/current"}),
+        "d": dict(ok, priority_first=["chromosome"]),
+        "e": dict(ok, chromosome_lengths={"from": "gff", "source": "a", "data_dir": "d/l"}),
+    }
+    probs = " | ".join(stock.validate_table(bad))
+    for needle in ("a/gaf: `keep_types` is for format gff3 only", "b: chromosome_lengths `from`",
+                   "c: chromosome_lengths `data_dir`", "d: `priority_first`",
+                   "e: chromosome_lengths `source` must be a new"):
+        assert needle in probs, (needle, probs)
 
 
 def test_jar_rows_name_each_jar_once_at_its_origins_version():
