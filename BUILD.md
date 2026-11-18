@@ -1427,14 +1427,17 @@ What it does, in order:
 
 Which lists:
 
-* **PanelApp**: all 433 current panels, Green genes only, the panel version in the description. 8 panels have no Green
+* **PanelApp**: all 433 current panels, Green genes only, the panel version in the description, then the
+  Genomics England attribution and usage limits (`ATTRIBUTION_TEXT` in `tools/panelapp_lists.py`: content authored by
+  Genomics England and its contributors, PanelApp Terms of Use December 2019 s.1.4; non-commercial use only, not for
+  diagnostic use or medical decision-making, s.1.1). The 13 other lists do not carry it. 8 panels have no Green
   gene and are skipped and reported (a list cannot be empty): Familial Neural Tube Defects, Testicular cancer pertinent
   cancer susceptibility, PHACE(S) syndrome, Ultra-rare undescribed monogenic disorders, Undiagnosed monogenic disorder
   seen in a specialist genetics clinic, Lung cancer pertinent cancer susceptibility, Juvenile dermatomyositis, Severe
   familial anorexia: 425 lists. `--public-lists-select 100k` is the 175 panels of HumanMine's 2021 scope.
 * **Names**: the 17 panels renamed in PanelApp since 2021 keep the **2021 list name** (the name BlueGenes and users of
   the lists know) and the description says `PanelApp now names this panel "<current name>"; the list keeps the name it had
-  in 2021.` One switch: `--keep-2021-names` (default; `KEEP_2021_NAMES_DEFAULT` in the tool) or `--current-names`
+  in 2021.` (before the attribution). One switch: `--keep-2021-names` (default; `KEEP_2021_NAMES_DEFAULT` in the tool) or `--current-names`
   (`--public-lists-names 2021|current` in `full-build.sh`). Flipping it renames those 17 lists: the old names are public
   `PL_` panel lists the run no longer produces, so they are removed.
 * **The 13 other HumanMine lists** (`curation/public_lists/`, from the 17 November 2026 archive; its README has the

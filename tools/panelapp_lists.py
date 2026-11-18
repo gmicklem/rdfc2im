@@ -43,6 +43,14 @@ LIST_TAGS = ["Genomics England gene panel", "im:public"]
 # The 2021 text, "Decemeber" corrected; the version, date and count are appended per panel.
 DESCRIPTION_TEXT = ("Gene panel from the Genomics England PanelApp. Only genes with a high level of confidence "
                     "(Green level) are included.")
+# Attribution and usage limits, the last sentences of every PanelApp list description. PanelApp Terms of Use
+# (December 2019): s.1.4 says GEL's status (and that of any identified contributors) as the authors of PanelApp and its
+# content must always be acknowledged; s.1.1 says no commercial use (including commercial research) and no diagnostic
+# use, medical decision-making or providing a healthcare service, unless there is a separate agreement with GEL.
+# The userprofile description column is an unbounded text, so the length is not constrained.
+ATTRIBUTION_TEXT = ("Source: Genomics England PanelApp (https://panelapp.genomicsengland.co.uk/); content authored by "
+                    "Genomics England and its contributors, used under the PanelApp Terms of Use (December 2019). "
+                    "Non-commercial use only; not for diagnostic use or medical decision-making.")
 # The order the project owner asked for: HGNC id first, then Ensembl GRCh38 id, then symbol.
 ID_ORDER = ("hgnc_id", "ensembl_id", "symbol")
 
@@ -282,10 +290,13 @@ def candidate_identifiers(rec):
     return [(k, vals[k]) for k in ID_ORDER if vals[k]]
 
 
-def description(panel, fetch_date):
+def description(panel, fetch_date, now_named=False):
+    """now_named: the list keeps its 2021 name, so say what PanelApp calls the panel now."""
+    note = (f" PanelApp now names this panel \"{panel['name']}\"; the list keeps the name it had in 2021."
+            if now_named else "")
     return (f"{DESCRIPTION_TEXT} Panel {panel['id']}, version {panel['version']} "
             f"(created {panel['version_created'][:10]}), fetched {fetch_date}. "
-            f"See https://panelapp.genomicsengland.co.uk/panels/{panel['id']}/ for more details.")
+            f"See https://panelapp.genomicsengland.co.uk/panels/{panel['id']}/ for more details.{note} {ATTRIBUTION_TEXT}")
 
 
 def build_list(panel, fetch_date, keep_2021_names=False):
@@ -294,7 +305,7 @@ def build_list(panel, fetch_date, keep_2021_names=False):
     old = RENAMED_SINCE_2021.get(panel["id"])
     suffix = old if (keep_2021_names and old) else list_suffix(panel["name"])
     return {"name": LIST_PREFIX + suffix, "type": LIST_TYPE, "tags": list(LIST_TAGS),
-            "description": description(panel, fetch_date),
+            "description": description(panel, fetch_date, bool(keep_2021_names and old)),
             "replaces": (LIST_PREFIX + old) if old and not keep_2021_names else None,
             "panel": {"id": panel["id"], "name": panel["name"], "version": panel["version"],
                       "version_created": panel["version_created"], "disease_group": panel.get("disease_group"),

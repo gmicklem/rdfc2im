@@ -343,6 +343,8 @@ def test_the_renamed_panels_keep_their_2021_names_by_default_and_say_so_in_the_d
     assert RENAMED in svc.store and RENAMED_NOW not in svc.store
     assert 'PanelApp now names this panel "Differences in sex development"' in svc.store[RENAMED]["description"]
     assert "now names" not in svc.store[PREFIX + "Hereditary_spastic_paraplegia"]["description"]
+    assert svc.store[RENAMED]["description"].endswith(P.ATTRIBUTION_TEXT)
+    assert all(l["description"].endswith(P.ATTRIBUTION_TEXT) for n, l in svc.store.items() if n.startswith(PREFIX))
 
 
 def test_the_switch_names_every_list_after_the_current_panel_and_retires_the_2021_name(tmp_path, cache):

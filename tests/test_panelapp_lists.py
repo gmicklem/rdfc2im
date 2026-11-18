@@ -247,7 +247,9 @@ def test_description_carries_version_date_and_the_corrected_2021_text():
     assert d.startswith("Gene panel from the Genomics England PanelApp. Only genes with a high level of confidence "
                         "(Green level) are included.")
     assert "Panel 165, version 1.316 (created 2025-11-23), fetched 2026-11-18." in d
-    assert d.endswith("See https://panelapp.genomicsengland.co.uk/panels/165/ for more details.")
+    assert "See https://panelapp.genomicsengland.co.uk/panels/165/ for more details. " + P.ATTRIBUTION_TEXT == d[d.index("See "):]
+    assert d.endswith("Non-commercial use only; not for diagnostic use or medical decision-making.")
+    assert "authored by Genomics England and its contributors" in d and "Terms of Use (December 2019)" in d
     assert "Decemeber" not in d
     assert lst["type"] == "Gene" and lst["tags"] == ["Genomics England gene panel", "im:public"]
 

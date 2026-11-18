@@ -194,15 +194,12 @@ def verify_cache(cache, log):
 
 
 def panel_definitions(in_dir, select, keep_2021_names):
-    """(meta, definitions of the selected panels' lists). A definition is panelapp_lists.build_list's, plus the
-    current panel name in the description when the list keeps a 2021 name."""
+    """(meta, definitions of the selected panels' lists). A definition is panelapp_lists.build_list's (its description names the current panel when the list keeps a 2021 name)."""
     meta, panels = P.read_panels(in_dir)
     defs = []
     for p in select_panels(panels, select):
         d = P.build_list(p, meta["fetch_date"], keep_2021_names)
         d["kind"] = "panelapp"
-        if keep_2021_names and p["id"] in P.RENAMED_SINCE_2021:
-            d["description"] += (f" PanelApp now names this panel \"{p['name']}\"; the list keeps the name it had in 2021.")
         defs.append(d)
     names = [d["name"] for d in defs]
     dup = sorted({n for n in names if names.count(n) > 1})
