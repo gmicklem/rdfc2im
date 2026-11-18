@@ -1209,7 +1209,7 @@ _stock_produce() {
     [ -z "$ids" ] || [ "$ids" = none ] || args+=(--ids "$STOCK_DIR/idsets/$ids.txt")
     [ -z "$col" ] || args+=(--column "$col")
     [ -z "$taxon" ] || args+=(--taxon "$taxon")
-    [ "$keep" = 1 ] && args+=(--keep-comments)
+    [ "${keep:-0}" = 0 ] || args+=(--keep-lines "$keep")   # keep_header: the number of leading lines kept [im-9n4.14]
     [ -z "$ktypes" ] || args+=(--keep-types "$ktypes")
     run python3 tools/subset_raw.py filter "${args[@]}"
     [ -z "$unpack" ] || run rm -rf "$tmp"
@@ -1293,6 +1293,11 @@ phase_subset_stock_data() {
       esac
       _stock_produce "$src" "$fid" "$raw" "$(_dash "$unpack")" "$(_dash "$member")" "$(_dash "$fmt")" "$(_dash "$ids")" \
         "$(_dash "$col")" "$(_dash "$taxon")" "$keep" "$work" "$kind" "$(_dash "$sname")" "$(_dash "$ktypes")" "$(_dash "$xdb")"
+      # phenotype.hpoa is disease-keyed: cut to the diseases of the genes_to_phenotype.txt just filtered (listed
+      # before it in the table), as mgi-identifiers is cut to panther's partners [im-9n4.15]
+      if [ "$src" = hpo-annotation ] && [ "$fid" = genes-to-phenotype ]; then
+        run python3 tools/subset_raw.py disease-ids --in "$work/$sname" --out "$STOCK_DIR/idsets"
+      fi
     done 3<<< "$rows"
     [ "$filtered" -eq 1 ] || continue
     if [ "$restore" -eq 1 ]; then

@@ -347,14 +347,20 @@ sources:
   protein-atlas:
     type: protein-atlas
     jar: humanmine-bio-sources
-    licence: CC BY-SA 3.0 in the converter (HPA now states 4.0; share-alike)
+    licence: CC BY-SA 4.0 (Human Protein Atlas; share-alike, the converter's data set still says 3.0)
     redistributable: true
     data_dir: metabolic/protein-atlas/current
     notes: >-
-      HPA renamed normal_tissue.tsv.zip to normal_ihc_data.tsv.zip (the old name is a 404);
-      staged under the name the converter accepts. Any other file in the directory makes the
-      converter throw. Column layout of the renamed file against the 2022 converter: unverified.
-      The member name inside the zip is assumed.
+      HPA renamed normal_tissue.tsv.zip to normal_ihc_data.tsv.zip (the old name is a 404); the converter
+      accepts both names. The directory must hold ONLY that file: any other name makes the converter throw, so
+      there is no README. Its only other file is tissue_to_organ.tsv (Tissue name, TissueGroup name): HPA
+      publishes none, and without it Tissue.tissueGroup is empty, which makes the Protein Atlas tool query
+      (`proteinAtlasExpression.tissue.tissueGroup.name`, an inner join through the web service) return no rows
+      ("No data found!"). rdfc2im/data/hpa_tissue_to_organ.tsv (shipped here, staged as it is) groups the 48
+      tissues of the file by the organ systems of HPA's tissue pages, written by hand [im-9n4.14]. Columns: Gene (Ensembl), Gene name, Tissue, IHC tissue name, Cell type, Level (Not
+      detected/Low/Medium/High), Reliability (Enhanced/Supported/Approved/Uncertain); the converter finds
+      them by header name. Cut to the panel's Ensembl ids, header kept [im-9n4.14].
+      HPA data are CC BY-SA: the share-alike applies to anyone redistributing the filtered cache group.
     files:
       - id: normal
         url: https://www.proteinatlas.org/download/tsv/normal_ihc_data.tsv.zip
@@ -363,19 +369,23 @@ sources:
         last_modified: "2026-11-10"
         unpack: zip
         member: normal_ihc_data.tsv
-        stage_as: normal_tissue.tsv
+        stage_as: normal_ihc_data.tsv
         filter: {format: tab, ids: ensembl, column: "1", keep_header: true}
+      - id: organs
+        repo_file: hpa_tissue_to_organ.tsv
+        stage_as: tissue_to_organ.tsv
+        filter: none
 
   protein-atlas-rna:
     type: protein-atlas-rna
     jar: humanmine-bio-sources
-    licence: CC BY-SA 3.0 in the converter (HPA now states 4.0; share-alike)
+    licence: CC BY-SA 4.0 (Human Protein Atlas; share-alike, the converter's data set still says 3.0)
     redistributable: true
     data_dir: metabolic/protein-atlas/RNA-seq/current
     notes: >-
-      The converter accepts only a file named rna_tissue.tsv (anything else throws): col 1
-      Ensembl gene, col 3 tissue, col 4 nTPM, which rna_tissue_consensus.tsv has. Member name
-      inside the zip assumed.
+      Only rna_tissue_consensus.tsv (Gene, Gene name, Tissue, nTPM) or the old rna_tissue.tsv is
+      accepted; any other file in the directory throws. Fills RNASeqResult (expressionType TPM).
+      Cut to the panel's Ensembl ids, header kept [im-9n4.14].
     files:
       - id: consensus
         url: https://www.proteinatlas.org/download/tsv/rna_tissue_consensus.tsv.zip
@@ -384,7 +394,7 @@ sources:
         last_modified: "2026-11-10"
         unpack: zip
         member: rna_tissue_consensus.tsv
-        stage_as: rna_tissue.tsv
+        stage_as: rna_tissue_consensus.tsv
         filter: {format: tab, ids: ensembl, column: "1", keep_header: true}
 
   gtex:
@@ -394,10 +404,11 @@ sources:
     redistributable: true
     data_dir: human/GTEx/current
     notes: >-
-      The converter reads a file whose name contains gene_median, but only after a header row
-      whose first cell is gene_id; the v8 GCT header says Name, so HumanMine's 2022 copy was
-      probably edited (unverified). Gene ids carry a version suffix, which subset_raw's tab
-      filter does not strip, so the cut is the resolver gate (T0.3). eQTLs (1.5 GB) are left out.
+      GTEx v8 median TPM per tissue, as RNASeqResult. The converter reads a file whose name contains
+      gene_median and, since [im-9n4.14], accepts v8's `Name` header cell; a file with `signif` in its name
+      would be read as v7 eQTLs, so none is staged (eQTLs, 1.5 GB, are left out: Gene_SigSNP stays off the
+      layout). The GCT has three leading lines (`#1.2`, `56200 54`, the header), kept by `keep_header: 3`;
+      its Ensembl ids carry a version (ENSG00000007372.22), which the tab filter strips before matching.
     files:
       - id: median
         url: https://storage.googleapis.com/adult-gtex/bulk-gex/v8/rna-seq/GTEx_Analysis_2017-06-05_v8_RNASeQCv1.1.9_gene_median_tpm.gct.gz
@@ -405,7 +416,7 @@ sources:
         size: 6952331
         last_modified: "2023-03-20"
         stage_as: GTEx_Analysis_2017-06-05_v8_RNASeQCv1.1.9_gene_median_tpm.gct
-        filter: none
+        filter: {format: tab, ids: ensembl, column: "1", keep_header: 3}
 
   atlas-express:
     type: atlas-express
@@ -414,16 +425,19 @@ sources:
     redistributable: true
     data_dir: atlas-express
     notes: >-
-      Every file in the directory is read as a tab file with a header row, col 1 Ensembl gene id.
-      The experiment's TPM table from the Atlas FTP area (the /gxa/experiments-content URL is a
-      404); the file HumanMine loaded in 2014 is not known.
+      E-MTAB-513 (Illumina Body Map), the FPKM table: five comma separated values per cell, the converter takes
+      the median; columns g1..g16 are the assay groups (leukocyte, lymph node, ...). EXACTLY one file may be in
+      the directory: every file there is parsed as data (a file name containing `tpm` makes the type TPM, so the
+      tpms file would double every row), so not E-MTAB-513-tpms.tsv and no configuration.xml. HumanMine's own
+      AtlasExpression data also include the frozen E-MTAB-62 (arrayexpress-atlas, Gos's copy only, not available
+      here) [im-9n4.14].
     files:
-      - id: tpms
-        url: https://ftp.ebi.ac.uk/pub/databases/microarray/data/atlas/experiments/E-MTAB-513/E-MTAB-513-tpms.tsv
+      - id: fpkms
+        url: https://ftp.ebi.ac.uk/pub/databases/microarray/data/atlas/experiments/E-MTAB-513/E-MTAB-513-fpkms.tsv
         verified: true
-        size: 12909800
+        size: 12937805
         last_modified: "2021-12-14"
-        stage_as: E-MTAB-513-tpms.tsv
+        stage_as: E-MTAB-513-fpkms.tsv
         filter: {format: tab, ids: ensembl, column: "1", keep_header: true}
 
   hpo-annotation:
@@ -432,14 +446,18 @@ sources:
     licence: HPO licence (reuse with attribution, terms not to be altered; unverified for a filtered copy)
     redistributable: true
     data_dir: hpo/current
-    needs: [omim]
     properties:
-      hpo.disease.file: "{data_root}/metabolic/omim/current/mimTitles.txt"
+      hpo.disease.file: ""     # OMIM's mimTitles.txt is optional now (omim is licensed, not available): empty = unset
     notes: >-
-      The 2022 converter requires phenotype_annotation.tab and phenotype_annotation_negated.tab,
-      which HPO no longer publishes (phenotype.hpoa replaced them, in another layout), and
-      hpo.disease.file (OMIM mimTitles.txt, hence needs omim). Loading it needs converter work
-      first (plan 50 section 3); the hpoa staging below is a placeholder (verified: false).
+      Reads genes_to_phenotype.txt (ncbi_gene_id, gene_symbol, hpo_id, hpo_name, frequency, disease_id) and
+      phenotype.hpoa (disease-keyed, with comment lines and a header); other files in the directory are ignored.
+      It loads OMIM: and ORPHA: (as ORPHANET:n) diseases, Gene.diseases, HPOAnnotation, HPOEvidence and HPOTerm
+      links; DECIPHER is ignored. It sets no Disease.name (the names come from orphanet and omim) and has no ID
+      resolver, so Gene.primaryIdentifier is the raw NCBI gene id. The cut is two stage [im-9n4.15]:
+      genes_to_phenotype.txt to the panel's Entrez ids (column 1), then phenotype.hpoa to the diseases that
+      cut mentions (`subset_raw.py disease-ids` writes idsets/hpo-diseases.txt, as `partner-ids` does for
+      PANTHER). The download redirects (purl.obolibrary.org) and a HEAD on the target answers 401, so
+      Last-Modified comes from the fallback one-byte GET.
     files:
       - id: genes-to-phenotype
         url: https://purl.obolibrary.org/obo/hp/hpoa/genes_to_phenotype.txt
@@ -450,11 +468,11 @@ sources:
         filter: {format: tab, ids: entrez, column: "1", keep_header: true}
       - id: hpoa
         url: https://purl.obolibrary.org/obo/hp/hpoa/phenotype.hpoa
-        verified: false
+        verified: true
         size: 35816037
         last_modified: "2026-09-02"
         stage_as: phenotype.hpoa
-        filter: none
+        filter: {format: tab, ids: hpo-diseases, column: "1", keep_header: true}
 
   orphanet:
     type: orphanet
@@ -462,7 +480,10 @@ sources:
     licence: CC BY 4.0 (Orphanet)
     redistributable: true
     data_dir: human/orphanet/current
-    notes: Disorder codes and names only, no gene ids, so no filter. Any other file in the directory throws.
+    notes: >-
+      en_product1.xml (11,645 disorders: code and name, no gene ids), used whole: the Disease objects it makes are
+      the names of the ORPHANET:n diseases hpo-annotation links to genes; the other 11,000 or so are harmless
+      stubs. Any other file in the directory throws.
     files:
       - id: product1
         url: https://www.orphadata.com/data/xml/en_product1.xml

@@ -45,7 +45,7 @@ NEEDS_IDS = ("gaf", "gff3", "uniprot-xml", "fasta", "tab", "psi-xml")
 MULTI_MEMBER_FORMATS = ("psi-xml",)
 # entrez..symbol: the panel id sets; chromosomes: the RefSeq accessions of the GRCh38 chromosomes
 # the ncbi-gff loader maps (not panel-dependent; `subset_raw.py idsets` writes it too)
-ID_KINDS = ("entrez", "ensembl", "uniprot", "symbol", "chromosomes", "mgi", "rgd", "none")
+ID_KINDS = ("entrez", "ensembl", "uniprot", "symbol", "chromosomes", "mgi", "rgd", "hpo-diseases", "none")
 # mgi, rgd: the partner genes of the panel's PANTHER rows (`subset_raw.py partner-ids`), "MGI:97490" and "3258", for
 # cutting mgi-identifiers' and rgd-identifiers' whole-genome files down to the genes panther will create [im-9n4.11]
 # NCBI's per-organism gene_info files (the ID resolver reads them whole, one taxon at a time): taxon -> path under
@@ -149,7 +149,14 @@ def validate_table(table: Dict[str, dict]) -> List[str]:
                 out.append(f"{fw}: duplicate file id")
             seen.add(fid)
             url = f.get("url")
-            if url is None:
+            if f.get("repo_file"):
+                if url is not None:
+                    out.append(f"{fw}: `repo_file` and `url` are alternatives")
+                if not os.path.isfile(os.path.join(HERE, "data", str(f["repo_file"]))):
+                    out.append(f"{fw}: repo_file {f['repo_file']} is not in rdfc2im/data/")
+                if f.get("filter", "none") != "none":
+                    out.append(f"{fw}: a repo_file is staged as it is (filter: none)")
+            elif url is None:
                 if local != "required":
                     out.append(f"{fw}: no `url`, so the source needs local_copy: required")
                 if not f.get("raw_name"):
@@ -187,6 +194,9 @@ def validate_table(table: Dict[str, dict]) -> List[str]:
                     out.append(f"{fw}: format tab needs `column`")
                 if flt.get("column") and not re.match(r"^\d+(,\d+)*$", str(flt["column"])):
                     out.append(f"{fw}: `column` is 1-based numbers, comma separated")
+                kh = flt.get("keep_header")
+                if kh is not None and not (isinstance(kh, bool) or (isinstance(kh, int) and kh >= 1)):
+                    out.append(f"{fw}: `keep_header` is true or a number of lines (1 or more)")
                 kt = flt.get("keep_types")
                 if kt is not None:
                     if fmt != "gff3":
@@ -255,7 +265,10 @@ def replaced_by(rdf_sources: Iterable[str], sources_cfg: dict) -> Dict[str, List
 
 
 def local_path(local_dir: Optional[str], name: str, f: dict) -> Optional[str]:
-    """The local copy of one file: <local_dir>/<source>/<raw name>, when it exists."""
+    """The local copy of one file: <local_dir>/<source>/<raw name>, when it exists. A `repo_file` (a small file
+    this repository ships in rdfc2im/data/, e.g. HPA's tissue-to-organ grouping [im-9n4.14]) is always local."""
+    if f.get("repo_file"):
+        return os.path.join(HERE, "data", f["repo_file"])
     if not local_dir:
         return None
     p = os.path.join(local_dir, name, raw_name(f))
@@ -263,6 +276,8 @@ def local_path(local_dir: Optional[str], name: str, f: dict) -> Optional[str]:
 
 
 def raw_name(f: dict) -> str:
+    if f.get("repo_file"):
+        return f["repo_file"]
     return f.get("raw_name") or os.path.basename(str(f["url"]).split("?", 1)[0])
 
 
@@ -403,6 +418,15 @@ def jar_rows(table: Dict[str, dict], names: List[str], im_version: str) -> List[
     return rows
 
 
+def header_lines(flt: dict) -> int:
+    """How many leading lines of a tab file the filter keeps whatever they hold: `keep_header: true` is 1, a
+    number is that many (GTEx's GCT has a `#1.2` line, a dimensions line and then the header) [im-9n4.14]."""
+    kh = flt.get("keep_header")
+    if not kh:
+        return 0
+    return 1 if kh is True else int(kh)
+
+
 def filter_spec(f: dict) -> str:
     """A canonical one-word description of how a file is cut down, for cache META and logs."""
     flt = f.get("filter", "none")
@@ -413,7 +437,8 @@ def filter_spec(f: dict) -> str:
         if flt.get(k):
             parts.append(f"{k}={flt[k]}")
     if flt.get("keep_header"):
-        parts.append("keep_header")
+        n = header_lines(flt)
+        parts.append("keep_header" if n == 1 else f"keep_header={n}")
     if flt.get("keep_types"):
         parts.append("keep_types=" + "+".join(flt["keep_types"]))
     if flt.get("xref_db"):
@@ -438,7 +463,7 @@ def file_rows(table: Dict[str, dict], names: List[str], stock_dir: str, raw_cach
     """One row per upstream file, 18 fields:
 
       source, file id, origin (download|local|derived), url, raw path, unpack, member,
-      format, ids, column, taxon, keep_header (0|1),
+      format, ids, column, taxon, keep_header (the number of leading lines kept, 0 for none),
       work dir (where filtering/unpacking writes; '-' when the raw file is staged as it is),
       kind (filtered|whole|asis|derived), stage dir (relative to the data root),
       stage name ('-' = member names), keep_types (gff3: comma-separated feature types),
@@ -470,7 +495,7 @@ def file_rows(table: Dict[str, dict], names: List[str], stock_dir: str, raw_cach
             fl = flt if isinstance(flt, dict) else {}
             rows.append(_row(n, f["id"], origin, f.get("url"), raw, f.get("unpack"), f.get("member"),
                              fl.get("format"), fl.get("ids"), fl.get("column"), fl.get("taxon"),
-                             1 if fl.get("keep_header") else 0, work, kind, e["data_dir"].strip("/"),
+                             header_lines(fl), work, kind, e["data_dir"].strip("/"),
                              f.get("stage_as"), ",".join(fl.get("keep_types") or []),
                              ",".join(fl.get("xref_db") or [])))
         cl = e.get("chromosome_lengths")

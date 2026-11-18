@@ -926,3 +926,74 @@ def test_the_interaction_report_template_runs_with_rows():
                                 "value1": "PAX6", "extra1": "H. sapiens", "format": "json"})
     payload = _get_json(f"{MINE_BASE}/service/template/results?{q}")
     assert payload.get("wasSuccessful") and payload["results"], payload.get("error")
+
+
+# ----------------------------------------------------------------- stock protein-atlas, protein-atlas-rna, gtex, atlas-express [im-9n4.14]
+HPA_DATA_SET = "The Human Protein Atlas expression profiles"
+HPA_RNA_DATA_SET = "Protein Atlas RNA Gene data"
+GTEX_DATA_SET = "RNA-Seq Data"
+ATLAS_DATA_SET = "atlas-express"
+
+
+def stock_expression_loaded() -> bool:
+    try:
+        return bool(query_rows_q('<query model="genomic" view="DataSet.name"><constraint path="DataSet.name" op="ONE OF">'
+                                 f'<value>{HPA_DATA_SET}</value><value>{HPA_RNA_DATA_SET}</value><value>{GTEX_DATA_SET}</value>'
+                                 f'<value>{ATLAS_DATA_SET}</value></constraint></query>'))
+    except Exception:
+        return False
+
+
+def _expression_skip():
+    if not mine_up():
+        return _skip(f"live checks off or no mine at {MINE_BASE} (make test-live)")
+    if not stock_expression_loaded():
+        return _skip("mine built without --stock-sources protein-atlas protein-atlas-rna gtex atlas-express")
+    return None
+
+
+def _human_gene_rows(view: str, symbol: str):
+    return query_rows_q(f'<query model="genomic" view="{view}"><constraint path="Gene.symbol" op="=" value="{symbol}"/>'
+                        '<constraint path="Gene.organism.shortName" op="=" value="H. sapiens"/></query>')
+
+
+def test_the_example_genes_have_protein_atlas_rna_gtex_and_atlas_express_rows():
+    if (s := _expression_skip()) is not None:
+        return s
+    for sym in ("PAX6", EXAMPLE_GENE):
+        assert len(_human_gene_rows("Gene.proteinAtlasExpression.id", sym)) > 0, sym
+        sets = {r[0] for r in _human_gene_rows("Gene.rnaSeqResults.dataSets.name", sym)}
+        assert {HPA_RNA_DATA_SET, GTEX_DATA_SET} <= sets, (sym, sets)
+        assert len(_human_gene_rows("Gene.atlasExpression.id", sym)) == 16, sym     # E-MTAB-513's 16 assay groups
+
+
+def test_tissue_and_gene_are_not_duplicated_by_the_expression_loaders():
+    """Tissue is keyed on name (protein-atlas and tissue_to_organ.tsv), Gene on primaryIdentifier by all four loaders."""
+    if (s := _expression_skip()) is not None:
+        return s
+    names = [r[0] for r in query_rows("Tissue.name", "Tissue.name", "IS NOT NULL", "")]
+    assert names and len(names) == len(set(names)), "duplicate Tissue.name"
+    ids = [r[0] for r in query_rows("Gene.primaryIdentifier", "Gene.primaryIdentifier", "IS NOT NULL", "")]
+    assert len(ids) == len(set(ids)), "duplicate Gene.primaryIdentifier"
+
+
+def test_every_tissue_has_its_organ_group_and_levels_are_hpas_current_words():
+    """Without tissue_to_organ.tsv the Protein Atlas tool's query (an inner join through tissueGroup) returns nothing."""
+    if (s := _expression_skip()) is not None:
+        return s
+    ungrouped = query_rows_q('<query model="genomic" view="Tissue.name"><constraint path="Tissue.name" op="IS NOT NULL"/>'
+                             '<constraint path="Tissue.tissueGroup" op="IS NULL"/></query>')
+    assert ungrouped == [], ungrouped
+    levels = {r[0] for r in query_rows("ProteinAtlasExpression.level", "ProteinAtlasExpression.level", "IS NOT NULL", "")}
+    assert {"Not detected", "Low", "Medium", "High"} <= levels, levels
+
+
+def test_the_protein_atlas_and_human_tissue_tool_queries_return_rows():
+    if (s := _expression_skip()) is not None:
+        return s
+    view = ("Gene.symbol Gene.primaryIdentifier Gene.proteinAtlasExpression.tissue.name "
+            "Gene.proteinAtlasExpression.tissue.tissueGroup.name Gene.proteinAtlasExpression.cellType "
+            "Gene.proteinAtlasExpression.reliability Gene.proteinAtlasExpression.level")
+    assert _human_gene_rows(view, "PAX6")
+    assert _human_gene_rows("Gene.symbol Gene.rnaSeqResults.tissue Gene.rnaSeqResults.expressionScore "
+                            "Gene.rnaSeqResults.expressionType", "PAX6")
