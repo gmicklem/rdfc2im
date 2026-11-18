@@ -513,6 +513,10 @@ def emit_items(model: InterMineModel, out_dir: str, src: str, source_cfg: dict, 
             dsrc_values["url"] = ds_url
         dsrc = store.get("DataSource", dsrc_values)
         dset = store.get("DataSet", {"name": ds_title})
+        if dset and source_cfg.get("data_set_licence"):
+            # the licence the upstream states (sources.yaml, im-9n4.45); set after the get so the
+            # DataSet's key stays its name
+            store.items[dset].attrs.setdefault("licence", source_cfg["data_set_licence"])
         if dsrc and dset:
             store.link(dset, "dataSource", dsrc)
         for k, it in list(store.items.items()):

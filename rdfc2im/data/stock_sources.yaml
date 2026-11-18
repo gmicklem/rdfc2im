@@ -157,16 +157,17 @@ sources:
   go-annotation:
     type: go-annotation
     jar: intermine
-    licence: "GOA copyright notice (free redistribution with the notice)"
-    licence_status: partial
-    licence_url: "https://ftp.ebi.ac.uk/pub/databases/GO/goa/HUMAN/README"
+    licence: "CC-BY-4.0 (GO Consortium); EMBL-EBI GOA copyright notice for the GOA files"
+    licence_status: verified
+    licence_url: "https://geneontology.org/docs/go-citation-policy/"
     licence_checked: "2026-11-18"
-    licence_quote: "This README and the accompanying databases may be copied and redistributed freely, without advance permission, provided that this copyright statement is reproduced with each copy."
+    licence_quote: "Gene Ontology Consortium data and data products are licensed under the Creative Commons Attribution 4.0 Unported License."
     licence_conditions:
-      - "Reproduce the notice with each copy: \"GOA - GO Annotation. Copyright 2018 (C) The European Bioinformatics Institute.\""
-      - "The GAF itself (current.geneontology.org/annotations/goa_human.gaf.gz) carries no licence line in its header. The GO Consortium states CC BY 4.0 for the ontology (go-basic.obo: \"terms:license http://creativecommons.org/licenses/by/4.0/\"), but its licence and citation page (geneontology.org) is blocked from the sandbox, so the licence of the annotation file is not confirmed there."
+      - "CC BY 4.0 attribution as the GO page spells it out: identify the creator (Gene Ontology Consortium), give a copyright notice, a notice that refers to the licence and to the disclaimer of warranties, and a link. Its example: \"Gene Ontology data from the 2024-01-17 release ( DOI:10.5281/zenodo.10536401 ) is made available under the terms of the CC BY 4.0 license.\""
+      - "\"We ask that when using or citing GO data that the particular release is mentioned\" (date, optionally the Zenodo DOI). In publications cite Ashburner et al., Nat Genet 2000;25:25-9 and The Gene Ontology Consortium, The Gene Ontology knowledgebase in 2026, Nucleic Acids Res 2025 (doi 10.1093/nar/gkaf1292)."
+      - "The EMBL-EBI GOA README (https://ftp.ebi.ac.uk/pub/databases/GO/goa/HUMAN/README) adds: \"This README and the accompanying databases may be copied and redistributed freely, without advance permission, provided that this copyright statement is reproduced with each copy.\" Reproduce \"GOA - GO Annotation. Copyright 2018 (C) The European Bioinformatics Institute.\" The GAF itself (current.geneontology.org/annotations/goa_human.gaf.gz) carries no licence line; the GO page covers it as a GO data product."
     redistributable: true
-    redistributable_reason: "The EBI GOA README allows free redistribution if its copyright statement travels with the copy; keep the notice file in any release asset. The GO Consortium page was not readable."
+    redistributable_reason: "CC BY 4.0 allows redistribution with attribution; keep the GOA copyright statement with the copy too."
     data_dir: go-annotation/current/human
     after: [uniprot, go]
     postprocess: [do-sources]
@@ -174,7 +175,10 @@ sources:
       GoPostprocess is the source's own postprocess (do-sources). The plugin ignores project.xml's
       src.data.includes, so every file in the directory is read as GAF: stage nothing else there.
       Column 2 is a UniProt accession for human. The GO terms come from rdfc2im's go source,
-      which replaces stock go.
+      which replaces stock go. The With/From column makes "with" Proteins (both UniProt: and UniProtKB:
+      prefixes, by primaryAccession, stubs when the protein is not otherwise loaded) since intermine
+      079ef219c2 (maint-2026): about 1,413 stub Proteins in the 114-gene panel build, 23,288 for the
+      whole human file. The running demo mine has the old code until its next rebuild.
     files:
       - id: gaf
         url: https://current.geneontology.org/annotations/goa_human.gaf.gz
@@ -187,15 +191,17 @@ sources:
   ncbi-gff:
     type: ncbi-gff
     jar: intermine
-    licence: "NCBI FTP notice: unrestricted public data (no licence named)"
-    licence_status: partial
-    licence_url: "https://ftp.ncbi.nlm.nih.gov/README.ftp"
+    licence: "No restrictions by NCBI (NCBI data-use policy; no licence named)"
+    licence_status: verified
+    licence_url: "https://www.ncbi.nlm.nih.gov/home/about/policies/"
     licence_checked: "2026-11-18"
-    licence_quote: "NOTE: ALL DATA HERE IS PUBLIC, NON-SENSITIVE, UNRESTRICTED SCIENTIFIC DATA SHARING AMONG SCIENTIFIC COMMUNITIES."
+    licence_quote: "NCBI itself places no restrictions on the use or distribution of the data contained therein."
     licence_conditions:
-      - "The notice names no licence and asks for no attribution. NCBI's own data-use policy page (https://www.ncbi.nlm.nih.gov/home/about/policies/) is on a host the sandbox blocks, so its wording on attribution and on third-party rights in some records was not read."
+      - "No licence is named and NCBI asks for no attribution for the data. The policy (Molecular Data Usage) adds: \"some submitters of the original data (or the country of origin of such data) may claim patent, copyright, or other intellectual property rights in all or a portion of the data\"; NCBI \"cannot provide comment or unrestricted permission concerning the use, copying, or distribution of the information contained in the molecular databases\"."
+      - "For NCBI's own web pages (public domain): \"it is requested that in any subsequent use of this work, NLM be given appropriate acknowledgment\". Giving that acknowledgement is cheap and the notice files do it."
+      - "The server notice (https://ftp.ncbi.nlm.nih.gov/README.ftp) agrees: \"ALL DATA HERE IS PUBLIC, NON-SENSITIVE, UNRESTRICTED SCIENTIFIC DATA SHARING AMONG SCIENTIFIC COMMUNITIES.\""
     redistributable: true
-    redistributable_reason: "The server notice says the data are unrestricted; the policy page was not readable."
+    redistributable_reason: "NCBI places no restrictions on use or distribution of its molecular data; third-party claims on single records are the submitters' (NCBI cannot grant them)."
     data_dir: human/gff/current
     after: [ncbi-gene]
     postprocess: [create-chromosome-locations-and-lengths, create-gene-flanking-features,
@@ -232,15 +238,17 @@ sources:
   ncbi-fasta:
     type: fasta
     jar: intermine
-    licence: "NCBI FTP notice: unrestricted public data (no licence named)"
-    licence_status: partial
-    licence_url: "https://ftp.ncbi.nlm.nih.gov/README.ftp"
+    licence: "No restrictions by NCBI (NCBI data-use policy; no licence named)"
+    licence_status: verified
+    licence_url: "https://www.ncbi.nlm.nih.gov/home/about/policies/"
     licence_checked: "2026-11-18"
-    licence_quote: "NOTE: ALL DATA HERE IS PUBLIC, NON-SENSITIVE, UNRESTRICTED SCIENTIFIC DATA SHARING AMONG SCIENTIFIC COMMUNITIES."
+    licence_quote: "NCBI itself places no restrictions on the use or distribution of the data contained therein."
     licence_conditions:
-      - "The notice names no licence and asks for no attribution. NCBI's own data-use policy page (https://www.ncbi.nlm.nih.gov/home/about/policies/) is on a host the sandbox blocks, so its wording on attribution and on third-party rights in some records was not read."
+      - "No licence is named and NCBI asks for no attribution for the data. The policy (Molecular Data Usage) adds: \"some submitters of the original data (or the country of origin of such data) may claim patent, copyright, or other intellectual property rights in all or a portion of the data\"; NCBI \"cannot provide comment or unrestricted permission concerning the use, copying, or distribution of the information contained in the molecular databases\"."
+      - "For NCBI's own web pages (public domain): \"it is requested that in any subsequent use of this work, NLM be given appropriate acknowledgment\". Giving that acknowledgement is cheap and the notice files do it."
+      - "The server notice (https://ftp.ncbi.nlm.nih.gov/README.ftp) agrees: \"ALL DATA HERE IS PUBLIC, NON-SENSITIVE, UNRESTRICTED SCIENTIFIC DATA SHARING AMONG SCIENTIFIC COMMUNITIES.\""
     redistributable: true
-    redistributable_reason: "The server notice says the data are unrestricted; the policy page was not readable."
+    redistributable_reason: "NCBI places no restrictions on use or distribution of its molecular data; third-party claims on single records are the submitters' (NCBI cannot grant them)."
     data_dir: human/fasta/current
     properties:
       fasta.taxonId: "9606"
@@ -274,11 +282,11 @@ sources:
     licence_url: "https://data.pantherdb.org/ftp/ortholog/current_release/README"
     licence_checked: "2026-11-18"
     licence_conditions:
-      - "Looked at: the README beside the download (it describes the files only), the /ftp/, /ftp/ortholog/ and /ftp/downloads/ directory listings and the file's own header: none states a licence or terms."
-      - "PANTHER's terms page (https://www.pantherdb.org/tou.jsp) answered HTTP 403, Approval required for www.pantherdb.org. The converter stamps the GPL URL on its data set, which nothing found supports."
-      - "The earlier record (\"free with citation\") was from general knowledge and is not confirmed."
+      - "Looked at (first and second pass): the README beside the download (it describes the files only), the /ftp/ top level and the listings of ortholog/, downloads/, generic_mapping/ (and its README), sequence_classifications/, hmm_classifications/, hmm_scoring/, panther_library/, pathway/, peregrine_data/, panther_interpro/, linkouts/, pub/, tools/ on data.pantherdb.org, and the file's own header: none states a licence or terms. There is no LICENSE or README at /ftp/ (404)."
+      - "PANTHER's terms page (https://www.pantherdb.org/tou.jsp) is on an allowed host that refuses automated readers: a Cloudflare \"Just a moment...\" page to curl, a page-load timeout to a headless browser; pantherdb.org without www fails the certificate check through the proxy. It was not worked around. No sbx rule helps; a person has to read the page in an ordinary browser."
+      - "The converter stamps the GPL URL on its data set, which nothing found supports. The earlier record (\"free with citation\") was from general knowledge and is not confirmed."
     redistributable: true
-    redistributable_reason: "No stated term forbids it and none permits it: unverified. Flag kept so the build does not break; hold publication until pantherdb.org is read."
+    redistributable_reason: "No stated term forbids it and none permits it: unverified. Flag kept so the build does not break; hold stock-panther out of any published asset until the terms are read in a browser."
     data_dir: panther/current
     resolver_taxa: [10116, 7955]
     properties:
@@ -334,16 +342,17 @@ sources:
   rgd-identifiers:
     type: rgd-identifiers
     jar: intermine
-    licence: "not verified"
-    licence_status: not-stated
-    licence_url: "https://download.rgd.mcw.edu/data_release/README.txt"
+    licence: "CC-BY-4.0"
+    licence_status: verified
+    licence_url: "https://rgd.mcw.edu/wg/disclaimer/"
     licence_checked: "2026-11-18"
+    licence_quote: "Data in RGD are provided under the terms of the Creative Commons Attribution 4.0 International (CC BY 4.0) license."
     licence_conditions:
-      - "Looked at: GENES_RAT.txt's header block (format and change log only), the README.txt and directory listing of download.rgd.mcw.edu/data_release/: none states a licence or terms."
-      - "RGD's licence and citation page (https://rgd.mcw.edu/wg/citing-rgd/) answered HTTP 403, Approval required for rgd.mcw.edu."
-      - "The earlier record (\"free to use with citation\") was HumanMine's wording and is not confirmed."
+      - "CC BY 4.0: \"You must give appropriate credit, provide a link to the license, and indicate if changes were made.\" The footer of every RGD page links the licence (\"License CC BY 4.0\", https://creativecommons.org/licenses/by/4.0/)."
+      - "Citation RGD asks for (https://rgd.mcw.edu/wg/citing-rgd/): \"RGD [species and datatype] Download file, Rat Genome Database Web Site, Medical College of Wisconsin, Milwaukee, Wisconsin. World Wide Web (URL: http://rgd.mcw.edu/). [Type in date (month, yr) when you retrieved data cited].\" For RGD itself: Rat Genome Database (RGD) (RRID:SCR_006444), and the general citation Vedi M et al., Genetics 2023, PMID 36930729."
+      - "The data file (GENES_RAT.txt) and the download host's README carry no licence text; the statement is on RGD's web pages."
     redistributable: true
-    redistributable_reason: "Unverified (no stated term either way). Flag kept so the build does not break; not in the stock_filtered asset; hold publication until rgd.mcw.edu is read."
+    redistributable_reason: "CC BY 4.0 allows redistribution of changed copies with attribution."
     data_dir: rgd-identifiers/current
     needs: [panther]      # its cut is the genes on panther's rows
     notes: >-
@@ -367,17 +376,17 @@ sources:
   psi-intact:
     type: psi
     jar: intermine
-    licence: "not verified (EMBL-EBI terms of use apply)"
-    licence_status: not-stated
-    licence_url: "https://www.ebi.ac.uk/about/terms-of-use/"
+    licence: "CC-BY-4.0"
+    licence_status: verified
+    licence_url: "https://raw.githubusercontent.com/Intact-portal/intact-portal-documentation/master/about/license-privacy.md"
     licence_checked: "2026-11-18"
-    licence_quote: "Where EMBL-EBI presents scientific data generated by others, EMBL-EBI imposes no additional restriction on the use of the contributed data than those provided by the data owner, unless otherwise specified in these Terms of Use."
+    licence_quote: "The terms of the Creative Commons Attribution 4.0 International (CC BY 4.0) License, meaning you are free to use, reproduce and adapt our data providing you give appropriate credit, apply to all IntAct data, e.g. PSI-MI XML, MI-JSON and MITAB files, as well as data directly accessed via web pages/services."
     licence_conditions:
-      - "Looked at: the PSI-MI XML <source> element and header, the FTP directory listings, CHANGES and various/README of ftp.ebi.ac.uk/pub/databases/intact/current/: no licence text."
-      - "IntAct's licence statement is on its web pages (https://www.ebi.ac.uk/intact/about and /documentation), which are JavaScript pages: fetched, they hold no licence text. This is not a blocked host; the page needs a browser."
-      - "The loader stamps an Apache-2.0 URL on the IntAct data set (a software licence); nothing found supports it. The earlier record (CC BY 4.0) is not confirmed from IntAct."
+      - "Give appropriate credit; \"For attribution please go to our Publications page\" (https://www.ebi.ac.uk/intact/about#publications)."
+      - "The Apache License 2.0 applies only to IntAct's software (\"all software relating to the functionality of IntAct, derived websites and webservices, the Curator Tool, SQL and Graph Database data dumps, and Art and Branding Materials\"), not to the data. Source: the IntAct portal documentation (the page https://www.ebi.ac.uk/intact/about/license-privacy renders this file); the PSI-MI XML files themselves carry no licence text."
+      - "EMBL-EBI terms of use (https://www.ebi.ac.uk/about/terms-of-use/) add no restriction beyond the data owner's."
     redistributable: true
-    redistributable_reason: "Unverified: the data owner's statement could not be read. Flag kept; hold publication of stock-psi-intact until it is read in a browser."
+    redistributable_reason: "CC BY 4.0 allows redistribution of changed copies with attribution."
     data_dir: psi/intact/current
     properties:
       intact.organisms: "9606"
@@ -387,10 +396,14 @@ sources:
       straight from the zip by `subset_raw.py filter --format psi-xml`, never unpacked: an
       interaction is kept when at least one participant's interactor has a panel UniProt
       accession (uniprotkb xref, isoforms and chains on their base accession), with exactly the
-      interactors and experiments it references, one filtered file per member. With the
-      all-human resolver (D-1) the partner then loads as a Gene stub. The filter also drops the
-      version of the Ensembl xref ids: PsiConverter resolves a human interactor by them
-      (9606.datasource = ensembl) and gene_info has none.
+      interactors and experiments it references, one filtered file per member. A partner outside
+      the panel is not loaded as a stub: PsiConverter makes a Gene only when one of the interactor's
+      Ensembl ids resolves through the ID resolver, and drops the whole interaction when any
+      participant has none (stock_mappings/psi-intact.yaml, interactor/xref). The filter also drops
+      the version of the Ensembl xref ids: PsiConverter resolves a human interactor by them
+      (9606.datasource = ensembl) and gene_info has none. The hostOrganism and DataSet licence
+      fixes (intermine 9ee7a6fb37 and 6e1209b48c, maint-2026) need an InterMine build that includes
+      those commits; the demo mine still runs the old code until its next rebuild.
     files:
       - id: human
         url: https://ftp.ebi.ac.uk/pub/databases/intact/current/psi25/species/human.zip
@@ -538,16 +551,18 @@ sources:
   gtex:
     type: gtex
     jar: humanmine-bio-sources
-    licence: "not verified"
-    licence_status: not-stated
-    licence_url: "https://storage.googleapis.com/adult-gtex/"
+    licence: "GTEx Portal Data License (acknowledge; no endorsement; currency statement)"
+    licence_status: verified
+    licence_url: "https://www.gtexportal.org/home/license"
     licence_checked: "2026-11-18"
+    licence_quote: "Users who republish or redistribute the data (services, products or raw data) agree to: maintain the most current version of all distributed data, or make known in a clear and conspicuous manner that the products/services/applications do not reflect the most current/accurate data available from the GTEx Portal."
     licence_conditions:
-      - "Looked at: the file's GCT header (no licence), the bucket listing of adult-gtex (README files exist for other versions and for eQTL data, none for bulk-gex/v8/rna-seq)."
-      - "The GTEx portal's licence page (https://www.gtexportal.org/home/license) answered HTTP 403, Approval required for www.gtexportal.org."
-      - "The earlier record (\"open-access summary data\") is not confirmed."
+      - "Acknowledge the GTEx Portal as the source with the phrase \"The data used for the analyses described in this manuscript were obtained from: [insert, where appropriate] the GTEx Portal on MM/DD/YY and/or dbGaP accession number phs000424.vN.pN on MM/DD/YYYY.\" \"in a clear and conspicuous manner\"."
+      - "Do not indicate or imply that the GTEx Portal has endorsed the products, services or applications."
+      - "A copy of the v8 median-TPM file must say clearly that it may not reflect the most current data (GTEx has later releases than v8), unless it is kept current."
+      - "\"No charges, usage fees or royalties are paid to the GTEx Portal for this data.\" No warranties; users hold the GTEx Project, the Broad Institute and the U.S. Government harmless. The page is a JavaScript page, read in a browser; the data file's header and the bucket carry no licence text."
     redistributable: true
-    redistributable_reason: "Unverified. Flag kept; hold publication of stock-gtex until gtexportal.org is read."
+    redistributable_reason: "The licence allows redistribution if the data are acknowledged and the currency statement is shown."
     data_dir: human/GTEx/current
     notes: >-
       GTEx v8 median TPM per tissue, as RNASeqResult. The converter reads a file whose name contains
@@ -597,16 +612,18 @@ sources:
   hpo-annotation:
     type: hpo-annotation
     jar: humanmine-bio-sources
-    licence: "not verified (points to https://hpo.jax.org/app/license)"
-    licence_status: not-verified
-    licence_url: "https://raw.githubusercontent.com/obophenotype/human-phenotype-ontology/master/README.md"
+    licence: "HPO licence (acknowledge and cite; show file dates or versions; content and relationships not to be altered)"
+    licence_status: verified
+    licence_url: "https://hpo.jax.org/license"
     licence_checked: "2026-11-18"
-    licence_quote: "See license information and instructions how to cite the HPO project (https://hpo.jax.org/app/license)"
+    licence_quote: "The HPO vocabularies, annotation files, tools and documentation are freely available."
     licence_conditions:
-      - "The annotation files (phenotype.hpoa, genes_to_phenotype.txt) have no licence line; hp.obo's header says \"terms:license https://hpo.jax.org/app/license\"; the repository's LICENSE.md is the same one-line pointer."
-      - "That page (hpo.jax.org) answered HTTP 403, Approval required for hpo.jax.org, so the terms themselves were not read. The earlier record (\"reuse with attribution, terms not to be altered\") is not confirmed."
+      - "\"anyone can download the HPO and use the ontologies or other HPO files under three conditions: That the Human Phenotype Ontology Consortium is acknowledged and cited properly. That any HPO Consortium file(s) displayed publicly include the date(s) and/or version number(s) of the relevant HPO file(s). That neither the content of the HPO file(s) nor the logical relationships embedded within the HPO file(s) be altered in any way. (Content additions and modifications have to be suggested using our issue tracker.)\""
+      - "\"Users of the HPO should add the following statement to their online presence. This service/product uses the Human Phenotype Ontology (version information). Find out more at http://www.human-phenotype-ontology.org We request that the HPO logo be included as well.\""
+      - "The HPO is copyrighted \"to protect the integrity of the vocabularies, which means that changes to the HPO vocabularies need to be done by HPO developers\". A copy that leaves rows out (the gene-panel cut of the annotation files) or re-writes the ontology as tables is not an alteration of any row or relationship, but the licence does not say so: this is a reading, for the project owner to accept or to put to the HPO team."
+      - "The page is a JavaScript page; its text was read in a browser (hpo.jax.org/app/license redirects to hpo.jax.org/license)."
     redistributable: true
-    redistributable_reason: "Unverified: the terms are on a blocked page. Flag kept; hold publication of stock-hpo-annotation and the hpo RDF group until read."
+    redistributable_reason: "Redistribution is allowed under the three conditions; a row-subset copy is a reading of 'not altered' that the project owner should accept (or confirm with the HPO team) before the group is published."
     data_dir: hpo/current
     properties:
       hpo.disease.file: ""     # OMIM's mimTitles.txt is optional now (omim is licensed, not available): empty = unset
@@ -701,16 +718,16 @@ sources:
   interpro-go:
     type: interpro-go
     jar: intermine
-    licence: "not verified"
-    licence_status: not-stated
-    licence_url: "https://ftp.ebi.ac.uk/pub/databases/interpro/current_release/interpro2go"
+    licence: "CC0-1.0"
+    licence_status: verified
+    licence_url: "https://interpro-documentation.readthedocs.io/en/latest/license.html"
     licence_checked: "2026-11-18"
+    licence_quote: "All of the InterPro, Pfam, PRINTS and SFLD downloadable data provided on the InterPro website is freely available under CC0 1.0 Universal (CC0 1.0) Public Domain Dedication."
     licence_conditions:
-      - "Looked at: the file's header (date, description, citation, contact; no licence), release_notes.txt and the FTP listings of ftp.ebi.ac.uk/pub/databases/interpro/: no licence text."
-      - "InterPro's licence page (https://www.ebi.ac.uk/interpro/about/) is a JavaScript page: fetched, it holds no text. This is not a blocked host; the page needs a browser. The earlier record (CC0) is not confirmed."
-      - "EMBL-EBI terms of use apply meanwhile (https://www.ebi.ac.uk/about/terms-of-use/)."
+      - "\"You do not need a special license for commercial use but please cite the resource and relevant individual member databases and keep the Copyright statement with your installation.\" (a request; CC0 imposes none)."
+      - "The interpro2go file (ftp.ebi.ac.uk/pub/databases/interpro/current_release/interpro2go) has no licence line of its own; the statement is on the InterPro documentation page. InterPro's own web page (https://www.ebi.ac.uk/interpro/about/license/) loads in a browser with no licence text."
     redistributable: true
-    redistributable_reason: "Unverified (3 MB mapping file, used whole). Flag kept; read the page in a browser before publishing."
+    redistributable_reason: "CC0 allows redistribution without conditions."
     data_dir: interpro/ontology/current
     files:
       - id: interpro2go
