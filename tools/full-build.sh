@@ -153,6 +153,9 @@
 #                     Default $RDFC2IM_DATA_ROOT/_stock. Raw data is large (UniProt Swiss-Prot human
 #                     175 MB, IntAct human 1 GB, the genome 973 MB gzipped): put it on a big disk, never
 #                     under the worktree or a small root (check_prereqs checks the free space).
+#   RDFC2IM_STOCK_FILTERED_CACHE  Where subset_stock_data keeps the filtered groups (stock-<name>) of
+#                     redistributable stock sources. Default the raw-data cache (--cache-dir, the CI
+#                     release asset's source); restricted sources always stay in $RDFC2IM_STOCK_DIR/cache.
 #
 # phase_resolve_bluegenes_deps was a reasoned reconstruction (LOAD-TRIAL.md recorded only the
 # *result* of resolving BlueGenes' Clojure dependencies - "178 jars" - not the exact command) -
@@ -350,6 +353,7 @@ DATA_ROOT=${RDFC2IM_DATA_ROOT:-/micklem/data}; DATA_ROOT=${DATA_ROOT%/}
 # asset): only the small filtered groups of redistributable sources go there.
 STOCK_DIR=${RDFC2IM_STOCK_DIR:-"$DATA_ROOT/_stock"}; STOCK_DIR=${STOCK_DIR%/}
 STOCK_RAW_CACHE="$STOCK_DIR/cache"
+STOCK_FILTERED_CACHE=${RDFC2IM_STOCK_FILTERED_CACHE:-}; STOCK_FILTERED_CACHE=${STOCK_FILTERED_CACHE%/}
 # The ID resolver's data directory (resolver.file.rootpath): EntrezGeneIdResolverFactory reads
 # $RESOLVER_ROOT/entrez, plain text in NCBI gene_info format (plan 50 2.2). Only used with --stock-sources.
 RESOLVER_ROOT="$STOCK_DIR/resolver"
@@ -1111,7 +1115,7 @@ _fetch_resolver_data() {
 # a release even before T0.3's `cache save --for-release` refusal exists.
 _stock_filtered_cache() {
   local m; m=$(python3 -m rdfc2im stock meta "$1" --record) || die "rdfc2im stock meta $1 failed"
-  case " $m " in *" --meta redistributable=false "*) echo "$STOCK_RAW_CACHE" ;; *) echo "$RAW_CACHE_DIR" ;; esac
+  case " $m " in *" --meta redistributable=false "*) echo "$STOCK_RAW_CACHE" ;; *) echo "${STOCK_FILTERED_CACHE:-$RAW_CACHE_DIR}" ;; esac
 }
 
 # Writes one file row's output (see `rdfc2im stock files`): a filtered file (tools/subset_raw.py filter),
@@ -1180,24 +1184,36 @@ phase_subset_stock_data() {
   local genes_md5; genes_md5=$(md5sum "$GENE_PANEL" | cut -d' ' -f1)
   local src
   for src in $STOCK_SOURCES; do
-    local cdir group="stock-$src" filtered=0 spec more
+    local cdir group="stock-$src" filtered=0 spec more restore=0
     cdir=$(_stock_filtered_cache "$src")
     spec=$(python3 -m rdfc2im stock meta "$src" --restore) || die "rdfc2im stock meta $src failed"
     more=$(python3 -m rdfc2im stock meta "$src" --record) || die "rdfc2im stock meta $src failed"
     # shellcheck disable=SC2206  # --meta k=v words without whitespace
     local need=(--meta "genes_md5=$genes_md5" --meta "taxon=$TAXON" $spec)
+    # --use-cached-data restores the filtered group - unless none matches this panel (a new
+    # genes_md5 after a panel change, or a first run) while the raw group is cached: filtering needs
+    # no network, so the files are cut from the raw group and saved, as without the option [im-9n4.6]
+    if [ "$USE_CACHED_DATA" -eq 1 ]; then
+      restore=1
+      if awk -F'\t' -v s="$src" '$1 == s && $14 == "filtered" { f = 1 } END { exit !f }' <<< "$rows" &&
+         [ -f "$STOCK_RAW_CACHE/stock-raw-$src/META.json" ] && ! { [ -f "$cdir/$group/META.json" ] &&
+           python3 -m rdfc2im cache verify "$group" --cache-dir "$cdir" "${need[@]}" >/dev/null 2>&1; }; then
+        log "$src: no filtered group for this panel in $cdir; cutting it from the cached raw group"
+        restore=0
+      fi
+    fi
     while IFS=$'\t' read -r -u 3 s fid origin url raw unpack member fmt ids col taxon keep work kind sdir sname; do
       [ "$s" = "$src" ] || continue
       case "$kind" in
         filtered) filtered=1
-                  [ "$USE_CACHED_DATA" -eq 1 ] && continue ;;
+                  [ "$restore" -eq 1 ] && continue ;;
         asis) continue ;;
       esac
       _stock_produce "$src" "$fid" "$raw" "$(_dash "$unpack")" "$(_dash "$member")" "$(_dash "$fmt")" "$(_dash "$ids")" \
         "$(_dash "$col")" "$(_dash "$taxon")" "$keep" "$work" "$kind" "$(_dash "$sname")"
     done 3<<< "$rows"
     [ "$filtered" -eq 1 ] || continue
-    if [ "$USE_CACHED_DATA" -eq 1 ]; then
+    if [ "$restore" -eq 1 ]; then
       run python3 -m rdfc2im cache restore "$group" "$STOCK_DIR/subset/$src" --cache-dir "$cdir" "${need[@]}"
     else
       # shellcheck disable=SC2086  # --meta k=v words without whitespace
