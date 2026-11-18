@@ -111,11 +111,12 @@ def test_deterministic_whatever_the_input_gzip_header():
     assert a[4:8] == b"\0\0\0\0"          # gzip MTIME field is zero
 
 
-def jb_src(d, js=True):
+def jb_src(d, js=True, jb2url="https://jbrowse2.intermine.org/"):
     d.mkdir(exist_ok=True)
     (d / "package.json").write_text(json.dumps({"name": "@intermine/bluegenes-jbrowse2-tool", "version": "0.1.0",
                                                  "files": ["config.json", "dist"]}))
-    (d / "config.json").write_text(json.dumps({"files": {"css": "dist/style.css", "js": "dist/bundle.js"}}))
+    (d / "config.json").write_text(json.dumps({"files": {"css": "dist/style.css", "js": "dist/bundle.js"},
+                                                 "jbrowse2Url": jb2url, "jbrowse2ConfigUrl": ""}, indent=2))
     (d / "dist").mkdir(exist_ok=True)
     (d / "dist" / "style.css").write_text("a{}")
     if js:
@@ -149,6 +150,11 @@ def test_stage_and_install(tmp_path):
     edn = (tools / "tools.edn").read_text()
     assert '"@intermine/bluegenes-msa-viewer" "2.1.1-patched.1"' in edn and "esyn" not in edn
     assert not (tools / ".staging").exists()
+    # the JBrowse 2 tool is patched to the page's own origin and carries the -patched.1 version
+    assert '"@intermine/bluegenes-jbrowse2-tool" "0.1.0-patched.1"' in edn
+    cfg = json.loads((tools / "@intermine" / "bluegenes-jbrowse2-tool" / "config.json").read_text())
+    assert cfg["jbrowse2Url"] == "/jbrowse2/"
+    assert rep["tools"]["bluegenes-jbrowse2-tool"]["patches"][0]["id"] == "jbrowse2-same-origin"
     # same inputs, second run: identical bytes
     rep2 = bgtools.stage(make_cache(tmp_path), jb_src(tmp_path / "jb"), str(tmp_path / "out2"))
     assert {k: v["sha256"] for k, v in rep["tools"].items()} == {k: v["sha256"] for k, v in rep2["tools"].items()}
@@ -173,3 +179,9 @@ def test_install_refuses_a_tampered_tarball(tmp_path):
         fh.write(b"x")
     with pytest.raises(PatchError, match="sha256"):
         bgtools.install(out, str(tmp_path / "tools"))
+
+
+def test_jbrowse2_url_anchor_absent_refuses(tmp_path):
+    with pytest.raises(PatchError, match="jbrowse2-same-origin"):
+        bgtools.stage(make_cache(tmp_path), jb_src(tmp_path / "jb", jb2url="https://elsewhere.example/"),
+                      str(tmp_path / "out"))

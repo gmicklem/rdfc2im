@@ -530,8 +530,9 @@ lengths (it was 404 "No Chromosomes on 9606"); `/service/jbrowse/9606/refSeqs.js
 not an endpoint and stays 404. `/service/jbrowse/9606/features/11?start=31789026&end=31817961&type=Gene`
 returns PAX6. Every feature has `subfeatures: []`: the endpoint builds them from `childFeatures`, which
 only `populate-child-features` fills, and HumanMine's project.xml has that postprocess commented out
-(HumanMine answers the same). The BlueGenes JBrowse 2 panel now draws an iframe on
-`jbrowse2.intermine.org` with assembly `<project.title>-9606` at `11:31786132..31820855` (the server is T1.5).
+(HumanMine answers the same). The BlueGenes JBrowse 2 panel opens an iframe on the BlueGenes origin,
+`/jbrowse2/?assembly=<project.title>-9606&loc=11:31786132..31820855` (served by `trial/front`, see
+"JBrowse 2 on the front" below).
 
 What the gene models lack: the converter has no CDS or UTR handling. It stores one CDS object per
 protein (604), each with the first segment as `chromosomeLocation` and the other segments as further
@@ -816,8 +817,11 @@ tools/stage-bluegenes-tools.sh --jbrowse2-src ../jbrowse2/bluegenes-tool --out $
   and gives the same bytes).
 * Patches (ids in `patches.json`): `rcsb-v1-to-v2` (protein visualizer, bundle and source), `msa-same-origin`
   (the aligner address becomes `""`, so the tool POSTs to `/align-sequence` on the BlueGenes origin),
-  `msa-array-at-crash`, `msa-legacy-wheel`, and `version-bump` to `<version>-patched.1` for the two patched
-  packages. Each edit names its anchor text and how often it must occur; any other count aborts with exit 1, so a
+  `msa-array-at-crash`, `msa-legacy-wheel`, `jbrowse2-same-origin` (the JBrowse 2 tool's `config.json`
+  `jbrowse2Url` `https://jbrowse2.intermine.org/` becomes `/jbrowse2/`, the front's route; HumanMine's own copy
+  has `https://www.humanmine.org/jbrowse2/`), and `version-bump` to `<version>-patched.1` for the three patched
+  packages (the JBrowse 2 tool is packed from source first, then patched like the others, so its version is
+  `0.1.0-patched.1`). Each edit names its anchor text and how often it must occur; any other count aborts with exit 1, so a
   silent no-op cannot happen.
 * Output: 19 tarballs, `SHA256SUMS`, `patches.json`, byte-identical for the same inputs. The esyn viewer, which
   HumanMine does not list, is left out and removed from `--install-to` if present.
@@ -832,6 +836,49 @@ the option nothing changes. The command it runs is, for the BlueGenes container'
 --install-to "$RDFC2IM_ARTIFACTS/bluegenes-tools"` (and mount that directory at BlueGenes' `BLUEGENES_TOOL_PATH`; `trial/docker-compose.yml` does not do that yet).
 The MSA viewer still needs the aligner container and a `/align-sequence` route on the BlueGenes origin
 (sequence-alignment-service), and the protein visualizer and JBrowse 2 tool need the mine's protein/location data.
+
+## JBrowse 2 on the front [im-9n4.10]
+
+`trial/front/up.sh` also serves JBrowse 2 at `http://localhost:15001/jbrowse2/`, on the BlueGenes origin as
+HumanMine does (docker_template's nginx `location /jbrowse2/`), so the tool's iframe is same-origin and needs no new
+published port. Parts:
+
+* image `rdfc2im-jbrowse2:latest` from the `repos/jbrowse2` checkout (jbrowse-web 4.3.0, pinned by SHA-256 in that
+  Dockerfile, plus the InterMine plugin built with `npm ci`), 112 MB in all (the `nginx:1.27.1-alpine` base is 52 MB of it). Behind
+  a TLS-inspecting proxy (the sandbox) the repo's Dockerfile cannot download or `npm ci` ("self-signed certificate in
+  certificate chain"), so `trial/front/build-jbrowse2.sh` builds from a copy of the committed tree
+  (`git archive HEAD`) whose Dockerfile gets the host CA bundle after each `FROM`; the checkout is not touched.
+  `build-jbrowse2.sh --smoke` then runs the repo's `docker/smoke-test.sh` from that copy (it checks the committed
+  public-mines `config.json`, which has a `humanmine-9606` assembly, not the demo's).
+* container `rdfc2im-ut-front-jbrowse2`, `127.0.0.1:14881` only, with `$FRONT_HOME/jbrowse2/config.json` mounted over
+  the image's `/config.json`;
+* `trial/front/gen-jbrowse-config.sh` writes that config with `repos/jbrowse2/config/generate.mjs
+  http://localhost:18090/humanmine 9606`. The URL is what the BROWSER uses for the mine's web service (it is written
+  into the adapters): `http://localhost:18090/humanmine` works from the Mac because that port is published, and the
+  mine answers CORS. The mine must be up; when it is not, the last generated config stays (none yet: the committed
+  public-mines config is copied as a placeholder, with a warning). Run it again after a rebuild changes the tracks.
+* assembly and track names come from the mine's `/service/jbrowse/config/9606/trackList.json` `dataset_id`, i.e. the
+  mine's `project.title` plus the taxon: `rdfc2im: 113 gene food/drug-metabolism panel-9606`, tracks
+  `<assembly>-<Class>` (98 of them). JBrowse 2 accepts that name, with its spaces and colon, as long as the tool
+  URL-encodes it, which it does (`assembly=rdfc2im%3A%20113%20gene...`); nothing needs to change in the title. A short
+  title would be tidier (HumanMine's is `humanmine-9606`).
+* the tool: `jbrowse2Url` is `/jbrowse2/` (patch `jbrowse2-same-origin`, above); no `jbrowse2ConfigUrl`, the site's own
+  `config.json` is the demo's.
+
+Why local and not jbrowse2.intermine.org: the shared site's `config.json` knows only the public mines. Its
+`jbrowse2ConfigUrl` parameter would take a config for the demo, but that config (and the mine it points at) would have
+to be reachable from the browser as https (mixed content), and Chrome's Private Network Access rules apply to a public
+https page reading `http://localhost`; none of that is needed when the viewer is on the BlueGenes origin.
+
+JBrowse 1 (`bluegenes-jbrowse-tool`): HumanMine's `/api/tools/all` lists it (19 tools, 18 Nov 2026) but its Gene
+report layout does not show it, and the layout `tools/apply_report_layout.py` applies (from
+`curation/humanmine_bluegenes_properties.json`) has only the JBrowse 2 tool, so no JBrowse 1 container is run and the
+tool stays installed, unpatched (`jbrowseUrl` `https://jbrowse.intermine.org/?data=`), outside the layout.
+Without a `layout.report` property BlueGenes lists every installed tool, including that one, so re-apply the layout
+after a rebuild (`python3 tools/apply_report_layout.py curation/humanmine_bluegenes_properties.json`).
+
+mine-tests: `[mines.local-hybrid].jbrowse2` (`MINE_TESTS_HYBRID_JBROWSE2`, default
+`http://localhost:15001/jbrowse2/`) drives `test_jbrowse2_iframe_loads` and `test_jbrowse2_site`.
 
 ## The report layout and HumanMine's templates [im-9n4.16]
 

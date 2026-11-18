@@ -70,6 +70,13 @@ PATCHES: dict[str, list[tuple[str, str, str, str, int]]] = {
         ("msa-legacy-wheel", "dist/bundle.js",
          't.mousewheel="_onmousewheel",t.DOMMouseScroll="_onmousewheel",', "", 1),
     ],
+    # The JBrowse 2 tool is packed from source, then patched like the rest. HumanMine's copy points
+    # at https://www.humanmine.org/jbrowse2/; the testbed serves JBrowse 2 on the BlueGenes origin
+    # (trial/front: /jbrowse2/), so the iframe is same-origin and the page needs no new port.
+    JBROWSE2_NAME: [
+        ("jbrowse2-same-origin", "config.json",
+         '"jbrowse2Url": "https://jbrowse2.intermine.org/"', '"jbrowse2Url": "/jbrowse2/"', 1),
+    ],
 }
 
 
@@ -221,18 +228,23 @@ def stage(src_cache: str, jbrowse2_src: str, out_dir: str, build_dir: str | None
             fh.write(data)
         report["tools"][name] = {"file": out_fn, "version": out_version, "source_version": version,
                                  "source_file": fn, "patches": patches, "sha256": sha256(data)}
-    missing = set(PATCHES) - seen
+    missing = set(PATCHES) - seen - {JBROWSE2_NAME}     # the JBrowse 2 tool comes from source, below
     if missing:
         raise PatchError(f"patched tools not found among the cached tarballs: {sorted(missing)}")
     if build_dir:
         jbrowse2_src = build_source(jbrowse2_src, build_dir)
     data, name, version = pack_source(jbrowse2_src)
     short = name.split("/", 1)[1]
+    source_version = version
+    patches: list[dict] = []
+    if short in PATCHES:
+        data, patches = patch_tarball(data, short, version)
+        version += PATCHED_SUFFIX
     out_fn = f"intermine__{short}-{version}.tgz"
     with open(os.path.join(out_dir, out_fn), "wb") as fh:
         fh.write(data)
-    report["tools"][short] = {"file": out_fn, "version": version, "source_version": version,
-                              "source_file": "(source tree)", "patches": [], "sha256": sha256(data),
+    report["tools"][short] = {"file": out_fn, "version": version, "source_version": source_version,
+                              "source_file": "(source tree)", "patches": patches, "sha256": sha256(data),
                               "built": bool(build_dir)}
     with open(os.path.join(out_dir, "patches.json"), "w", encoding="utf-8") as fh:
         json.dump(report, fh, indent=2, sort_keys=True)
