@@ -632,10 +632,100 @@ panel. `go_enrichment_for_gene` and the `GOAnnotation` model are what it restore
 * **Layout.** Homology now keeps `homologues`; HumanMine's `Gene_Orth2` is not one of its public templates, so the
   category holds the class table only.
 
+#### Interactions: psi-mi-ontology, psi-intact and biogrid [im-9n4.13]
+
+`--stock-sources "... panther mgi-identifiers psi-mi-ontology psi-intact biogrid"` on the ut stack, same panel. It
+restores `Gene.interactions`, the Cytoscape tool and the templates `Gene_Interactions_forReportPage` and
+`Gene_Interact_disease`.
+
+* **Downloads** (once): IntAct `human.zip` 1,061,726,001 B (release 24 Oct 2026; 344 members, 20 GB unpacked, 7 min from
+  the EBI mirror), BioGRID `BIOGRID-ORGANISM-LATEST.psi25.zip` 208,061,555 B (5.0.263; the human member is 5.8 GB;
+  51 s), `mi.obo` 744,253 B. BioGRID's server dates the file at the request (`Last-Modified` is always now), so a run
+  without `--use-cached-data` fetches it again.
+* **Why a filter.** Both loaders were `filter: none`, relying on the resolver gate; with the all-human resolver (D-1)
+  that cuts nothing from a human file, so the whole human interactome would have loaded. `subset_raw.py filter
+  --format psi-xml` keeps every interaction with at least one participant whose interactor has a panel id in an xref
+  of the table's `xref_db` (IntAct: `uniprotkb` against `idsets/uniprot.txt`, isoform and chain accessions on their
+  base; BioGRID: `entrez gene/locuslink` against `idsets/entrez.txt`), with exactly the interactors and experiments
+  those reference. Both files are compact PSI-MI 2.5 (lists per `<entry>`, `<interactorRef>` in the participants),
+  which is what both converters read; the expanded form is refused. It reads the zip itself, two streaming passes per
+  member, and writes one file per member under the member's own name (BioGridConverter reads the organism from the
+  file name at `substring(17)`, so the BioGRID file keeps `BIOGRID-ORGANISM-Homo_sapiens-5.0.263.psi25.xml`). Nothing
+  is unpacked to disk.
+* **Three rules the real files needed.**
+  1. *Ensembl versions.* PsiConverter resolves a human interactor through its `ensembl` xrefs
+     (`psi-intact_config.properties`: `9606.datasource = ensembl`) against `gene_info`, whose Ensembl ids have no
+     version; IntAct now writes `ENSG00000007372.27`. Without a fix no human interactor resolves. The filter drops
+     the version (94,341 ids). The ENSP and ENST ids still fail to resolve, harmlessly (about 83,000 `RESOLVER:
+     failed` log lines); 897 ENSG ids are unknown to `gene_info` and 12 resolve to two genes.
+  2. *Negative interactions.* 40 members are `human_NN_negative.xml` (`<negative>true</negative>`: shown not to
+     interact). Neither converter reads the flag, so they would load as interactions; 923 are dropped. (HumanMine
+     loads the whole directory, so its 2022 load may include them.)
+  3. *n-ary records.* Both converters turn a record into every pair of its participants except prey-prey. A
+     583-member complex with one panel gene would load 56,814 pairs, 204 with the panel gene. An interaction with
+     more than two participants keeps the panel participants and those the converter pairs with them (1,792 records
+     trimmed, 180,007 participants dropped). Counted on the filtered files, the pairs go from 470,310 to 57,418 and all
+     22,900 pairs with a panel gene stay; most of the rest come from one 176-member complex whose members all pair
+     with each other. The cost: `allInteractors` on such a detail lists the kept participants, not the whole complex.
+* **Filter numbers** (`subset_stock_data` 263 s, was 41 s):
+
+  | | IntAct | BioGRID |
+  |---|---|---|
+  | interactions in / kept | 549,887 / 6,922 | 1,441,421 / 12,019 |
+  | interactors in / kept | 551,770 / 10,828 | 49,856 / 5,684 |
+  | experiments in / kept | 43,161 / 1,382 | 71,029 / 2,202 |
+  | panel ids matched | 137 accessions (of 1,547) | 114 Entrez ids (of 114) |
+  | files | 344 in, 288 written, 318 MB | 1, 62 MB |
+  | time, peak RSS | 221 s, 87 MB | 34 s, 33 MB |
+
+* **Merging.** Nothing failed on the first integrate. Read from the keys files before the run and checked after it:
+  `Interaction` is keyed on `participant1, participant2` by both loaders, so IntAct and BioGRID details hang off one
+  Interaction per ordered gene pair (each direction is its own Interaction, as on HumanMine); `Publication` on
+  `pubMedId` by both and by the RDF pubmed source; `InteractionTerm` on `identifier` through the inherited
+  `OntologyTerm.key_identifier` (BioGRID's own `InteractionTerm.key_name` cannot apply: it sets no name), so the
+  loaders' terms merge into psi-mi-ontology's (MI:0018 has its name "two hybrid"); partner `Gene`s on
+  `primaryIdentifier` (the resolved Entrez id). `InteractionExperiment` and `InteractionDetail` have no key in
+  psi and are new objects, as on HumanMine. The model additions (`psi_additions.xml`, `biogrid_additions.xml`) do not
+  touch `curation/extensions_additions.xml`. The live tests check each of these: no duplicate pair, pubMedId,
+  InteractionTerm identifier or Gene primaryIdentifier, and every InteractionDetail has an experiment, an interaction
+  and a type.
+* **Partner genes.** 5,994 human genes are partner stubs: an Entrez id, the organism and the data set, **no symbol**
+  (3,381 from both sources, 1,753 BioGRID only, 860 IntAct only). The RDF `ncbigene` and `hgnc` sources are
+  panel-scoped, so nothing names them; the Cytoscape tool labels such a node with its Entrez id (CYP2D6: CYP2C9 by
+  symbol, 1528, 5447, 51374 by id). Loading every human gene as an identifier with its symbol is a separate task (D-1,
+  `ncbigene=full`).
+* **Result** (before: the homologue build above):
+
+  | | before | after |
+  |---|---|---|
+  | Interaction / InteractionDetail | - | 22,351 / 37,826 |
+  | InteractionExperiment / InteractionTerm / InteractionRegion | - | 2,692 / 1,480 / 78 |
+  | Gene: human (panel + stubs) / all | 114 / 1,111 | 6,108 (114 + 5,994) / 7,105 |
+  | Publication | 7,748 | 9,485 |
+  | PAX6 `Gene.interactions` (IntAct / BioGRID partners) | - | 361 (138 / 350); HumanMine (2022): 156 |
+  | CYP2D6 `Gene.interactions` | - | 4 (BioGRID 4, IntAct 1) |
+  | all objects (`intermineobject`) | 465,814 | 554,192 |
+
+  PAX6 has more partners than HumanMine's 156 because BioGRID 5.0 (2026) holds many more PAX6 interactions than the
+  2022 release.
+* **Timings** (driver from `rdfc2im_project`, 17 min in all): integrate 441 s (was 297 s; psi-mi-ontology about 10 s,
+  psi-intact 50 s, biogrid 131 s), postprocess 113 s (was 101 s). Disk: `stock_ut/` 2.7 GB (raw IntAct 1.06 GB, BioGRID
+  208 MB, filtered groups 380 MB), Postgres 2.3 GB; the root disk is untouched (3.4 GB free before and after).
+* **Report page.** `apply_report_layout.py`'s `TOOL_QUERIES` guard for the Cytoscape tool now lists every path of the
+  query bundled in the tool (`Gene.interactions.participant2.symbol`, ..., `Gene.interactions.details.dataSets.name`);
+  they resolve once these sources are loaded, so the Interactions category comes back by itself with the class table,
+  the tool and both templates. The guard stays for builds without them. 37 HumanMine templates load (was 30).
+  On the PAX6 report page in Chromium the panel draws the network (361 nodes) and no request to the mine answers 400
+  (109 requests). `Gene_Interactions_forReportPage` returns 433 rows for PAX6 and 6 for CYP2D6.
+  `Gene_Interact_disease` loads but returns no rows: it inner-joins `Gene.interactions.participant2.diseases`, and
+  `Gene.diseases` is empty in this mine (hpo-annotation and omim, T1.10).
+
 ### The ID-resolver gate [im-9n4.4]
 
-The stock loaders for psi, biogrid, panther, omim and the HumanMine expression sources have no gene filter; the
-table leaves them `filter: none`. What cuts them is the mine's ID resolver: each of those converters asks
+The stock loaders for psi, biogrid, panther, omim and the HumanMine expression sources have no gene filter of their
+own. omim and the expression sources are `filter: none` in the table; panther, psi-intact and biogrid are pre-filtered
+to records with a panel gene, since with the all-human resolver the gate cuts nothing from a human file
+[im-9n4.12, im-9n4.13]. The other cut is the mine's ID resolver: each of those converters asks
 `EntrezGeneIdResolverFactory` whether it knows a gene and drops what it does not. With a non-empty
 `--stock-sources` the build therefore gives the resolver a gene list (plan 50 2.2, decision D-1):
 
