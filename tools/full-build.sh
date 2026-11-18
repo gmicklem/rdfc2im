@@ -55,6 +55,20 @@
 #                       its own TRIAL_HOME and HOME too (the mine's ~/.intermine/humanmine.properties
 #                       carries the ports). check_prereqs refuses to start if a port is already
 #                       published by a container that is not this stack's.
+#   --stock-sources "a b"  Stock HumanMine/InterMine sources to load beside the rdfc2im ones (the
+#                       hybrid testbed, epic im-9n4): names from rdfc2im/data/stock_sources.yaml
+#                       (`python3 -m rdfc2im stock list`). Default empty: a build exactly as without
+#                       the option. Needs --intermine-src on the 6.0 line (D-5) and --taxon 9606.
+#                       check_prereqs validates the list as it does --sources; build_stock_sources
+#                       builds or checks their loader jars, fetch_stock_data downloads the upstream
+#                       files (cache groups stock-raw-<name> under $RDFC2IM_STOCK_DIR/cache, keyed to
+#                       each file's URL and Last-Modified), subset_stock_data cuts them to the gene
+#                       panel with tools/subset_raw.py (cache groups stock-<name>, keyed to genes_md5),
+#                       stage_src_data links the results into HumanMine's own data paths under the
+#                       data root, and rdfc2im project / reduce_mine.py keep their <source> entries.
+#   --stock-local DIR   Local copies of stock data: DIR/<source>/<raw file name>. Used instead of a
+#                       download when present; the only way in for a source that is not
+#                       redistributable (OMIM: D-7). Also RDFC2IM_STOCK_LOCAL.
 #   -h, --help          This text.
 #
 # Every side-effecting external command (gradle, docker, psql, curl) is emitted through `run`,
@@ -120,6 +134,11 @@
 #   INTERMINE_JAVA_HOME  JDK for building the --intermine-src checkout (default: JAVA8_HOME).
 #   MINE_TITLE        Display name baked into the webapp and BlueGenes. Default matches the demo
 #                     panel; override for a differently-scoped build.
+#   RDFC2IM_STOCK_DIR Where --stock-sources keeps its raw downloads (cache/stock-raw-<name>), the
+#                     filtered and unpacked files (subset/, whole/) and the panel id sets (idsets/).
+#                     Default $RDFC2IM_DATA_ROOT/_stock. Raw data is large (UniProt Swiss-Prot human
+#                     175 MB, IntAct human 1 GB, the genome 973 MB gzipped): put it on a big disk, never
+#                     under the worktree or a small root (check_prereqs checks the free space).
 #
 # phase_resolve_bluegenes_deps was a reasoned reconstruction (LOAD-TRIAL.md recorded only the
 # *result* of resolving BlueGenes' Clojure dependencies - "178 jars" - not the exact command) -
@@ -165,6 +184,8 @@ OFFLINE=0
 [ "${RDFC2IM_OFFLINE:-}" = 1 ] && { OFFLINE=1; USE_CACHED_DATA=1; }
 RAW_CACHE_DIR=${RAW_CACHE_DIR:-"$HERE/cached_raw_data"}
 REACTOME_LEVELS=${REACTOME_LEVELS:-default}
+STOCK_SOURCES=${STOCK_SOURCES:-}
+STOCK_LOCAL=${RDFC2IM_STOCK_LOCAL:-}
 DRY_RUN=0
 LIST_PHASES=0
 FROM_PHASE=""
@@ -191,9 +212,9 @@ TIMING_TSV="$LOG_DIR/build-$RUN_ID.timing.tsv"
 STATUS_FILE="$LOG_DIR/build-$RUN_ID.status"   # one line, current phase - `watch cat` this for a live view
 
 PHASES=(check_prereqs fetch_inputs rdfc2im_pipeline rdfc2im_project build_humanmine_items
-        build_reactome_source prepare_mine_checkout stage_src_data start_databases build_dbmodel
-        integrate_sources postprocess build_webapp resolve_bluegenes_deps stage_artifacts
-        start_mine_stack apply_templates verify)
+        build_stock_sources fetch_stock_data subset_stock_data prepare_mine_checkout stage_src_data
+        start_databases build_dbmodel integrate_sources postprocess build_webapp
+        resolve_bluegenes_deps stage_artifacts start_mine_stack apply_templates verify)
 
 # ============================================================== logging & timing
 # Every log line goes to both the terminal and $LOGFILE, timestamped, so `tail -f "$LOGFILE"`
@@ -262,11 +283,19 @@ while [ $# -gt 0 ]; do
     --reactome-levels) REACTOME_LEVELS=$2; shift ;;
     --stack-name) STACK_NAME=$2; shift ;;
     --intermine-src) INTERMINE_SRC=$2; shift ;;
+    --stock-sources) STOCK_SOURCES=$2; shift ;;
+    --stock-local) STOCK_LOCAL=$2; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "unknown option: $1" >&2; usage; exit 2 ;;
   esac
   shift
 done
+
+# build_reactome_source became build_stock_sources (reactome first, then any --stock-sources); the
+# old name still works for --from/--only.
+[ "$FROM_PHASE" = build_reactome_source ] && FROM_PHASE=build_stock_sources
+[ "$ONLY_PHASE" = build_reactome_source ] && ONLY_PHASE=build_stock_sources
+STOCK_SOURCES=$(echo ${STOCK_SOURCES//,/ })   # one space between names; commas allowed
 
 case "$REACTOME_LEVELS" in
   default|all) ;;
@@ -292,6 +321,11 @@ MINE_PORT=${MINE_PORT:-8090}
 # src_data_dir and HumanMine's own project.xml point; RDFC2IM_DATA_ROOT moves everything this
 # script stages and rewrites project.xml to match [im-ore.7].
 DATA_ROOT=${RDFC2IM_DATA_ROOT:-/micklem/data}; DATA_ROOT=${DATA_ROOT%/}
+# --stock-sources' working area (see RDFC2IM_STOCK_DIR above). The raw download groups live in their
+# own cache directory there, not in $RAW_CACHE_DIR (cached_raw_data/, published as the CI release
+# asset): only the small filtered groups of redistributable sources go there.
+STOCK_DIR=${RDFC2IM_STOCK_DIR:-"$DATA_ROOT/_stock"}; STOCK_DIR=${STOCK_DIR%/}
+STOCK_RAW_CACHE="$STOCK_DIR/cache"
 PG_CONTAINER="$RDFC2IM_PREFIX-postgres"
 SOLR_CONTAINER="$RDFC2IM_PREFIX-solr"
 MINE_CONTAINER="$RDFC2IM_PREFIX-mine"
@@ -368,6 +402,7 @@ log "full-build.sh starting - run id $RUN_ID, log $LOGFILE, dry_run=$DRY_RUN"
 log "sources: $SOURCES"
 log "trial home: $TRIAL_HOME"
 log "raw-data cache: $RAW_CACHE_DIR (use_cached_data=$USE_CACHED_DATA offline=$OFFLINE)"
+[ -z "$STOCK_SOURCES" ] || log "stock sources: $STOCK_SOURCES (working area $STOCK_DIR${STOCK_LOCAL:+, local copies $STOCK_LOCAL})"
 if [ -n "$INTERMINE_SRC" ]; then
   log "intermine-src: $INTERMINE_SRC (InterMine $IM_VERSION, $IM_LINE line, mine Gradle $IM_GRADLE_VERSION${IM_GRADLE_SHA256:+, sha256 ${IM_GRADLE_SHA256:0:12}...})"
 else
@@ -417,6 +452,7 @@ phase_check_prereqs() {
     [ -v "SCOPE_MODE[$src]" ] || die "unknown source '$src' - not in SCOPE_MODE (tools/full-build.sh); " \
       "known sources: ${!SCOPE_MODE[*]}"
   done
+  [ -z "$STOCK_SOURCES" ] || _check_stock_sources
   # The host-side Gradle tasks reach Postgres and Solr through localhost:$PG_PORT/$SOLR_PORT. If a
   # port is already published by ANOTHER stack's container, builddb would drop and recreate that
   # stack's database (and postprocess re-index its Solr) - so a port held by anything but this
@@ -460,6 +496,38 @@ phase_check_prereqs() {
     write_file "$gradle_props" "org.gradle.jvmargs=-Xmx4096m -Dfile.encoding=UTF-8"
   fi
   log "prerequisites OK"
+}
+
+# --stock-sources, validated against rdfc2im/data/stock_sources.yaml the way --sources is against
+# SCOPE_MODE, before any work starts: unknown or repeated names, a source an rdfc2im source of this
+# build replaces, a missing `needs`, a not-redistributable source (OMIM) with no local copy under
+# --stock-local, and the 6.0-line / human-only limits (D-5). Rewrites STOCK_SOURCES into HumanMine's
+# own project.xml order, the order every later phase uses. Read-only, so it runs under --dry-run too.
+_check_stock_sources() {
+  [ "$IM_LINE" = "6.0" ] || die "--stock-sources needs --intermine-src on the 6.0 line (D-5: the hybrid is" \
+    "built on the 6.0.0 stack only; the humanmine-bio-sources fork is on that line)"
+  activate_venv
+  local out err="$LOG_DIR/build-$RUN_ID.stock-check.err"
+  out=$(python3 -m rdfc2im stock check $STOCK_SOURCES --sources "$SOURCES" --taxon "$TAXON" \
+        ${STOCK_LOCAL:+--local "$STOCK_LOCAL"} 2>"$err") || die "--stock-sources: $(cat "$err")"
+  [ ! -s "$err" ] || log "$(cat "$err")"
+  STOCK_SOURCES=$out
+  log "stock sources, in HumanMine's project.xml order: $STOCK_SOURCES"
+  # The filter tool (task T0.2) is a separate file; a real run cannot do without it.
+  if [ ! -f "$HERE/tools/subset_raw.py" ]; then
+    [ "$DRY_RUN" -eq 1 ] || die "--stock-sources needs tools/subset_raw.py (the raw-file filter, task T0.2), which this checkout lacks"
+    log "note: tools/subset_raw.py is not in this checkout; a real run would stop here"
+  fi
+  # Raw downloads, plus room to unpack and filter them: twice the download plus 2 GB.
+  local need avail probe=$STOCK_DIR
+  need=$(python3 -m rdfc2im stock size $STOCK_SOURCES ${STOCK_LOCAL:+--local "$STOCK_LOCAL"}) || die "rdfc2im stock size failed"
+  need=$(( need * 2 + (2 << 30) ))
+  while [ ! -d "$probe" ]; do probe=$(dirname "$probe"); done
+  avail=$(df -B1 --output=avail "$probe" | tail -1 | tr -dc 0-9)
+  if [ "${avail:-0}" -lt "$need" ]; then
+    local msg="--stock-sources: $STOCK_DIR (on the filesystem of $probe) has $((avail >> 20)) MB free, $((need >> 20)) MB needed - set RDFC2IM_STOCK_DIR (or RDFC2IM_DATA_ROOT) to a directory on a bigger disk"
+    [ "$DRY_RUN" -eq 1 ] && log "note: $msg" || die "$msg"
+  fi
 }
 
 activate_venv() {
@@ -636,6 +704,9 @@ phase_rdfc2im_project() {
   # them, so stale translate output from sources nobody asked for ended up in project.xml and
   # :dbmodel:integrate died loading one of them (confirmed live: humanmine-expressionatlas).
   local src_flags=(); for s in $SOURCES; do src_flags+=(--source "$s"); done
+  # --stock-sources: their <source> entries are checked against the table, get their data and
+  # organism properties from it, and their integrate-order constraints are checked (plan 50 row 4).
+  for s in $STOCK_SOURCES; do src_flags+=(--stock-source "$s"); done
   run python3 -m rdfc2im project "${src_flags[@]}"
   # `check` needs out/_mine/project.xml (rdfc2im check -> check_project(..., out/_mine, ...)), which
   # `project` above is what creates - USAGE.md's own documented order is project -> check -> docs.
@@ -772,7 +843,9 @@ GRADLE
   run_in "$build" "${GRADLE_ENV[@]}" "$GRADLE49" "${IM_GRADLE_ARGS[@]}" install
 }
 
-phase_build_reactome_source() {
+# Stock reactome: what phase build_reactome_source was until --stock-sources, unchanged; now the
+# first step of phase_build_stock_sources.
+_build_reactome_source() {
   # Stock reactome (type="reactome", org.intermine:bio-source-reactome) - our own
   # humanmine-reactome only maps Pathway.description, no participants (unmapped/pruned
   # pathwayComponent link - sources.yaml's own note), so without this alongside source Pathway
@@ -845,6 +918,229 @@ phase_build_reactome_source() {
     run python3 -m rdfc2im cache save reactome-uniprot-map "$dest_dir" --cache-dir "$RAW_CACHE_DIR" \
       --meta levels="$REACTOME_LEVELS" --meta url="https://reactome.org/download/current/$fname"
   fi
+}
+
+# The rows `rdfc2im stock ROWS...` prints for this build's --stock-sources (tab-separated, '-' for an
+# empty field). Dies on a failure rather than handing an empty list to a loop. Read-only.
+_stock_rows() {
+  local what=$1; shift
+  local out
+  out=$(python3 -m rdfc2im stock "$what" $STOCK_SOURCES "$@") || die "rdfc2im stock $what failed"
+  printf '%s\n' "$out"
+}
+_stock_files() {
+  _stock_rows files --stock-dir "$STOCK_DIR" --raw-cache "$STOCK_RAW_CACHE" ${STOCK_LOCAL:+--local "$STOCK_LOCAL"}
+}
+_dash() { [ "$1" = - ] && echo "" || echo "$1"; }
+
+# Reactome as before, then the loader jar of every --stock-sources entry (plan 50 row 6), before
+# prepare_mine_checkout and builddb: dbmodel:addSourceDependencies resolves org.intermine:bio-source-
+# <type> for every source left in project.xml.
+#   intermine              publish_intermine already published every bio/sources jar of the
+#                          --intermine-src checkout into $IM_M2 at $IM_VERSION; only a missing one is
+#                          built, in that checkout's bio/sources.
+#   humanmine-bio-sources  built in the humanmine-bio-sources fork copy (maint-2026, 4.3.0) that
+#                          build_humanmine_items made, exactly as humanmine-items is.
+phase_build_stock_sources() {
+  _build_reactome_source
+  [ -n "$STOCK_SOURCES" ] || return 0
+  activate_venv
+  local rows src type origin art ver jar tree="$INTERMINE_TREE"
+  if [ "$DRY_RUN" -eq 1 ] && [ ! -d "$tree" ]; then tree="$INTERMINE_SRC"; fi   # as in _build_reactome_source
+  rows=$(_stock_rows jars --im-version "$IM_VERSION")
+  while IFS=$'\t' read -r -u 3 src type origin art ver; do
+    [ -n "$src" ] || continue
+    case "$origin" in
+      intermine)
+        jar="$IM_M2/org/intermine/$art/$ver/$art-$ver.jar"
+        if [ -f "$jar" ]; then
+          log "$src: $art $ver published by publish_intermine ($jar)"
+        elif [ "$DRY_RUN" -eq 1 ]; then
+          log "$src: $art $ver from publish_intermine ($jar); built in $tree/bio/sources only if missing"
+        else
+          log "$src: $jar is missing - building it in the checkout's bio/sources"
+          run_in "$tree/bio/sources" env JAVA_HOME="${INTERMINE_JAVA_HOME:-$JAVA8_HOME}" "${GRADLE_HOME_ENV[@]}" \
+            LANG=C.UTF-8 LC_ALL=C.UTF-8 ./gradlew --no-daemon "${IM_GRADLE_ARGS[@]}" ":$art:publishToMavenLocal"
+          [ -f "$jar" ] || die "$src: $art was built but $jar is still missing"
+        fi ;;
+      humanmine-bio-sources)
+        run_in "$TRIAL_HOME/humanmine-bio-sources" "${GRADLE_ENV[@]}" ./gradlew "${IM_GRADLE_ARGS[@]}" ":$art:publishToMavenLocal" ;;
+      *) die "$src: unknown jar origin $origin" ;;
+    esac
+  done 3<<< "$rows"
+}
+
+# Upstream Last-Modified of URL $1 as an ISO timestamp, or "unknown". HEAD first; some hosts answer
+# HEAD with an error but a one-byte GET properly (purl.obolibrary.org's GitHub release assets: 401).
+_last_modified() {
+  local url=$1 h lm
+  h=$(curl -fsSIL --max-time 60 "$url" 2>/dev/null) || h=$(curl -fsSL --max-time 60 -r 0-0 -D - -o /dev/null "$url" 2>/dev/null) || true
+  lm=$(printf '%s' "$h" | tr -d '\r' | sed -n 's/^[Ll]ast-[Mm]odified: *//p' | tail -1)
+  if [ -n "$lm" ] && lm=$(date -u -d "$lm" +%Y-%m-%dT%H:%M:%SZ 2>/dev/null); then echo "$lm"; else echo unknown; fi
+}
+
+# Plan 50 row 6 (download half): every upstream file of the --stock-sources, as one raw cache group
+# per source, stock-raw-<name>, in $STOCK_RAW_CACHE (under the data root: never cached_raw_data/).
+# The loaders later read the files straight out of that group's data/ directory, so a download is on
+# disk once. The group's META records each file's url.<id> and last_modified.<id>; a build without
+# --use-cached-data asks the server for Last-Modified first and downloads again only when it changed
+# (or is unknown). --use-cached-data / --offline never download: the raw group must verify against the
+# table's URLs, unless the source's filtered group (subset_stock_data) is cached and it has no file
+# that is used whole. Local copies (--stock-local) are read where they are.
+phase_fetch_stock_data() {
+  [ -n "$STOCK_SOURCES" ] || { log "no --stock-sources: nothing to fetch"; return 0; }
+  activate_venv
+  local rows src fid origin url raw unpack member fmt ids col taxon keep work kind sdir sname
+  rows=$(_stock_files)
+  for src in $STOCK_SOURCES; do
+    local group="stock-raw-$src" urls=() fids=() raws=() whole=0
+    while IFS=$'\t' read -r -u 3 s fid origin url raw unpack member fmt ids col taxon keep work kind sdir sname; do
+      [ "$s" = "$src" ] || continue
+      [ "$origin" = download ] || { log "$src/$fid: local copy $raw"; continue; }
+      urls+=("$url"); fids+=("$fid"); raws+=("$(basename "$raw")")
+      [ "$kind" = filtered ] || whole=1
+    done 3<<< "$rows"
+    [ "${#urls[@]}" -gt 0 ] || continue
+    local verify_meta=() i
+    for i in "${!urls[@]}"; do verify_meta+=(--meta "url.${fids[$i]}=${urls[$i]}"); done
+    if [ "$USE_CACHED_DATA" -eq 1 ]; then
+      if [ -f "$STOCK_RAW_CACHE/$group/META.json" ] || [ "$DRY_RUN" -eq 1 ]; then
+        run python3 -m rdfc2im cache verify "$group" --cache-dir "$STOCK_RAW_CACHE" "${verify_meta[@]}"
+      elif [ "$whole" -eq 0 ] && [ -f "$(_stock_filtered_cache "$src")/stock-$src/META.json" ]; then
+        log "$src: no raw download cached; subset_stock_data restores its filtered files instead"
+      else
+        die "$src: nothing cached in $STOCK_RAW_CACHE/$group - run once without --use-cached-data/--offline"
+      fi
+      continue
+    fi
+    local save_meta=("${verify_meta[@]}") known=1 lm
+    for i in "${!urls[@]}"; do
+      if [ "$DRY_RUN" -eq 1 ]; then
+        log "+ curl -fsSIL ${urls[$i]}  (its Last-Modified)"; lm=dry-run
+      else
+        lm=$(_last_modified "${urls[$i]}")
+      fi
+      [ "$lm" = unknown ] && known=0
+      save_meta+=(--meta "last_modified.${fids[$i]}=$lm")
+    done
+    if [ "$DRY_RUN" -eq 0 ] && [ "$known" -eq 1 ] && [ -f "$STOCK_RAW_CACHE/$group/META.json" ] &&
+       python3 -m rdfc2im cache verify "$group" --cache-dir "$STOCK_RAW_CACHE" "${save_meta[@]}" >/dev/null 2>&1; then
+      log "$src: cached download is current (same URLs and Last-Modified) - not fetched again"
+      continue
+    fi
+    local incoming="$STOCK_DIR/incoming/$src"
+    run rm -rf "$incoming"
+    run mkdir -p "$incoming"
+    for i in "${!urls[@]}"; do
+      run curl -fsSL --retry 3 --retry-delay 10 -o "$incoming/${raws[$i]}" "${urls[$i]}"
+    done
+    run python3 -m rdfc2im cache save "$group" "$incoming" --cache-dir "$STOCK_RAW_CACHE" "${save_meta[@]}"
+    run rm -rf "$incoming"
+  done
+}
+
+# Where a source's filtered cache group lives: cached_raw_data/ (the CI release asset's source) for
+# redistributable data, the data root's own cache for the rest (D-7), so restricted data cannot reach
+# a release even before T0.3's `cache save --for-release` refusal exists.
+_stock_filtered_cache() {
+  local m; m=$(python3 -m rdfc2im stock meta "$1" --record) || die "rdfc2im stock meta $1 failed"
+  case " $m " in *" --meta redistributable=false "*) echo "$STOCK_RAW_CACHE" ;; *) echo "$RAW_CACHE_DIR" ;; esac
+}
+
+# Writes one file row's output (see `rdfc2im stock files`): a filtered file (tools/subset_raw.py filter),
+# or a whole file unpacked from its archive or .gz. Arguments are the row's fields.
+_stock_produce() {
+  local src=$1 fid=$2 raw=$3 unpack=$4 member=$5 fmt=$6 ids=$7 col=$8 taxon=$9 keep=${10} work=${11} kind=${12} sname=${13}
+  local in=$raw tmp="$STOCK_DIR/unpacked/$src/$fid"
+  run rm -rf "$work"
+  run mkdir -p "$work"
+  if [ "$kind" = whole ] && [ -n "$unpack" ] && [ -z "$sname" ]; then
+    # several members (a glob), used whole: unpacked flat into the work directory
+    case "$unpack" in
+      zip) run unzip -o -q -j "$raw" "$member" -d "$work" ;;
+      tar.gz) run tar -xzf "$raw" -C "$work" --wildcards --no-anchored --transform='s|.*/||' "$member" ;;
+    esac
+    return 0
+  fi
+  local out="$work/$sname"
+  [ "$kind" = whole ] || out="$tmp/$(basename "${member:-x}")"
+  if [ -n "$unpack" ]; then
+    [ "$kind" = whole ] || { run rm -rf "$tmp"; run mkdir -p "$tmp"; }
+    case "$unpack" in
+      zip) run bash -c "unzip -p '$raw' '$member' > '$out'" ;;
+      tar.gz) run bash -c "tar -xzOf '$raw' --wildcards --no-anchored '$member' > '$out'" ;;
+    esac
+    in=$out
+  elif [ "$kind" = whole ]; then
+    run bash -c "gzip -dc '$raw' > '$out'"
+  fi
+  if [ "$kind" = filtered ]; then
+    local args=(--format "$fmt" --in "$in" --out "$work/$sname")
+    [ -z "$ids" ] || [ "$ids" = none ] || args+=(--ids "$STOCK_DIR/idsets/$ids.txt")
+    [ -z "$col" ] || args+=(--column "$col")
+    [ -z "$taxon" ] || args+=(--taxon "$taxon")
+    [ "$keep" = 1 ] && args+=(--keep-comments)
+    run python3 tools/subset_raw.py filter "${args[@]}"
+    [ -z "$unpack" ] || run rm -rf "$tmp"
+  fi
+}
+
+# Plan 50's new phase after row 6: the gene panel as id sets (Entrez, Ensembl, UniProt, symbol, from
+# the rdfc2im items and the gene-id lookup cache), then every --stock-sources file cut to them
+# (tools/subset_raw.py, task T0.2). The filtered files of a source are one cache group, stock-<name>,
+# keyed like the panel sources (genes_md5, taxon) plus the table's spec for them (spec_md5); its META
+# also records the upstream releases and redistributable/licence. Files used whole are unpacked from
+# the raw group on every build and never cached a second time.
+phase_subset_stock_data() {
+  [ -n "$STOCK_SOURCES" ] || { log "no --stock-sources: nothing to subset"; return 0; }
+  activate_venv
+  [ "$DRY_RUN" -eq 1 ] || [ -f tools/subset_raw.py ] || die "tools/subset_raw.py (task T0.2) is missing"
+  local rows s fid origin url raw unpack member fmt ids col taxon keep work kind sdir sname
+  rows=$(_stock_files)
+  run python3 tools/subset_raw.py idsets --genes "$GENE_PANEL" --out "$STOCK_DIR/idsets" --items-root out \
+    --lookup-dir "$LOOKUP_DIR" --taxon "$TAXON"
+  # HOOK (T0.3, the ID-resolver gate, plan 50 2.2 mechanism 1): write the filtered NCBI gene_info as
+  # ${resolver.file.rootpath}/entrez here (subset_raw.py filter --format gene_info --taxon 9606, all
+  # human genes under D-1), so psi, biogrid, panther, omim and the HumanMine expression loaders drop
+  # what the resolver does not know; prepare_mine_checkout then sets resolver.file.rootpath.
+  local genes_md5; genes_md5=$(md5sum "$GENE_PANEL" | cut -d' ' -f1)
+  local src
+  for src in $STOCK_SOURCES; do
+    local cdir group="stock-$src" filtered=0 spec more
+    cdir=$(_stock_filtered_cache "$src")
+    spec=$(python3 -m rdfc2im stock meta "$src" --restore) || die "rdfc2im stock meta $src failed"
+    more=$(python3 -m rdfc2im stock meta "$src" --record) || die "rdfc2im stock meta $src failed"
+    # shellcheck disable=SC2206  # --meta k=v words without whitespace
+    local need=(--meta "genes_md5=$genes_md5" --meta "taxon=$TAXON" $spec)
+    while IFS=$'\t' read -r -u 3 s fid origin url raw unpack member fmt ids col taxon keep work kind sdir sname; do
+      [ "$s" = "$src" ] || continue
+      case "$kind" in
+        filtered) filtered=1
+                  [ "$USE_CACHED_DATA" -eq 1 ] && continue ;;
+        asis) continue ;;
+      esac
+      _stock_produce "$src" "$fid" "$raw" "$(_dash "$unpack")" "$(_dash "$member")" "$(_dash "$fmt")" "$(_dash "$ids")" \
+        "$(_dash "$col")" "$(_dash "$taxon")" "$keep" "$work" "$kind" "$(_dash "$sname")"
+    done 3<<< "$rows"
+    [ "$filtered" -eq 1 ] || continue
+    if [ "$USE_CACHED_DATA" -eq 1 ]; then
+      run python3 -m rdfc2im cache restore "$group" "$STOCK_DIR/subset/$src" --cache-dir "$cdir" "${need[@]}"
+    else
+      # shellcheck disable=SC2086  # --meta k=v words without whitespace
+      run python3 -m rdfc2im cache save "$group" "$STOCK_DIR/subset/$src" --cache-dir "$cdir" "${need[@]}" \
+        $more $(_stock_releases "$src")
+    fi
+  done
+}
+
+# `--meta release.<id>=<Last-Modified>` words for a source, from its raw group's META (empty when
+# there is none: a dry run, or local copies only).
+_stock_releases() {
+  local f="$STOCK_RAW_CACHE/stock-raw-$1/META.json"
+  [ -f "$f" ] || return 0
+  python3 -c 'import json, sys
+m = json.load(open(sys.argv[1])).get("meta", {})
+print(" ".join("--meta release.%s=%s" % (k.split(".", 1)[1], v) for k, v in sorted(m.items()) if k.startswith("last_modified.")))' "$f"
 }
 
 # Writes $2 to file $1, or just logs the intent under --dry-run - a real dry run must not touch
@@ -1140,7 +1436,8 @@ phase_prepare_mine_checkout() {
   # jar (org.intermine:bio-source-reactome) is equally dead on JCenter/Maven Central, but unlike
   # the ~39 sources dropped above, this one is worth building from local source and keeping -
   # see phase_build_humanmine_items' sibling handling of the same JCenter problem.
-  run python3 tools/reduce_mine.py sources "$mine/project.xml" humanmine-items reactome
+  # --stock-sources are kept by name the same way, in HumanMine's order (plan 50 row 7).
+  run python3 tools/reduce_mine.py sources "$mine/project.xml" humanmine-items reactome $STOCK_SOURCES
   # Restrict to human only, matching the rest of this build - rdfc2im's own generated project.xml
   # carries this source's original "9606 10090" (human+mouse) value untouched.
   run sed -i 's|<property name="reactome.organisms" value="9606 10090"/>|<property name="reactome.organisms" value="9606"/>|' \
@@ -1208,6 +1505,9 @@ superuser.account=superuser@intermine.org
 superuser.initialPassword=intermine
 PROPS
 )"
+  # HOOK (T0.3, plan 50 row 7): with --stock-sources, add resolver.file.rootpath (the directory
+  # subset_stock_data writes the filtered entrez gene_info to) to the properties above, and delete
+  # any idresolver.cache the resolver left from an earlier build.
   log "~/.intermine/humanmine.properties done (default.intermine.properties.file=$prod_props)"
 }
 
@@ -1226,6 +1526,39 @@ phase_stage_src_data() {
     run mkdir -p "$dest_dir"
     run ln -sf "$HERE/out/$src/items/$src.xml" "$dest_dir/$src.xml"
   done
+  [ -z "$STOCK_SOURCES" ] || _stage_stock_data
+}
+
+# --stock-sources (plan 50 row 8): link every filtered, unpacked or as-is file into HumanMine's own data
+# directory under the data root, by the name its converter expects, so the stock project.xml properties
+# work unchanged. Several loaders read every file in their directory (go-annotation, panther, psi) or
+# throw on an unexpected one (protein-atlas, orphanet), so each directory is first cleared of links
+# into this build's own areas ($STOCK_DIR, the local copies) - links an earlier build left - and a real
+# file (a deployment's own HumanMine data under /micklem/data) is never replaced.
+_stage_stock_data() {
+  activate_venv
+  local rows s fid origin url raw unpack member fmt ids col taxon keep work kind sdir sname dirs=""
+  rows=$(_stock_files)
+  while IFS=$'\t' read -r -u 3 s fid origin url raw unpack member fmt ids col taxon keep work kind sdir sname; do
+    [ -n "$s" ] || continue
+    case " $dirs " in *" $sdir "*) ;; *) dirs="$dirs $sdir" ;; esac
+  done 3<<< "$rows"
+  local d
+  for d in $dirs; do
+    run mkdir -p "$DATA_ROOT/$d"
+    run find "$DATA_ROOT/$d" -maxdepth 1 -type l \( -lname "$STOCK_DIR/*" ${STOCK_LOCAL:+-o -lname "${STOCK_LOCAL%/}/*"} \) -delete
+  done
+  while IFS=$'\t' read -r -u 3 s fid origin url raw unpack member fmt ids col taxon keep work kind sdir sname; do
+    [ -n "$s" ] || continue
+    local dest="$DATA_ROOT/$sdir" from
+    if [ "$kind" = asis ]; then from=$raw; else from="$work/$sname"; fi
+    if [ "$sname" = - ]; then
+      # a member glob: every file unpacked into the work directory
+      run bash -c "for f in '$work'/*; do t='$dest'/\$(basename \"\$f\"); if [ -e \"\$t\" ] && [ ! -L \"\$t\" ]; then echo \"refusing to replace the real file \$t\" >&2; exit 1; fi; ln -sfn \"\$f\" \"\$t\"; done"
+    else
+      run bash -c "if [ -e '$dest/$sname' ] && [ ! -L '$dest/$sname' ]; then echo 'refusing to replace the real file $dest/$sname' >&2; exit 1; fi; ln -sfn '$from' '$dest/$sname'"
+    fi
+  done 3<<< "$rows"
 }
 
 phase_start_databases() {
@@ -1379,6 +1712,9 @@ phase_integrate_sources() {
     order="reactome humanmine-$(echo "$SOURCES" | sed 's/ /\nhumanmine-/g')"  # placeholder so dry-run still shows the loop shape
     log "note: $mine/project.xml does not exist yet in this dry run - showing SOURCES as a stand-in for the real (project.xml-derived) load order"
   fi
+  # --stock-sources load in this same project.xml order: HumanMine's own, with the table's `after`
+  # constraints (plan 50 row 11) checked by `rdfc2im project`.
+  [ -z "$STOCK_SOURCES" ] || log "stock sources load in project.xml order with the rest: $STOCK_SOURCES"
   for src in $order; do
     run_in "$mine" "${GRADLE_ENV[@]}" ./gradlew "${IM_GRADLE_ARGS[@]}" :dbmodel:integrate -Psource="$src"
   done
@@ -1393,6 +1729,17 @@ phase_postprocess() {
   # produce anything real (confirmed live). update-data-sources needs a Micklem-lab-specific
   # file path this build does not have; also skipped.
   local mine="$TRIAL_HOME/humanmine"
+  # HOOK (plan 50 row 12; first used by T1.1 onwards): the postprocesses the --stock-sources need
+  # (the table's `postprocess`: the genomic-location tasks for ncbi-gff/ncbi-fasta, do-sources for
+  # go-annotation's GoPostprocess) are listed here but not yet run.
+  if [ -n "$STOCK_SOURCES" ]; then
+    activate_venv
+    local pp p wanted
+    pp=$(_stock_rows postprocess)
+    while IFS=$'\t' read -r -u 3 p wanted; do
+      [ -n "$p" ] && log "HOOK: stock postprocess $p (for $wanted) is not run yet"
+    done 3<<< "$pp"
+  fi
   for task in create-references create-attribute-indexes; do
     run_in "$mine" "${GRADLE_ENV[@]}" ./gradlew "${IM_GRADLE_ARGS[@]}" :dbmodel:postProcess -Pprocess="$task"
   done

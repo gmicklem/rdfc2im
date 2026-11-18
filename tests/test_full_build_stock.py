@@ -1,0 +1,176 @@
+"""tools/full-build.sh --stock-sources, checked through --dry-run (see test_full_build_cache.py).
+
+--stock-sources needs --intermine-src on the 6.0 line (D-5), so these tests make a stand-in
+checkout with just the files the script reads before and during the phases under test. They skip,
+like the other dry-run tests, where check_prereqs cannot pass (no docker compose or JDK 8).
+"""
+import os
+import re
+import subprocess
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+PANEL = os.path.join(ROOT, "curation", "demo_gene_panel.txt")
+
+
+def _fake_intermine_60(tmp_path):
+    src = tmp_path / "intermine-src"
+    for rel, text in {
+        "config/lib/install_intermine.py": 'DEFAULT_GRADLE_VERSION = "8.14.6"\n'
+                                           '    "gradle-8.14.6-bin.zip":\n        "%s",\n' % ("0" * 64),
+        "gradle/libs.versions.toml": '[versions]\nintermine = "6.0.0"\n',
+        "plugin/build.gradle": "version = '6.0.0'\n",
+        "intermine/libs/antlr-2.7.6-caching.jar": "",
+        "intermine/resources/src/main/resources/default.intermine.production.properties": "",
+        "bio/sources/reactome/reactome.properties": "",
+    }.items():
+        p = src / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(text)
+    return str(src)
+
+
+def _run(tmp_path, *args, stock_dir=True):
+    env = dict(os.environ, TRIAL_HOME=str(tmp_path / "trial_home"), RUN_ID="test",
+               LOG_DIR=str(tmp_path / "logs"))
+    if stock_dir:
+        env["RDFC2IM_STOCK_DIR"] = str(tmp_path / "stock")
+    env.pop("RDFC2IM_STOCK_LOCAL", None)
+    r = subprocess.run(["bash", "tools/full-build.sh", "--dry-run", *args], cwd=ROOT, env=env,
+                       capture_output=True, text=True)
+    return r.returncode, r.stdout + r.stderr
+
+
+def _plan(tmp_path, *args):
+    """The dry-run log, or None where check_prereqs fails for reasons that are not ours."""
+    rc, out = _run(tmp_path, *args)
+    if rc != 0 and "[check_prereqs] FATAL" in out and "stock" not in out.split("FATAL", 1)[1][:200]:
+        return None
+    assert rc == 0, out
+    return out
+
+
+def _cmds(plan, phase=None):
+    pat = r"\[(%s)\] \+ (.*)$" % (re.escape(phase) if phase else r"[a-z0-9_]+")
+    return [m.group(2) for line in plan.splitlines() if (m := re.search(pat, line))]
+
+
+def _stock(tmp_path, *more):
+    return ("--intermine-src", _fake_intermine_60(tmp_path), "--stock-sources", "go-annotation uniprot", *more)
+
+
+def test_the_phase_list_has_the_stock_phases_in_place():
+    r = subprocess.run(["bash", "tools/full-build.sh", "--list-phases"], cwd=ROOT, capture_output=True, text=True)
+    phases = r.stdout.split()
+    i = phases.index("build_humanmine_items")
+    assert phases[i + 1:i + 5] == ["build_stock_sources", "fetch_stock_data", "subset_stock_data",
+                                   "prepare_mine_checkout"], phases
+    assert phases[phases.index("prepare_mine_checkout") + 1] == "stage_src_data"
+    assert "build_reactome_source" not in phases
+
+
+def test_an_empty_stock_list_makes_the_new_phases_no_ops(tmp_path):
+    for phase in ("fetch_stock_data", "subset_stock_data"):
+        plan = _plan(tmp_path, "--only", phase)
+        if plan is None:
+            return
+        assert _cmds(plan, phase) == [], plan
+        assert "no --stock-sources: nothing to" in plan
+    plan = _plan(tmp_path, "--only", "prepare_mine_checkout")
+    reduce = next(c for c in _cmds(plan) if "reduce_mine.py sources" in c)
+    assert reduce.endswith(" humanmine-items reactome"), reduce
+
+
+def test_stock_sources_need_the_60_line(tmp_path):
+    rc, out = _run(tmp_path, "--only", "fetch_stock_data", "--stock-sources", "uniprot")
+    if "[check_prereqs] FATAL" in out and "stock" not in out:
+        return
+    assert rc != 0 and "needs --intermine-src on the 6.0 line" in out, out
+
+
+def test_an_unknown_or_restricted_stock_source_stops_check_prereqs(tmp_path):
+    src = _fake_intermine_60(tmp_path)
+    rc, out = _run(tmp_path, "--only", "fetch_stock_data", "--intermine-src", src, "--stock-sources", "uniprot nosuch")
+    if "[check_prereqs] FATAL" in out and "stock" not in out:
+        return
+    assert rc != 0 and "unknown stock source(s) nosuch" in out, out
+    rc, out = _run(tmp_path, "--only", "fetch_stock_data", "--intermine-src", src, "--stock-sources", "omim")
+    assert rc != 0 and "omim is not redistributable" in out, out
+    # ... and a local copy is what lets it through
+    local = tmp_path / "local" / "omim"
+    local.mkdir(parents=True)
+    for f in ("mimTitles.txt", "morbidmap.txt", "pubmed_cited"):
+        (local / f).write_text("x\n")
+    plan = _plan(tmp_path, "--only", "stage_src_data", "--intermine-src", src, "--stock-sources", "omim",
+                 "--stock-local", str(tmp_path / "local"))
+    assert any(f"ln -sfn '{local}/mimTitles.txt'" in c for c in _cmds(plan, "stage_src_data")), plan
+
+
+def test_stock_sources_are_put_in_humanmines_order_and_kept_by_project_and_reduce(tmp_path):
+    if not os.path.exists(os.path.join(ROOT, "in", "humanmine_project.xml")):
+        return                                  # in/ (make-inputs.sh) gives HumanMine's order
+    plan = _plan(tmp_path, "--only", "rdfc2im_project", *_stock(tmp_path))
+    if plan is None:
+        return
+    assert "stock sources, in HumanMine's project.xml order: uniprot go-annotation" in plan
+    proj = next(c for c in _cmds(plan) if "rdfc2im project" in c)
+    assert proj.endswith("--stock-source uniprot --stock-source go-annotation"), proj
+    plan = _plan(tmp_path, "--only", "prepare_mine_checkout", *_stock(tmp_path))
+    reduce = next(c for c in _cmds(plan) if "reduce_mine.py sources" in c)
+    assert reduce.endswith(" humanmine-items reactome uniprot go-annotation"), reduce
+
+
+def test_fetch_downloads_into_the_stock_cache_once_per_source(tmp_path):
+    plan = _plan(tmp_path, "--only", "fetch_stock_data", *_stock(tmp_path))
+    if plan is None:
+        return
+    stock, cmds = tmp_path / "stock", _cmds(plan, "fetch_stock_data")
+    dl = next(i for i, c in enumerate(cmds) if c.startswith("curl -fsSL") and c.endswith("uniprot_sprot_human.xml.gz"))
+    save = next(i for i, c in enumerate(cmds) if "cache save stock-raw-uniprot " in c)
+    assert dl < save and f"--cache-dir {stock}/cache" in cmds[save], cmds
+    assert "--meta url.sprot=https://ftp.ebi.ac.uk/" in cmds[save] and "last_modified.sprot=" in cmds[save]
+    assert not any(str(os.path.join(ROOT, "cached_raw_data")) in c for c in cmds), "raw data never in cached_raw_data/"
+    cached = _plan(tmp_path, "--only", "fetch_stock_data", "--use-cached-data", *_stock(tmp_path))
+    ccmds = _cmds(cached, "fetch_stock_data")
+    assert not any("curl" in c for c in ccmds), ccmds
+    assert any("cache verify stock-raw-go-annotation " in c and "--meta url.gaf=" in c for c in ccmds), ccmds
+
+
+def test_subset_filters_with_subset_raw_and_caches_by_gene_panel(tmp_path):
+    plan = _plan(tmp_path, "--only", "subset_stock_data", *_stock(tmp_path))
+    if plan is None:
+        return
+    stock, cmds = tmp_path / "stock", _cmds(plan, "subset_stock_data")
+    assert cmds[0].startswith(f"python3 tools/subset_raw.py idsets --genes {PANEL} --out {stock}/idsets")
+    flt = next(c for c in cmds if "subset_raw.py filter --format uniprot-xml" in c)
+    assert f"--ids {stock}/idsets/uniprot.txt" in flt and "/subset/uniprot/sprot/9606_uniprot_sprot.xml " in flt
+    assert f"--in {stock}/cache/stock-raw-uniprot/data/uniprot_sprot_human.xml.gz" in flt
+    save = next(c for c in cmds if "cache save stock-uniprot " in c)
+    assert f"--cache-dir {ROOT}/cached_raw_data" in save
+    for k in ("genes_md5=", "taxon=9606", "spec_md5=", "redistributable=true", "licence="):
+        assert f"--meta {k}" in save, (k, save)
+    cached = _cmds(_plan(tmp_path, "--only", "subset_stock_data", "--use-cached-data", *_stock(tmp_path)),
+                   "subset_stock_data")
+    assert not any("subset_raw.py filter" in c for c in cached), cached
+    restore = next(c for c in cached if "cache restore stock-go-annotation " in c)
+    assert "--meta genes_md5=" in restore and "--meta spec_md5=" in restore and "licence" not in restore
+
+
+def test_stage_links_into_humanmines_own_paths_and_never_over_a_real_file(tmp_path):
+    plan = _plan(tmp_path, "--only", "stage_src_data", *_stock(tmp_path))
+    if plan is None:
+        return
+    cmds = _cmds(plan, "stage_src_data")
+    link = next(c for c in cmds if "gene_association.goa_human" in c)
+    assert "/go-annotation/current/human/gene_association.goa_human'" in link
+    assert "refusing to replace the real file" in link and "ln -sfn" in link
+    assert any(c.startswith("find ") and "/uniprot/current" in c and "-delete" in c for c in cmds), cmds
+
+
+def test_the_jar_of_an_intermine_stock_source_comes_from_publish_intermine(tmp_path):
+    plan = _plan(tmp_path, "--only", "build_stock_sources", *_stock(tmp_path))
+    if plan is None:
+        return
+    assert "uniprot: bio-source-uniprot 6.0.0 from publish_intermine" in plan, plan
+    assert "UniProt2Reactome.txt" in plan                  # reactome is still built first
+    old = _plan(tmp_path, "--only", "build_reactome_source", *_stock(tmp_path))
+    assert "[build_stock_sources]" in old                   # the old phase name still works
