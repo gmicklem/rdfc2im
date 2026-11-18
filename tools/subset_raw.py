@@ -22,6 +22,9 @@ written transparently by file suffix.
   subset_raw.py chromosome-lengths --in GFF --out ITEMS.xml [--taxon ID] [--data-set NAME]
       Chromosome lengths from the ##sequence-region lines, as Items XML (see chromosome_lengths).
 
+  subset_raw.py panel-items --genes FILE --in ITEMS.xml --out ITEMS.xml [--lookup-dir DIR]
+      The panel genes' part of an items file fetched for every gene (see panel_items).
+
 Per-format rules are in each filter function's docstring and in USAGE.md.
 """
 import argparse
@@ -1072,6 +1075,55 @@ def derive_idsets(genes_file, items_root="out", lookup_dir=None, taxon="9606"):
     return sets, {"inputs": used, "notes": notes}
 
 
+def panel_items(src, dst, entrez=(), symbols=()):
+    """Write the part of an rdfc2im items XML file that a panel-scoped fetch of the same source
+    would have produced: the Gene items of the panel (Gene.primaryIdentifier in `entrez`, or, when
+    no Entrez ids are given, Gene.symbol in `symbols`) and every non-Gene item they reach through
+    references and collections, transitively.  Other genes are never followed into.
+
+    Used with `--gene-identifiers all` [im-9n4.40]: the pubmed source is scoped to the PMIDs the
+    panel's own data cites, gathered from out/{hgnc,uniprot,gwascatalog,reactome}/items; with hgnc
+    fetched for every human gene that file names some 23,500 papers (and 44,000 Entrez ids), and
+    the PMID set, its md5 and with it the cached pubmed group would no longer be the panel's.
+    Returns counts."""
+    entrez, symbols = set(entrez), set(symbols)
+    info, gene_ids, seeds = {}, set(), []
+    for it in _iter_items(src):
+        iid, cls = it.get("id"), it.get("class")
+        refs = [r.get("ref_id") for r in it.iter("reference")]
+        info[iid] = (cls, refs)
+        if cls == "Gene":
+            gene_ids.add(iid)
+            a = _attrs(it)
+            if (entrez and a.get("primaryIdentifier") in entrez) or (not entrez and a.get("symbol") in symbols):
+                seeds.append(iid)
+    keep, todo = set(seeds), list(seeds)
+    while todo:
+        for r in info.get(todo.pop(), ("", []))[1]:
+            if r not in keep and r not in gene_ids and r in info:
+                keep.add(r)
+                todo.append(r)
+    n = 0
+    with open(dst, "w", encoding="utf-8", newline="\n") as fh:
+        fh.write('<?xml version="1.0" encoding="UTF-8"?>\n<items>\n')
+        for _, el in ET.iterparse(src, events=("end",)):
+            if el.tag == "item":
+                if el.get("id") in keep:
+                    fh.write("  " + ET.tostring(el, encoding="unicode").strip() + "\n")
+                    n += 1
+                el.clear()
+        fh.write("</items>\n")
+    return {"items_in": len(info), "genes_in": len(gene_ids), "panel_genes": len(seeds), "items_out": n}
+
+
+def run_panel_items(a):
+    entrez = set()
+    if a.lookup_dir:
+        found = _read_lookup(a.lookup_dir, read_panel(a.genes), a.taxon)
+        entrez = found.get("entrez", ("", set()))[1]
+    print(json.dumps(panel_items(a.input, a.out, entrez, read_panel(a.genes))))
+
+
 def run_idsets(a):
     if not os.path.isfile(a.genes):
         raise SubsetError(f"--genes file not found: {a.genes}")
@@ -1218,6 +1270,12 @@ def build_parser():
     c.add_argument("--taxon", default="9606")
     c.add_argument("--data-set", default="ncbi-gff", help="DataSet name (default ncbi-gff, the loader's own)")
     c.add_argument("--data-source", default="NCBI", help="DataSource name (default NCBI)")
+    i = sub.add_parser("panel-items", help="the panel genes' part of an rdfc2im items XML file (see panel_items)")
+    i.add_argument("--genes", required=True, help="gene panel file")
+    i.add_argument("--in", dest="input", required=True, help="items XML of a source fetched for every gene")
+    i.add_argument("--out", required=True, help="items XML to write")
+    i.add_argument("--lookup-dir", default=None, help="gene-id lookup cache: panel genes by Entrez id (else by symbol)")
+    i.add_argument("--taxon", default="9606")
     return p
 
 
@@ -1251,6 +1309,8 @@ def main(argv=None):
             run_partner_ids(a)
         elif a.cmd == "disease-ids":
             run_disease_ids(a)
+        elif a.cmd == "panel-items":
+            run_panel_items(a)
         else:
             run_filter(a)
     except SubsetError as e:

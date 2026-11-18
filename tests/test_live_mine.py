@@ -366,6 +366,13 @@ def test_gene_panel_is_panel_sized():
     rows = query_rows_q('<query model="genomic" view="Gene.primaryIdentifier">'
                         '<constraint path="Gene.organism.taxonId" op="=" value="9606"/>'
                         f'<constraint path="Gene.dataSets.name" op="=" value="{RDF_GENE_DATA_SET}"/></query>')
+    if len(rows) >= 1000:
+        # --gene-identifiers all [im-9n4.40]: every human gene of the types the stock loader keeps
+        # (about 64,000), never the 194,000 records of the unfiltered NCBI Gene graph
+        assert 50_000 < len(rows) < 100_000, (
+            f"{len(rows)} human genes from {RDF_GENE_DATA_SET}: neither the panel nor the stock gene types "
+            "(full_scope_filter in sources.yaml not applied?)")
+        return
     assert 0 < len(rows) < 1000, (
         f"expected a panel-sized Gene table, got {len(rows)} - is a source unscoped?")
 
@@ -627,6 +634,18 @@ NO_PRIMARY_LOCATION = {"GSTT1"}
 PAX6 = ("PAX6", "5080", "11", 31789026, 31817961)
 
 
+def panel_symbols():
+    """The demo panel's symbols (curation/demo_gene_panel.txt, as tools/subset_raw.read_panel reads it)."""
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "curation", "demo_gene_panel.txt")
+    out = []
+    with open(path, encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if line and not line.startswith("#"):
+                out.extend(line.split())
+    return out
+
+
 def stock_gff_loaded() -> bool:
     try:
         return bool(query_rows("DataSet.name", "DataSet.name", "=", GFF_DATA_SET))
@@ -647,10 +666,14 @@ def test_every_panel_gene_has_a_chromosome_location():
     location read. The only exceptions are genes the primary assembly lacks."""
     if (s := _gff_skip()) is not None:
         return s
+    # the panel by symbol, not by the RDF ncbigene data set: with --gene-identifiers all that holds
+    # every human gene, and only the panel's are cut from the GFF [im-9n4.40]
     rows = query_rows_q(
         '<query model="genomic" view="Gene.symbol Gene.chromosomeLocation.start Gene.chromosome.primaryIdentifier">'
         '<join path="Gene.chromosomeLocation" style="OUTER"/><join path="Gene.chromosome" style="OUTER"/>'
-        f'<constraint path="Gene.dataSets.name" op="=" value="{RDF_GENE_DATA_SET}"/></query>')
+        f'<constraint path="Gene.dataSets.name" op="=" value="{RDF_GENE_DATA_SET}"/>'
+        '<constraint path="Gene.symbol" op="ONE OF">'
+        + "".join(f"<value>{s}</value>" for s in panel_symbols()) + '</constraint></query>')
     assert len(rows) >= 100, f"only {len(rows)} panel genes"
     missing = {r[0] for r in rows if r[1] is None}
     assert missing == NO_PRIMARY_LOCATION, f"panel genes without a location: {sorted(missing)}"
@@ -1051,3 +1074,125 @@ def test_the_disease_templates_run_with_rows_for_the_example_gene():
                                     "extra1": "H. sapiens", "format": "json"})
         payload = _get_json(f"{MINE_BASE}/service/template/results?{q}")
         assert payload.get("wasSuccessful") and payload["results"], (t, payload.get("error"))
+
+
+# ----------------------------------------------------------------- the RDF hpo source [im-9n4.41]
+RDF_HPO_DATA_SET = "Human Phenotype Ontology (RDF Portal)"
+
+
+def _rdf_hpo_skip():
+    if (s := _disease_skip()) is not None:
+        return s
+    try:
+        ok = bool(query_rows("DataSet.name", "DataSet.name", "=", RDF_HPO_DATA_SET))
+    except Exception:
+        ok = False
+    return None if ok else _skip("mine built without the RDF hpo source (--sources ... hpo)")
+
+
+def test_hpo_terms_of_the_example_genes_diseases_have_names():
+    """humanmine-hpo merges into hpo-annotation's identifier-only HPOTerms (key: identifier), so
+    the terms of PAX6's diseases carry their names, and Gene_Disease_HPO / Gene_HPOphenotype_2
+    show them.  It stopped integrate before im-9n4.41 (two synonyms equal once folded to ASCII)."""
+    if (s := _rdf_hpo_skip()) is not None:
+        return s
+    rows = _human_gene_rows("Gene.diseases.hpoAnnotations.hpoTerm.identifier Gene.diseases.hpoAnnotations.hpoTerm.name", "PAX6")
+    assert rows, "PAX6 has no HPO annotations"
+    unnamed = sorted({r[0] for r in rows if not r[1]})
+    assert not unnamed, f"{len(unnamed)} HPO terms of PAX6's diseases have no name: {unnamed[:5]}"
+
+
+def test_hpo_terms_are_unique_and_no_cross_reference_stand_ins_load():
+    """One HPOTerm per identifier, every one an HP: term with a name (obsolete terms included);
+    no UMLS:/SNOMEDCT_US: stand-ins (the stock OBO loader keeps only FBbt, FMA, MA, WBbt and ZFA
+    cross references; HumanMine has none on HPOTerm)."""
+    if (s := _rdf_hpo_skip()) is not None:
+        return s
+    rows = query_rows("HPOTerm.identifier HPOTerm.name", "HPOTerm.identifier", "IS NOT NULL", "")
+    ids = [r[0] for r in rows]
+    assert len(ids) > 15000 and len(ids) == len(set(ids)), (len(ids), len(set(ids)))
+    assert all(i.startswith("HP:") for i in ids), sorted(i for i in ids if not i.startswith("HP:"))[:5]
+    assert not [r for r in rows if not r[1]], [r for r in rows if not r[1]][:5]
+
+
+# ----------------------------------------------------------------- --gene-identifiers all [im-9n4.40]
+def all_genes_loaded() -> bool:
+    try:
+        n = query_rows_q('<query model="genomic" view="Gene.id"><constraint path="Gene.dataSets.name" op="=" '
+                         f'value="{RDF_GENE_DATA_SET}"/><constraint path="Gene.symbol" op="=" value="BRCA2"/></query>')
+        return bool(n) and "BRCA2" not in panel_symbols()
+    except Exception:
+        return False
+
+
+def _all_genes_skip():
+    if not mine_up():
+        return _skip(f"live checks off or no mine at {MINE_BASE} (make test-live)")
+    return None if all_genes_loaded() else _skip("mine built with the panel's genes only (--gene-identifiers panel)")
+
+
+def test_interaction_partners_of_the_example_genes_have_symbols():
+    """Partner genes of IntAct/BioGRID were Entrez-id stubs (the Cytoscape tool drew "1528");
+    with every human gene loaded they carry their symbols.  The few that stay without one are
+    Entrez ids the RDF graph no longer holds (discontinued records) or of a type it filters."""
+    if (s := _all_genes_skip()) is not None:
+        return s
+    for sym, most in (("PAX6", 0.95), (EXAMPLE_GENE, 1.0)):
+        rows = _human_gene_rows("Gene.interactions.participant2.primaryIdentifier Gene.interactions.participant2.symbol", sym)
+        assert rows, f"{sym} has no interactions"
+        named = [r for r in rows if r[1]]
+        assert len(named) >= most * len(rows), f"{sym}: {len(rows) - len(named)} of {len(rows)} partners without a symbol"
+
+
+def test_every_human_gene_is_unique_by_identifier_and_symbol():
+    """0 duplicate Gene.primaryIdentifier (all organisms) and 0 duplicate symbol within 9606 with
+    the whole genome loaded; the ten shared NCBI tRNA symbols are dropped (sources.yaml
+    key_ambiguity), not merged."""
+    if (s := _all_genes_skip()) is not None:
+        return s
+    for view, constraint in (("Gene.primaryIdentifier", '<constraint path="Gene.primaryIdentifier" op="IS NOT NULL"/>'),
+                             ("Gene.symbol", '<constraint path="Gene.organism.taxonId" op="=" value="9606"/>'
+                                             '<constraint path="Gene.symbol" op="IS NOT NULL"/>')):
+        vals = [r[0] for r in query_rows_q(f'<query model="genomic" view="{view}">{constraint}</query>')]
+        seen, dups = set(), set()
+        for v in vals:
+            (dups if v in seen else seen).add(v)
+        assert not dups, f"{len(dups)} duplicate {view}: {sorted(dups)[:10]}"
+
+
+def test_most_human_genes_have_a_symbol_and_an_ensembl_id():
+    """HumanMine (2022): 64,160 human genes, 56,020 with a symbol, 42,429 with an Ensembl id.  With
+    ncbigene ranked first for secondaryIdentifier, 7,337 genes lost the Ensembl id only hgnc gives
+    (curation/priorities_override.properties)."""
+    if (s := _all_genes_skip()) is not None:
+        return s
+    def count(extra):
+        q = ('<query model="genomic" view="Gene.id"><constraint path="Gene.organism.taxonId" op="=" value="9606"/>'
+             f'{extra}</query>')
+        return int(_get(f"{MINE_BASE}/service/query/results?query={urllib.parse.quote(q)}&format=count").strip())
+    total = count("")
+    assert count('<constraint path="Gene.symbol" op="IS NOT NULL"/>') > 0.99 * total
+    assert count('<constraint path="Gene.secondaryIdentifier" op="IS NOT NULL"/>') > 42_000
+
+
+def test_a_non_panel_gene_resolves_by_symbol_hgnc_id_and_ensembl_id():
+    """What the PanelApp lists of milestone 2 need: a gene outside the panel found by its symbol,
+    its HGNC id and its Ensembl id through the list-upload resolver (/service/ids)."""
+    if (s := _all_genes_skip()) is not None:
+        return s
+    import time
+    for ident in ("BRCA2", "HGNC:1101", "ENSG00000139618"):
+        body = json.dumps({"identifiers": [ident], "type": "Gene", "extra": "H. sapiens"}).encode()
+        req = urllib.request.Request(f"{MINE_BASE}/service/ids", data=body, headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+            uid = json.loads(r.read().decode())["uid"]
+        for _ in range(60):
+            if _get_json(f"{MINE_BASE}/service/ids/{uid}/status")["status"] == "SUCCESS":
+                break
+            time.sleep(1)
+        res = _get_json(f"{MINE_BASE}/service/ids/{uid}/results")["results"]
+        urllib.request.urlopen(urllib.request.Request(f"{MINE_BASE}/service/ids/{uid}", method="DELETE"), timeout=TIMEOUT)
+        # a symbol or Ensembl id is a MATCH (key field); the HGNC id is a synonym (an OTHER match)
+        found = [m for kind in ("MATCH", "OTHER") for e in res["matches"][kind]
+                 for m in (e.get("matches") or [e])]
+        assert {m["summary"]["symbol"] for m in found} == {"BRCA2"}, (ident, res)

@@ -66,5 +66,7 @@ test-live:  ; RDFC2IM_LIVE=1 $(if $(HAVE_PYTEST),$(PY) -m pytest -q tests/test_l
 # `cat src > dst`, not `cp`: plain `cp` has silently zeroed files on this virtiofs-backed
 # workspace mount (confirmed live - a 4097-byte file copied to 4097 bytes of pure NUL), same
 # issue `make docs` was already patched for below; fork-sync wasn't, until it hit it for real.
-fork-sync:  ; mkdir -p humanmine-items/resources && rm -f humanmine-items/resources/humanmine-items_keys.properties humanmine-items/resources/humanmine-items_additions.xml && cat out/_mine/humanmine-items_keys.properties > humanmine-items/resources/humanmine-items_keys.properties && cat out/_mine/humanmine-items_additions.xml > humanmine-items/resources/humanmine-items_additions.xml
+# The per-source keys files (humanmine-<src>_keys.properties, sources.yaml own_keys) go with them;
+# stale ones from an earlier `project` are removed first [im-9n4.40].
+fork-sync:  ; mkdir -p humanmine-items/resources && rm -f humanmine-items/resources/humanmine-*_keys.properties humanmine-items/resources/humanmine-items_additions.xml && for f in out/_mine/humanmine-*_keys.properties; do cat $$f > humanmine-items/resources/$$(basename $$f); done && cat out/_mine/humanmine-items_additions.xml > humanmine-items/resources/humanmine-items_additions.xml
 clean:      ; rm -rf out/_mine out/_docs

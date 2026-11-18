@@ -285,6 +285,65 @@ def test_idsets_merges_lookup_cache(tmp_path):
     assert any("resolve_ncbigene" in p for p in info["inputs"])
 
 
+def _all_genes_items(tmp_path):
+    """The idsets fixture as a `--gene-identifiers all` build sees it: ncbigene and hgnc fetched for
+    every human gene, so their items hold non-panel genes too, with Ensembl ids, HGNC protein
+    links, a symbol-less gene and a publication; ensembl and uniprot stay panel-scoped."""
+    import shutil
+    root = tmp_path / "items"
+    shutil.copytree(fx("items"), root)
+    (root / "ncbigene" / "items" / "ncbigene.xml").write_text(
+        '<?xml version="1.0" encoding="UTF-8"?>\n<items>\n'
+        + "".join(f'  <item id="0_{i}" class="Gene" implements=""><attribute name="primaryIdentifier" value="{e}"/>'
+                  + (f'<attribute name="symbol" value="{s}"/>' if s else "")
+                  + f'<attribute name="secondaryIdentifier" value="{g}"/></item>\n'
+                  for i, (e, s, g) in enumerate([("1017", "CDK2", "ENSG00000123374"), ("7157", "TP53", "ENSG00000141510"),
+                                                 ("9999", "NOTPANEL", "ENSG00000000009"), ("1018", "CDK3", "ENSG00000250506"),
+                                                 ("124905847", "", "ENSG00000000010")], 1))
+        + '  <item id="0_9" class="Organism" implements=""><attribute name="taxonId" value="9606"/></item>\n</items>\n')
+    (root / "hgnc" / "items" / "hgnc.xml").write_text(
+        '<?xml version="1.0" encoding="UTF-8"?>\n<items>\n'
+        '  <item id="0_1" class="Gene" implements=""><attribute name="primaryIdentifier" value="1017"/><attribute name="symbol" value="CDK2"/>'
+        '<attribute name="secondaryIdentifier" value="ENSG00000123374"/><collection name="proteins"><reference ref_id="0_3"/></collection>'
+        '<collection name="publications"><reference ref_id="0_5"/></collection></item>\n'
+        '  <item id="0_2" class="Gene" implements=""><attribute name="primaryIdentifier" value="1018"/><attribute name="symbol" value="CDK3"/>'
+        '<attribute name="secondaryIdentifier" value="ENSG00000250506"/><collection name="proteins"><reference ref_id="0_4"/></collection>'
+        '<collection name="publications"><reference ref_id="0_6"/></collection></item>\n'
+        '  <item id="0_3" class="Protein" implements=""><attribute name="primaryAccession" value="P24941"/><collection name="genes"><reference ref_id="0_1"/></collection></item>\n'
+        '  <item id="0_4" class="Protein" implements=""><attribute name="primaryAccession" value="Q00526"/><collection name="genes"><reference ref_id="0_2"/></collection></item>\n'
+        '  <item id="0_5" class="Publication" implements=""><attribute name="pubMedId" value="1639063"/></item>\n'
+        '  <item id="0_6" class="Publication" implements=""><attribute name="pubMedId" value="8195233"/></item>\n'
+        '</items>\n')
+    return root
+
+
+def test_idsets_stay_the_panel_when_ncbigene_and_hgnc_hold_every_gene(tmp_path):
+    """im-9n4.40, the main trap of --gene-identifiers all: the stock raw files are cut to the id
+    sets derived from out/<source>/items.  With ncbigene and hgnc fetched for all human genes those
+    items hold some 64,000 genes, and the id sets must still be the panel's, or every stock filter
+    (UniProt XML, GAF, GFF, PSI-MI, expression files) stops filtering."""
+    panel, _ = subset_raw.derive_idsets(fx("panel.txt"), fx("items"), str(tmp_path / "no-cache"))
+    full, _ = subset_raw.derive_idsets(fx("panel.txt"), str(_all_genes_items(tmp_path)), str(tmp_path / "no-cache"))
+    assert full == panel
+    assert full["entrez"] == {"1017", "7157"} and "Q00526" not in full["uniprot"]
+
+
+def test_panel_items_keeps_the_panel_genes_and_what_they_reach(tmp_path):
+    """panel_items cuts an every-gene items file back to what a panel fetch would have held, so the
+    pubmed source's cited-PMID scope (a grep of the hgnc items) stays the panel's [im-9n4.40]."""
+    root = _all_genes_items(tmp_path)
+    out = tmp_path / "hgnc-panel.xml"
+    res = subset_raw.panel_items(str(root / "hgnc" / "items" / "hgnc.xml"), str(out), entrez={"1017", "7157"})
+    assert res == {"items_in": 6, "genes_in": 2, "panel_genes": 1, "items_out": 3}
+    text = out.read_text()
+    assert "1639063" in text and "P24941" in text
+    assert "8195233" not in text and "Q00526" not in text and "1018" not in text
+    ET.parse(str(out))   # well-formed
+    # by symbol when no Entrez ids are given
+    res2 = subset_raw.panel_items(str(root / "hgnc" / "items" / "hgnc.xml"), str(out), symbols={"CDK3"})
+    assert res2["panel_genes"] == 1 and "8195233" in out.read_text()
+
+
 def test_idsets_without_any_input_fails(tmp_path):
     p = run_cli("idsets", "--genes", fx("panel.txt"), "--out", str(tmp_path / "o"),
                 "--items-root", str(tmp_path / "empty"), "--lookup-dir", str(tmp_path / "none"))

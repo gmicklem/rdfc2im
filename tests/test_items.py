@@ -108,6 +108,50 @@ def test_to_ascii_transliterates_what_the_intermine_loader_cannot_take():
     assert to_ascii("plain ascii") == "plain ascii"
     assert to_ascii("中") == "?"               # no ASCII form at all
 
+
+def test_items_are_keyed_on_the_value_intermine_sees_after_ascii_folding(tmp_path):
+    """Regression for im-9n4.41: HP:0011002 has the related synonyms "Albers-Schonberg disease"
+    and "Albers-Schönberg disease".  Keyed on the raw Unicode they were two OntologyTermSynonym
+    items, written identically once to_ascii folded the o-umlaut; InterMine keys the class on
+    name, the equivalent-object prefetch of that batch failed on the duplicate, and the retried
+    batch stopped humanmine-hpo with "Given a ProxyReference, but id not in ID Map".  They must
+    be one item, linked once, with no attribute conflict reported."""
+    model = """<model name="genomic" package="org.intermine.model.bio">
+    <class name="OntologyTerm" is-interface="true">
+      <attribute name="identifier" type="java.lang.String"/>
+      <collection name="synonyms" referenced-type="OntologyTermSynonym"/>
+    </class>
+    <class name="OntologyTermSynonym" is-interface="true">
+      <attribute name="name" type="java.lang.String"/>
+      <attribute name="type" type="java.lang.String"/>
+    </class>
+    <class name="Note" is-interface="true">
+      <attribute name="text" type="java.lang.String"/>
+    </class>
+    </model>"""
+    (tmp_path / "core.xml").write_text(model)
+    (tmp_path / "x_keys.properties").write_text(
+        "OntologyTerm.key_identifier=identifier\nOntologyTermSynonym.key_name=name\n")
+    m = InterMineModel(); m.load_xml(str(tmp_path / "core.xml")); m.load_keys(str(tmp_path / "x_keys.properties"))
+    m.finalize(); m.live = None
+    store = ItemStore(m)
+    t = store.get("OntologyTerm", {"identifier": "HP:0011002"})
+    names = ["Albers-Schoenberg disease", "Albers-Schonberg disease", "Albers-Schönberg disease"]
+    for name in names:
+        store.link(t, "synonyms", store.get("OntologyTermSynonym", {"name": name, "type": "related"}))
+    syns = [it for it in store.items.values() if it.cls == "OntologyTermSynonym"]
+    assert len(syns) == 2
+    assert len(store.items[t].colls["synonyms"]) == 2
+    assert store.conflicts == []
+    # the composite fallback key folds too
+    k1, k2 = store.key_for("Note", {"text": "Schönberg"}), store.key_for("Note", {"text": "Schonberg"})
+    assert k1 == k2 and k1[1] == "*"
+    path = tmp_path / "items.xml"
+    store.write(str(path))
+    written = [ln for ln in path.read_text().splitlines() if 'name="name"' in ln]
+    assert len(written) == len(set(written)) == 2
+
+
 def test_data_source_gets_a_url_when_the_source_config_declares_one(tmp_path):
     """Regression for a real gap: DataSource.url was always empty (nothing in sources.yaml or
     the items-generation code ever set it), which BlueGenes' "Browse Sources" page cannot render
@@ -275,6 +319,85 @@ def test_key_ambiguity_keeps_only_the_disambiguated_holder(tmp_path):
     assert "secondaryIdentifier" not in gene("3") and "secondaryIdentifier" not in gene("4"), \
         "no principled winner between two ncRNAs - drop from both, not a coin flip"
     assert any("blanked on 3 items" in n for n in notes), notes
+
+
+def test_key_ambiguity_takes_a_list_and_drops_a_shared_symbol(tmp_path):
+    """im-9n4.40: in the whole human NCBI Gene set ten tRNA symbols are each shared by 2 to 17
+    Entrez records; InterMine keys Gene on (symbol, organism) as well, so they would merge.  The
+    stock NcbiGeneConverter gives a gene its symbol only when it is unique in the taxon: the shared
+    symbol goes from every holder, a unique one stays, and several key_ambiguity fields per class
+    are accepted as a list."""
+    m = make_model(tmp_path)
+    out = tmp_path / "out"; (out / "tsv").mkdir(parents=True)
+    (out / "columns.tsv").write_text(textwrap.dedent("""\
+    table\tposition\tcolumn\tvariable\tim_class\tim_field\ttransform\tfilter\tvalue\tkind\tvia\tstatus\trequired
+    main\t0\tid\tid\tGene\tprimaryIdentifier\t\t\t\tliteral\t\tsure\tyes
+    main\t1\tsym\tsym\tGene\tsymbol\t\t\t\tliteral\t\tsure\tno
+    main\t2\tc\t\tOrganism\ttaxonId\t\t\t9606\tconst\t\tsure\tno
+    """))
+    (out / "tsv" / "main.tsv").write_text(
+        "Gene.primaryIdentifier\tGene.symbol\tOrganism.taxonId\n"
+        "124905847\tTRNAG-GCC\t9606\n124905849\tTRNAG-GCC\t9606\n5080\tPAX6\t9606\n")
+    cfg = {"key_ambiguity": {"Gene": [{"field": "secondaryIdentifier"}, {"field": "symbol"}]}}
+    notes = []
+    emit_items(m, str(out), "t", cfg, log=notes.append)
+    xml = (out / "items" / "t.xml").read_text()
+    assert "TRNAG-GCC" not in xml
+    assert 'name="symbol" value="PAX6"' in xml
+    assert any("Gene.symbol: blanked on 2 items" in n for n in notes), notes
+
+
+def test_proteins_take_the_organism_of_their_genes_when_the_source_asks(tmp_path):
+    """im-9n4.40: hgnc's Protein items have only an accession and a gene link; with every human
+    gene loaded about 20,000 of them are proteins of their own, and must not be organism-less."""
+    (tmp_path / "core.xml").write_text("""<model name="genomic" package="org.intermine.model.bio">
+    <class name="Gene" is-interface="true">
+      <attribute name="primaryIdentifier" type="java.lang.String"/>
+      <reference name="organism" referenced-type="Organism"/>
+      <collection name="proteins" referenced-type="Protein" reverse-reference="genes"/>
+    </class>
+    <class name="Protein" is-interface="true">
+      <attribute name="primaryAccession" type="java.lang.String"/>
+      <reference name="organism" referenced-type="Organism"/>
+      <collection name="genes" referenced-type="Gene" reverse-reference="proteins"/>
+    </class>
+    <class name="Organism" is-interface="true"><attribute name="taxonId" type="java.lang.String"/></class>
+    </model>""")
+    (tmp_path / "x_keys.properties").write_text(
+        "Gene.key_primaryidentifier=primaryIdentifier\nProtein.key_primaryacc=primaryAccession\nOrganism.key=taxonId\n")
+    m = InterMineModel(); m.load_xml(str(tmp_path / "core.xml")); m.load_keys(str(tmp_path / "x_keys.properties"))
+    m.finalize(); m.live = None
+    store = ItemStore(m)
+    org = store.get("Organism", {"taxonId": "9606"})
+    g = store.get("Gene", {"primaryIdentifier": "675"})
+    store.link(g, "organism", org)
+    p = store.get("Protein", {"primaryAccession": "P51587"})
+    store.link(p, "genes", g)
+    lone = store.get("Protein", {"primaryAccession": "Q00000"})
+    assert store.organisms_from_genes({"Protein"}) == 1
+    assert store.items[p].refs["organism"] == org
+    assert "organism" not in store.items[lone].refs          # no gene, no guess
+    assert store.organisms_from_genes({"Gene"}) == 0         # already set
+
+
+def test_a_source_yields_a_symbol_or_ensembl_id_the_other_source_gives_to_another_gene(tmp_path):
+    """im-9n4.40: hgnc defers to ncbigene where the two snapshots disagree on who owns a value."""
+    from rdfc2im.items import defer_to_source
+    m = make_model(tmp_path)
+    other = tmp_path / "ncbigene.xml"
+    other.write_text('<?xml version="1.0"?>\n<items>\n'
+                     '  <item id="0_1" class="Gene" implements=""><attribute name="primaryIdentifier" value="4549"/>'
+                     '<attribute name="symbol" value="RNR1"/></item>\n'
+                     '  <item id="0_2" class="Gene" implements=""><attribute name="primaryIdentifier" value="5080"/>'
+                     '<attribute name="symbol" value="PAX6"/></item>\n</items>\n')
+    store = ItemStore(m)
+    a = store.get("Gene", {"primaryIdentifier": "6052", "symbol": "RNR1"})
+    b = store.get("Gene", {"primaryIdentifier": "5080", "symbol": "PAX6"})
+    c = store.get("Gene", {"primaryIdentifier": "4549", "symbol": "MT-RNR1"})
+    assert defer_to_source(store, str(other), "Gene", "primaryIdentifier", ["symbol"]) == {"symbol": 1}
+    assert "symbol" not in store.items[a].attrs
+    assert store.items[b].attrs["symbol"] == "PAX6" and store.items[c].attrs["symbol"] == "MT-RNR1"
+    assert defer_to_source(store, str(tmp_path / "missing.xml"), "Gene", "primaryIdentifier", ["symbol"]) == {}
 
 
 def _organism_model(tmp_path):

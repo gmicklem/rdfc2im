@@ -829,3 +829,49 @@ def test_without_stock_sources_generated_priorities_are_unchanged():
     out = merge_priorities(None, {"Gene.name": ["humanmine-a", "humanmine-b"]}, {}, {}, {}, open_ended=True,
                            first={"Gene.name": ["ncbi-gff"]})
     assert "Gene.name = ncbi-gff, humanmine-a, humanmine-b, *" in out.splitlines()
+
+
+def test_an_entrez_keyed_source_gets_its_own_keys_file_without_the_symbol_and_ensembl_keys(tmp_path):
+    """[im-9n4.40] With every human gene loaded, a symbol or an Ensembl id can name one Entrez gene
+    in hgnc and another in ncbigene; through Gene.key_symbol_org the second source would merge the
+    two.  sources.yaml own_keys gives ncbigene and hgnc a keys file of their own (InterMine reads
+    <source name>_keys.properties before the type's) with Gene keyed on primaryIdentifier only;
+    the other classes keep their keys, other sources keep the type file."""
+    from rdfc2im.model import InterMineModel as IM
+    from rdfc2im.project import gen_project
+    (tmp_path / "core.xml").write_text("""<model name="genomic" package="org.intermine.model.bio">
+    <class name="Gene" is-interface="true">
+      <attribute name="primaryIdentifier" type="java.lang.String"/>
+      <attribute name="symbol" type="java.lang.String"/>
+      <attribute name="secondaryIdentifier" type="java.lang.String"/>
+      <reference name="organism" referenced-type="Organism"/>
+    </class>
+    <class name="Organism" is-interface="true"><attribute name="taxonId" type="java.lang.String"/></class>
+    </model>""")
+    (tmp_path / "x_keys.properties").write_text(
+        "Gene.key_primaryidentifier=primaryIdentifier\nGene.key_symbol_org=symbol, organism\n"
+        "Gene.key_secondaryidentifier_org=secondaryIdentifier, organism\nOrganism.key=taxonId\n")
+    m = IM(); m.load_xml(str(tmp_path / "core.xml")); m.load_keys(str(tmp_path / "x_keys.properties"))
+    m.finalize()
+    m.live = IM(); m.live.load_xml(str(tmp_path / "core.xml")); m.live.finalize()
+    out_root = tmp_path / "out"
+    for src in ("ncbigene", "ensembl"):
+        (out_root / src).mkdir(parents=True)
+        write_tsv(str(out_root / src / "columns.tsv"),
+                  [_col(0, "Gene", "primaryIdentifier", required="yes"), _col(1, "Gene", "symbol")], COL_COLUMNS)
+    mine = str(tmp_path / "_mine")
+    (tmp_path / "_mine").mkdir()
+    (tmp_path / "_mine" / "humanmine-stale_keys.properties").write_text("x=y\n")
+    gen_project(str(out_root), mine, m, "humanmine-items", "/data", None,
+                {"ncbigene": {"own_keys": {"Gene": ["primaryIdentifier"]}}}, None, source_version="4.3.0",
+                log=lambda *a: None)
+    own = open(os.path.join(mine, "humanmine-ncbigene_keys.properties")).read().splitlines()
+    typ = open(os.path.join(mine, "humanmine-items_keys.properties")).read().splitlines()
+    gene = lambda lines: sorted(k for k in lines if k.startswith("Gene."))
+    assert gene(own) == ["Gene.key_primaryidentifier=primaryIdentifier"], own
+    assert gene(typ) == ["Gene.key_primaryidentifier=primaryIdentifier",
+                         "Gene.key_secondaryidentifier_org=secondaryIdentifier, organism",
+                         "Gene.key_symbol_org=symbol, organism"], typ
+    assert [k for k in own if k and not k.startswith(("Gene.", "#"))] == [k for k in typ if k and not k.startswith(("Gene.", "#"))]
+    assert not os.path.exists(os.path.join(mine, "humanmine-ensembl_keys.properties"))
+    assert not os.path.exists(os.path.join(mine, "humanmine-stale_keys.properties"))

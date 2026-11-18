@@ -33,8 +33,26 @@ ncbigene:
   # two or more distinct NCBI Entrez records (overlapping-transcript/antisense annotations, e.g.
   # ENSG00000248767 <- both FOXL3-OT1 and FOXL3) - real upstream ambiguity, not an rdfc2im bug,
   # but it makes Gene.secondaryIdentifier non-unique, which key_secondaryidentifier_org assumes.
+  #
+  # Gene.symbol (rdfs:label, NCBI's own Symbol column) is unique among the panel genes but not in
+  # the whole genome: in the full human set (--gene-identifiers all) ten tRNA symbols are each
+  # shared by 2 to 17 Entrez records (TRNAG-GCC, TRNAD-GUC, ...; NCBI gene_info 18 Nov 2026), and
+  # InterMine keys Gene on (symbol, organism) too, so they would merge.  NcbiGeneConverter sets a
+  # symbol only when it is the nomenclature symbol or unique in the taxon (isUniqueSymbol): the
+  # same rule here, the symbol is dropped from every holder of a shared one (they keep their
+  # Entrez id and synonyms).
   key_ambiguity:
-    Gene: {field: secondaryIdentifier, prefer_field: typeOfGene, prefer_value: protein-coding}
+    Gene:
+      - {field: secondaryIdentifier, prefer_field: typeOfGene, prefer_value: protein-coding}
+      - {field: symbol}
+  # An unscoped fetch (--gene-identifiers all) keeps the gene types the stock loader keeps:
+  # NcbiGeneInfoParser.TYPES_TO_IGNORE drops other, biological-region and unknown (130,304 of the
+  # 194,018 human records in RDF Portal's graph).  scope.apply_full_scope_filter.
+  full_scope_filter:
+    Gene.typeOfGene: [protein-coding, ncRNA, pseudo, snoRNA, rRNA, tRNA, snRNA, scRNA]
+  # Its genes all carry their Entrez id: merge on that alone, never on a symbol or an Ensembl id,
+  # which can name another Entrez gene in another source (project.source_keys) [im-9n4.40].
+  own_keys: {Gene: [primaryIdentifier]}
   scope: good
 hgnc:
   replaces: [hgnc]
@@ -42,6 +60,20 @@ hgnc:
   data_source_url: https://rdfportal.org/dataset/hgnc
   data_set_title: HGNC identifiers (RDF Portal)
   consts: {Organism.taxonId: "9606"}
+  # hgnc's Protein items (see_also uniprot) are an accession and a gene link; outside the panel
+  # (--gene-identifiers all) nothing else gives them an organism.  items.organisms_from_genes.
+  organism_from_genes: [Protein]
+  # As ncbigene: Entrez-keyed genes merge on the Entrez id only (project.source_keys).
+  own_keys: {Gene: [primaryIdentifier]}
+  # HGNC's own data gives some Ensembl ids to two genes (ENSG00000175658: Entrez 1818 and
+  # 101060524); drop it from both, as for ncbigene (STATUS.md D14).  No effect on the panel.
+  key_ambiguity:
+    Gene: {field: secondaryIdentifier}
+  # Where the two RDF snapshots disagree on who owns a symbol or an Ensembl id (5 symbols, 101 ids
+  # with every gene loaded; RNR1 is HGNC's 6052 but NCBI's 4549), hgnc yields to ncbigene, which
+  # ranks first for both fields.  Needs out/ncbigene/items written first (SOURCES order).
+  defer_to:
+    ncbigene: {class: Gene, key: primaryIdentifier, fields: [symbol, secondaryIdentifier]}
   gene_scope_field: primaryIdentifier
   scope: good
 uniprot:

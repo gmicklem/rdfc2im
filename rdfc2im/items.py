@@ -144,10 +144,18 @@ class ItemStore:
         # for ncbigene/hgnc, Gene.secondaryIdentifier only for ensembl), and committing to one
         # choice regardless leaves a source that never populates it with no real key at all -
         # see InterMineModel.key_attributes' docstring for what that silently breaks.
+        #
+        # The key is the value as InterMine will see it, i.e. after to_ascii (write() folds every
+        # attribute).  Keyed on the raw Unicode, HPO's three related synonyms of HP:0011002
+        # "Albers-Schoenberg", "Albers-Schonberg" and "Albers-Schönberg disease" were three items,
+        # two of them identical once written; InterMine keys OntologyTermSynonym on name, so the
+        # equivalent-object prefetch of their batch failed ("Duplicate objects found for pk") and
+        # the retry of the batch stopped humanmine-hpo with "Given a ProxyReference, but id not in
+        # ID Map" on an unrelated term's crossReferences [im-9n4.41].
         for ka in self.model.key_attributes(cls):
             if values.get(ka):
-                return (cls, ka, values[ka])
-        vals = "|".join(f"{k}={v}" for k, v in sorted(values.items()) if v)
+                return (cls, ka, to_ascii(values[ka]))
+        vals = "|".join(f"{k}={to_ascii(v)}" for k, v in sorted(values.items()) if v)
         return (cls, "*", vals) if vals else None
 
     def get(self, cls: str, values: Dict[str, str]) -> Optional[tuple]:
@@ -166,7 +174,9 @@ class ItemStore:
                 if len(self.dropped) < 50:
                     self.dropped.append(f"{cls} {k[2]}: {f} = {v!r} does not parse as {fd.type} - dropped")
                 continue
-            if f in it.attrs and it.attrs[f] != v:
+            if f in it.attrs and to_ascii(it.attrs[f]) == to_ascii(v):
+                continue          # the same value once written (see key_for): not a conflict
+            if f in it.attrs:
                 if len(self.conflicts) < 50:
                     self.conflicts.append(f"{cls} {k[2]}: {f} = {it.attrs[f]!r} vs {v!r} (first kept)")
                 continue
@@ -211,6 +221,24 @@ class ItemStore:
                 if f in self.model.all_fields("Organism"):
                     it.attrs.setdefault(f, full[f])
             n += len(it.attrs) > before
+        return n
+
+    def organisms_from_genes(self, classes) -> int:
+        """Give each item of `classes` (sources.yaml `organism_from_genes`) that has no organism the
+        organism of the genes in its `genes` collection, when they agree.  hgnc's Protein items are
+        an accession and a gene link only: in a panel build they merge into stock UniProt's
+        proteins, which carry the organism, but with every human gene loaded (--gene-identifiers
+        all) some 20,000 of them are proteins of their own and would have none [im-9n4.40].
+        Returns the number of items linked."""
+        n = 0
+        for it in self.items.values():
+            if it.cls not in classes or "organism" in it.refs or "organism" not in self.model.all_fields(it.cls):
+                continue
+            found = {self.items[g].refs.get("organism") for g in it.colls.get("genes", []) if g in self.items}
+            found.discard(None)
+            if len(found) == 1:
+                it.refs["organism"] = next(iter(found))
+                n += 1
         return n
 
     def organise_chromosomes(self) -> int:
@@ -333,6 +361,41 @@ def resolve_key_ambiguity(store: ItemStore, cls: str, field: str,
     return blanked
 
 
+def defer_to_source(store: ItemStore, other_items: str, cls: str, key: str, fields: List[str]) -> Dict[str, int]:
+    """Blank, on this source's `cls` items, each of `fields` whose value the other source's items
+    (`other_items`, already written) give to a DIFFERENT object, told apart by `key`.
+
+    [im-9n4.40] With every human gene loaded, the RDF hgnc and ncbigene snapshots disagree on a few
+    hundred genes: HGNC still gives RNR1 to Entrez 6052 (NCBI type "other", so not in ncbigene),
+    while NCBI's Symbol column gives RNR1 to 4549 (MT-RNR1), and 101 Ensembl ids sit on one Entrez
+    gene in ncbigene and on another in hgnc.  Both are keyed on Entrez alone (sources.yaml
+    own_keys), so nothing merges wrongly, but the two genes would show the same symbol or Ensembl id.
+    ncbigene ranks first for both fields (genomic_priorities), so hgnc yields where they disagree.
+    Returns {field: number blanked}; a missing other file is no deferral (a panel-only build)."""
+    owners: Dict[str, Dict[str, set]] = {f: {} for f in fields}
+    if not os.path.exists(other_items):
+        return {}
+    import xml.etree.ElementTree as ET
+    for _, el in ET.iterparse(other_items):
+        if el.tag == "item":
+            if el.get("class") == cls:
+                a = {x.get("name"): x.get("value") for x in el.findall("attribute")}
+                for f in fields:
+                    if a.get(f) and a.get(key):
+                        owners[f].setdefault(a[f], set()).add(a[key])
+            el.clear()
+    n = {f: 0 for f in fields}
+    for it in store.items.values():
+        if it.cls != cls or not it.attrs.get(key):
+            continue
+        for f in fields:
+            v = it.attrs.get(f)
+            if v and to_ascii(v) in owners[f] and it.attrs[key] not in owners[f][to_ascii(v)]:
+                del it.attrs[f]
+                n[f] += 1
+    return n
+
+
 def emit_items(model: InterMineModel, out_dir: str, src: str, source_cfg: dict, log=print) -> dict:
     cols = read_tsv(os.path.join(out_dir, "columns.tsv"))
     tables: Dict[str, List[dict]] = {}
@@ -390,13 +453,23 @@ def emit_items(model: InterMineModel, out_dir: str, src: str, source_cfg: dict, 
                     if src_key is None or src_key == k:
                         continue
                     store.link(src_key, vf, k)
-    for cls, kcfg in (source_cfg.get("key_ambiguity") or {}).items():
-        n = resolve_key_ambiguity(store, cls, kcfg["field"], kcfg.get("prefer_field"), kcfg.get("prefer_value"))
-        if n:
-            stats["notes"].append(f"{cls}.{kcfg['field']}: blanked on {n} items - ambiguous in this "
-                                   f"source's own data, not an rdfc2im mapping error (STATUS.md D14)")
+    for cls, kcfgs in (source_cfg.get("key_ambiguity") or {}).items():
+        for kcfg in (kcfgs if isinstance(kcfgs, list) else [kcfgs]):   # one field, or a list of them
+            n = resolve_key_ambiguity(store, cls, kcfg["field"], kcfg.get("prefer_field"), kcfg.get("prefer_value"))
+            if n:
+                stats["notes"].append(f"{cls}.{kcfg['field']}: blanked on {n} items - ambiguous in this "
+                                       f"source's own data, not an rdfc2im mapping error (STATUS.md D14)")
+    for other, dcfg in (source_cfg.get("defer_to") or {}).items():
+        other_items = os.path.join(os.path.dirname(os.path.abspath(out_dir)), other, "items", f"{other}.xml")
+        for f, n in defer_to_source(store, other_items, dcfg.get("class", "Gene"), dcfg.get("key", "primaryIdentifier"),
+                                    dcfg["fields"]).items():
+            if n:
+                stats["notes"].append(f"{dcfg.get('class', 'Gene')}.{f}: blanked on {n} items - {other} gives the "
+                                      f"value to another {dcfg.get('key', 'primaryIdentifier')} (defer_to)")
     stats["organisms_completed"] = store.complete_organisms()
     stats["chromosomes_linked"] = store.organise_chromosomes()
+    if source_cfg.get("organism_from_genes"):
+        stats["organisms_from_genes"] = store.organisms_from_genes(set(source_cfg["organism_from_genes"]))
     # DataSet / DataSource
     ds_title = source_cfg.get("data_set_title") or f"{src} (rdf-config)"
     ds_name = source_cfg.get("data_source_name") or src

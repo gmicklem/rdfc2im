@@ -572,7 +572,8 @@ panel. `go_enrichment_for_gene` and the `GOAnnotation` model are what it restore
   and no new terms from the GAF or interpro2go. Protein stays 13,723: the loader creates a stub Protein for each
   UniProt `with` value, but every one matches an existing accession, so no Protein lacks an organism and none is
   duplicated. 29,760 of the RDF terms are not GO terms at all (identifiers `Reactome:...`, `RHEA:...`, `EC:...`)
-  and have no name; that is the RDF side's, not this source's.
+  and have no name; that is the RDF side's, not this source's (gone since im-9n4.41: the RDF go source keeps only the
+  cross references the stock OBO loader keeps, 48,348 GOTerms).
 * **Widget.** `go_enrichment_for_gene` was missing although `GOAnnotation` was now in the model: the mine checkout is copied
   once and `reduce_mine.py webconfig` only removes, so the widget dropped in the earlier GOA-less builds never came back
   (the same for the ProteinDomain autocomplete lines of `objectstoresummary.config.properties`). `build_dbmodel` now puts
@@ -767,9 +768,7 @@ made when the directory is missing.
 * **HPO counts.** 74 panel genes have a disease: 72 with OMIM (121 diseases), 44 with ORPHA (72 diseases). Evidence rows 3,637
   (OMIM 1,685, ORPHA 1,952, so 1,685 without the ORPHA rows), HPOAnnotation 3,631. The converter loads ORPHA annotations; undoing it is dropping
   `ORPHA:` rows from the two files. PAX6 has 15 diseases (8 OMIM, 7 ORPHANET), CYP2D6 1 (OMIM:608902).
-* **Not done: the RDF `hpo` source.** Its fetch worked (cache group `hpo`, 18 MB, 37,960 terms: 17,547 of them `UMLS:` and
-  `SNOMEDCT_US:` cross-reference stand-ins) but `humanmine-hpo` stops integrate with "Given a ProxyReference, but id not in ID
-  Map" on `HPOTerm.crossReferences` (terms that already hold a cross reference). Not resolved; the mine is built without it.
+* **The RDF `hpo` source** stopped integrate here; it loads since im-9n4.41 (next section).
 * **Report page.** `TOOL_QUERIES` now lists `atlasExpression.tStatistic`/`pValue` for the three ArrayExpress tools (they need
   E-MTAB-62, `arrayexpress-atlas`, not loaded): they are dropped, as is `Gene_SigSNP` (`EMPTY_TEMPLATES`: no eQTL). Kept: both
   Protein Atlas and Human Tissue tools, `Gene_Disease2`, `Gene_Disease_HPO`, `Gene_HPOphenotype_2`. On the PAX6 page in Chromium
@@ -783,6 +782,162 @@ made when the directory is missing.
   `rdfc2im_project` 18 min. `stock_ut/` 2.9 GB, Postgres 1.2 GB, root disk 3.3 GB free before and after.
 * **Licence.** The HPA groups are `redistributable: true` with the CC BY-SA note (share-alike); nothing from OMIM is loaded
   or cached. `cache check-release` passes on `cached_raw_data/` (16 groups) and on the stock filtered cache (13).
+
+#### HPO term names: the RDF hpo source beside hpo-annotation [im-9n4.41]
+
+`--sources "go ncbigene reactome hgnc ensembl uniprot clinvar gwascatalog pubmed hpo"` with the stock list above. `hpo`
+`replaces: [hpo]`: the stock OBO `hpo` entry (in HumanMine's project.xml right before `hpo-annotation`) moves to
+`replaced_sources.xml`, and `humanmine-hpo` loads with the other rdfc2im sources, after `humanmine-hgnc`, so still
+before `hpo-annotation`, as on HumanMine. Its terms merge into hpo-annotation's identifier-only `HPOTerm`s through
+`HPOTerm.key_identifier` (now in the generated keys file).
+
+* **Why it failed.** Not the cross references. `ItemStore` keyed items on the raw Unicode value, but `write()` folds every
+  attribute to ASCII (the large-file loader's UTF-8 bug, see `items.py`). HP:0011002 (Osteopetrosis) has the related
+  synonyms "Albers-Schonberg disease" and "Albers-Schönberg disease": two `OntologyTermSynonym` items, identical once
+  written. InterMine keys that class on `name` (the GO synonyms already in the database make the key live), so the
+  `ParallelBatchingFetcher` prefetch of the batch holding the term (items 5,001 to 10,000) failed with "Duplicate objects
+  found for pk" in a worker thread (the log shows only `PrefetchManager ... Error in worker thread`). That fetch had
+  already put the batch's collection members into the translator's `doneAlready` set; the batch was fetched again in the
+  main thread, those members came back as `ProxyReference`s never stored, and the first one met, `UMLS:C1850970` in
+  HP:0007541's `crossReferences`, stopped the load with "Given a ProxyReference, but id not in ID Map".
+* **The fix.** `ItemStore.key_for` keys on `to_ascii(value)`, so items InterMine would see as identical are one item (and
+  equal-once-folded values are not reported as conflicts). The hpo items have one synonym fewer (29,090) and no duplicate
+  under any key the integration uses except two obsolete terms named "obsolete Radial deviation of the thumb" (key
+  `name, ontology`; harmless while the HPO `Ontology` is new when humanmine-hpo loads, as here, because the fetcher's
+  hints then skip that key; GO has 22 such pairs and loads the same way).
+* **Cross references.** HumanMine's own loader keeps an OBO `xref` only when its prefix is in bio/core's
+  `obo_xrefs.properties` (FBbt, FMA, MA, WBbt, ZFA; `OboParser.addXrefs`); HumanMine has 0 `HPOTerm.crossReferences`,
+  no `UMLS:` term at all, and 8 GOTerm cross references (www.humanmine.org, 18 Nov 2026). The `oboinowl:hasDbXref` entry
+  in `knowledge.yaml` now carries the same rule as a filter, for every ontology: the 17,547 `UMLS:`/`SNOMEDCT_US:`/`NCIT:`/
+  `MSH:` HPOTerm stand-ins and the 29,760 nameless `Reactome:`/`RHEA:`/`EC:` GOTerms of the RDF go source (im-9n4.38) are no
+  longer made; go keeps 8 cross references (48,348 GOTerms, was 78,100). The queries and the cache are unchanged (the
+  filter applies to the fetched rows).
+
+| | before (no hpo) | with hpo |
+|---|---|---|
+| HPOTerm / without a name | 1,523 / 1,523 | 20,413 / 0 (all `HP:`) |
+| GOTerm / without a name | 78,100 / 29,760 | 48,348 / 8 |
+| OntologyTermSynonym | 79,819 | 108,909 |
+| `Gene_Disease_HPO` / `Gene_HPOphenotype_2` for PAX6 | 187 / 187 rows, every term name empty | 187 / 187 rows, every term named |
+| duplicate HPOTerm / OntologyTerm identifier | 0 / 0 | 0 / 0 |
+| PAX6 / CYP2D6 deep counts (proteins, alleles, GO, homologues, interactions, expression, diseases) | | unchanged |
+| all objects | 597,076 | 615,144 |
+
+Integrate 521 s (humanmine-hpo 14 s), postprocess 116 s, the whole driver run from `rdfc2im_pipeline` 17 min.
+Live tests `test_hpo_terms_*` skip on a mine without the `Human Phenotype Ontology (RDF Portal)` data set.
+
+**`Disease.dataSets` and the fork.** `build_humanmine_items` still deletes `Disease.dataSets` from the build's copy of
+`hpo-annotation_additions.xml`. Deleting it in the fork is not the fix: on HumanMine `Disease extends Annotatable`, which
+has no `dataSets`, so the line is what gives HumanMine's Disease its data sets (its `/service/model/Disease` lists
+`Disease.dataSets`; `BioStoreHook.setDataSets` fills it for every hpo-annotation and orphanet Disease). The clash exists
+only because this repository's `curation/extensions_additions.xml` makes `Disease extends BioEntity`, whose `dataSets`
+has the reverse `DataSet.bioEntities`. A fork change that works for both would have to make HumanMine's Disease a
+BioEntity too; until someone decides that, the build's logged edit is the right place.
+
+#### All human genes as identifiers: `--gene-identifiers all` [im-9n4.40, T1.15]
+
+Decision D-1 (plan 50 2.2 b): the mine holds every human gene as an identifier, the deep annotation only for the panel.
+`--gene-identifiers all` makes the RDF `ncbigene` and `hgnc` sources `SCOPE_MODE` `full` (`--taxon 9606`, no
+`--genes`); every other source keeps its mode. The default stays `panel`: the 5.1.1 baseline, CI and the release
+cache are unchanged (the dry-run tests check both).
+
+What has to stay panel-scoped, and how:
+
+* **The stock filters.** `subset_raw.py idsets` derives the Entrez, Ensembl and UniProt id sets the stock raw files are
+  cut to from `out/<source>/items`. It only takes genes whose symbol is in the panel, so with 64,000 genes in the
+  ncbigene and hgnc items the sets are still the panel's (a unit test runs it on an every-gene fixture; on the real
+  build `idsets/*.txt` are byte-identical to the panel build's). Without that, every stock filter (UniProt XML, GAF,
+  GFF, PSI-MI, expression) would stop filtering.
+* **The PMIDs pubmed is fetched for.** They are grepped from `out/{hgnc,uniprot,gwascatalog,reactome}/items`; a full
+  hgnc cites about 23,500 papers (and the grep also catches its 44,000 Entrez ids), so the PMID set, its md5 and the
+  cached pubmed group would no longer be the panel's. With `all` the grep reads `subset_raw.py panel-items`' cut of the
+  hgnc items instead: the panel genes (by the Entrez ids of the gene-id lookup) and every non-Gene item they reach.
+  On the real items the PMID file is identical to the panel build's, so the panel's pubmed cache group is reused.
+* **Gene types.** RDF Portal's NCBI Gene graph holds 194,018 human records, 128,261 of them `biological-region` (the
+  "193,000 genes" of the scope bug). The stock ncbi-gene loader never loads `other`, `biological-region` or `unknown`
+  (`NcbiGeneInfoParser.TYPES_TO_IGNORE`). ncbigene's `full_scope_filter` (sources.yaml, `scope.apply_full_scope_filter`)
+  restricts an unscoped run to the other eight types; the field is promoted to required, so it joins every table's
+  query and the synonym and cross-reference tables of a dropped record are not fetched either. A gene-scoped run never
+  applies it: the panel queries are unchanged.
+* **Shared symbols.** In the whole genome ten tRNA symbols (TRNAG-GCC, TRNAD-GUC, ...) are each NCBI's Symbol for 2 to
+  17 Entrez records; InterMine also keys Gene on `(symbol, organism)`, so they would merge. NcbiGeneConverter sets a
+  symbol only when it is unique in the taxon; ncbigene's `key_ambiguity` now also lists `symbol` with no preferred
+  holder, so it is dropped from every gene that shares it.
+* **Proteins.** hgnc links every protein-coding gene to its UniProt accession. In a panel build those Protein items merge
+  into stock UniProt's; with every gene about 20,000 are proteins of their own, an accession and a gene and nothing
+  else. `organism_from_genes: [Protein]` gives them the organism of their gene (`items.organisms_from_genes`), so no
+  Protein lacks an organism.
+
+* **Merging (plan 50 risk 3).** Gene is keyed on `primaryIdentifier`, `(symbol, organism)` and `(secondaryIdentifier,
+  organism)`, and an object merges into everything any key finds. Checked on the items before the first load
+  (`merge_risk`/`simulate` scripts of the bead): the RDF NCBI and HGNC snapshots disagree on who owns 9 symbols (HGNC
+  still gives KCNIP4-AS2 to Entrez 105374516, NCBI to 143433685; RNR1/RNR2 are HGNC's 6052/6053, of NCBI type `other`,
+  while NCBI's own Symbol column names MT-RNR1 and MT-RNR2 "RNR1"/"RNR2") and 109 Ensembl ids (each on one Entrez gene in
+  one source and another in the other), and HGNC's own data gives 6 Ensembl ids to two genes. Through the symbol and
+  Ensembl keys every one of these would have merged two Entrez genes. Three rules:
+  1. `own_keys: {Gene: [primaryIdentifier]}` for ncbigene and hgnc: `rdfc2im project` writes
+     `humanmine-ncbigene_keys.properties` and `humanmine-hgnc_keys.properties` (the type file without Gene's symbol and
+     Ensembl keys; InterMine reads `<source name>_keys.properties` before `<type>_keys.properties`), and `make fork-sync`
+     puts them in the humanmine-items jar. Their genes all carry the Entrez id, so nothing is lost; ensembl, uniprot and
+     gwascatalog, which have no Entrez id, keep the full keys and still find their (panel) gene by symbol or Ensembl id.
+  2. hgnc `defer_to: ncbigene` for `symbol` and `secondaryIdentifier`: where ncbigene gives the value to another Entrez
+     gene, hgnc's copy is dropped (9 symbols, 106 Ensembl ids); ncbigene ranks first for both fields anyway. It reads
+     `out/ncbigene/items`, so ncbigene must come before hgnc in `--sources` (it does by default).
+  3. hgnc `key_ambiguity` on `secondaryIdentifier` (6 genes), as ncbigene already had for its 492.
+  The simulation of the merged table then has 0 duplicate symbols and 0 duplicate Ensembl ids among 64,470 Entrez genes,
+  and all 5,994 interaction-partner stubs named.
+* **Chromosomes.** ncbigene's chromosome column (a `guess` row) gave the whole genome three extra Chromosome objects,
+  `MT`, `Un` and `X|Y`, with no length (the GFF names 24). `knowledge.yaml` now filters it to `1`-`22`, `X`, `Y`; the
+  37 MT genes and the unplaced ones keep their row, without a chromosome (ncbi-gff maps no MT either).
+* **Integrate memory.** One Gradle daemon loads every source and its 4 GB heap is not given back between them: on the
+  first all-genes run the old generation was full by panther (1,976 full collections, 46 min of GC, no progress; it had
+  to be killed). With `all`, `integrate_sources` runs each source with `--no-daemon`.
+
+**The build** (ut stack, the stock list of the disease build, `--sources "... pubmed hpo" --gene-identifiers all`):
+
+| | panel (hpo build above) | all genes |
+|---|---|---|
+| human Gene / with symbol / with Ensembl id | 6,108 / 114 / 113 | 64,470 / 64,359 / 45,051 (HumanMine 2022: 64,160 / 56,020 / 42,429) |
+| interaction-partner stubs without a symbol | 5,994 | 0 (PAX6's 361 partners and CYP2D6's 4 all named) |
+| orthologue partner genes (6 organisms) / with symbol | 997 / 182 | 997 / 182 |
+| duplicate Gene.primaryIdentifier / symbol (9606) / Ensembl id (9606) | 0 / 0 / 0 | 0 / 0 / 0 |
+| Protein / genes-proteins links | 13,723 / 1,687 | 22,630 / 21,950 (hgnc's accession stubs, all with an organism) |
+| Synonym / CrossReference / Publication | 6,696 / 32,561 / 9,550 | 232,023 / 221,697 / 32,794 (25,899 without a title: hgnc's references) |
+| Chromosome / GeneFlankingRegion / Location | 24 / 2,260 / 16,603 | unchanged (only the panel genes are located) |
+| PAX6 / CYP2D6: proteins, alleles, pathways, GO terms, homologues, interactions, HPA, RNA-seq, atlas, diseases, transcripts | 47, 996, 5, 57, 12, 361, 137, 105, 16, 15, 53 / 59, 356, 6, 33, 67, 4, 97, 105, 16, 1, 2 | identical |
+| all objects | 615,144 | 1,120,120 |
+
+The 64,470 human genes are the 63,649 NCBI records of the kept types plus 821 Entrez ids only HGNC names (types NCBI files
+as `other` or `unknown`, such as the PIRC piRNA clusters and RNR1/RNR2, or records NCBI has since replaced); the 111 without
+a symbol are the 106 genes of the ten shared tRNA symbols and 5 HGNC-only genes whose symbol NCBI gives to another gene.
+`idsets/*.txt` and `cited_pmids.txt` are byte-identical to the panel build's, so every stock filter and the pubmed group
+are the panel's. A list of 20 non-panel symbols (BRCA1, BRCA2, TP53, ...) uploaded through `/service/lists` resolves 20 of 20
+(0 before); `/service/ids` finds BRCA2 by symbol, by `HGNC:1101` (a synonym match) and by `ENSG00000139618`; keyword search
+finds BRCA2 first. The Cytoscape tool on the CYP2D6 page labels its four partners CYP2C9, POR, CYB5A, ATRAID (they were
+CYP2C9, 1528, 5447, 51374).
+
+* **Fetch** (once, RDF Portal, the configured 1 s between pages, one source at a time): ncbigene 767 s (466,399 rows, raw
+  44 MB, 274,697 items), hgnc 898 s (778,913 rows, raw 15 MB, 333,149 items): 28 min. The cache groups are 45 MB and 15 MB
+  (the panel's were 0.1 MB); the allgenes cache is 267 MB against the panel cache's 210 MB.
+* **Build** from `rdfc2im_project`, all from the cache: 19.5 min. Integrate 809 s (was 521 s; humanmine-hgnc 164 s,
+  humanmine-ncbigene 160 s, `--no-daemon` per source), postprocess 161 s (was 116 s; the two search-index passes 45 s and
+  49 s), `rdfc2im_pipeline` from the cache 110 s. Postgres 2.2 GB (`pg_database_size`; the volume 3.3 GB), Solr 275 MB.
+  Lowest available memory during the build 2.6 GB (0.66 GB in the panel build, whose integrate shares one daemon). Root
+  disk unchanged (3.0 GB free; the worktree's `out/` grew by about 200 MB of items).
+* **ensembl=full is not cheap**: RDF Portal holds 53,636 human Ensembl genes, and 845 labels are each shared by several of
+  them (4,678 genes: haplotype and patch copies, Y_RNA, U6, ...). ensembl has no Entrez id, so it merges on symbol and
+  Ensembl id: it would need its own `key_ambiguity` on the symbol and a rule against NCBI/HGNC's Ensembl ids before it
+  could load, for no gain the two sources do not already give (45,051 genes carry an Ensembl id from them). Left `panel`.
+
+**The CI data asset should stay panel-scoped.** The panel cache is what CI and the 5.1.1 baseline build from; `all`
+changes neither (default `panel`, dry-run tests). Everything the gene panel exercises is exercised there, while the
+all-genes groups add 60 MB to the asset, half an hour of network to refresh and five minutes and half a million objects
+to every CI build, with no test that needs them. Publish the allgenes cache as a second, optional asset (both sources
+are redistributable: NCBI Gene public domain, HGNC CC0) when the demo mine or the PanelApp lists of milestone 2 need it.
+
+The cache groups of the two sources are saved as `scope=full` (no `genes_md5`), so a panel cache refuses them and they
+refuse a panel build: they live in a cache of their own (`--cache-dir`, here `repos/rdfc2im/cached_raw_data.allgenes-
+2026-11-18`, a verified copy of the panel cache with the two groups replaced).
 
 ### The ID-resolver gate [im-9n4.4]
 
