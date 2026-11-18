@@ -368,11 +368,48 @@ What each phase does with the list:
 | `integrate_sources` | Unchanged: the stock sources load in project.xml order with the rest |
 | `postprocess` | Lists the postprocesses the table asks for; they are not run yet (a marked hook) |
 
-Two hooks are marked in the script and left for the next tasks: the ID-resolver gate (a filtered
-`${resolver.file.rootpath}/entrez`, written in `subset_stock_data` and set in
-`prepare_mine_checkout`; T0.3), which is what cuts the loaders the table leaves unfiltered (psi,
-biogrid, panther, omim, the HumanMine expression sources), and `cache save --for-release` refusing
-groups whose META says `redistributable=false` (T0.3).
+One hook is still marked in the script and left for the next tasks: the postprocesses the table asks for
+(`phase_postprocess`). The ID-resolver gate and the release refusal of T0.3 are described next.
+
+### The ID-resolver gate [im-9n4.4]
+
+The stock loaders for psi, biogrid, panther, omim and the HumanMine expression sources have no gene filter; the
+table leaves them `filter: none`. What cuts them is the mine's ID resolver: each of those converters asks
+`EntrezGeneIdResolverFactory` whether it knows a gene and drops what it does not. With a non-empty
+`--stock-sources` the build therefore gives the resolver a gene list (plan 50 2.2, decision D-1):
+
+* `fetch_stock_data` downloads NCBI's `Homo_sapiens.gene_info.gz` (public domain, 5.2 MB; cache group
+  `stock-raw-resolver` in the stock cache, same URL / `Last-Modified` rules as the other raw groups).
+* `subset_stock_data` runs `subset_raw.py filter --format gene_info --taxon 9606` on it and writes the result
+  uncompressed as `$RDFC2IM_STOCK_DIR/resolver/entrez`. The default keeps **every** human gene, because the mine
+  holds all human genes as identifiers (deep annotation only for the panel): interaction and orthologue
+  partners outside the panel must still resolve. `--resolver-scope panel` keeps only the panel's Entrez ids
+  (`idsets/entrez.txt`) for anyone who wants the strict subset; partners outside the panel are then dropped.
+* `prepare_mine_checkout` adds `resolver.file.rootpath=$RDFC2IM_STOCK_DIR/resolver` to the generated
+  `~/.intermine/humanmine.properties` and deletes any `idresolver.cache` under the mine checkout
+  (`find ... -maxdepth 3 -name idresolver.cache -delete`).
+
+What the factory needs (`bio/core/.../EntrezGeneIdResolverFactory.java`, `NcbiGeneInfoParser.java`):
+
+* the file is `<resolver.file.rootpath>/entrez` (lines 39-40 and 183), read with a plain `FileReader` (line 215),
+  so it must be **uncompressed**; the name has no extension;
+* tab-delimited NCBI `gene_info`: `#` lines skipped, column 1 the tax id, 2 GeneID, 3 symbol, 4 locus tag,
+  5 synonyms, 6 dbXrefs, 8 map location, 9 description, 10 gene type, 11 and 12 the nomenclature symbol and
+  name (parser lines 61-79); rows of type `other`, `biological-region`, `unknown` or empty are ignored;
+* with `resolver.file.rootpath` unset the factory logs a warning and returns an empty resolver (lines 177-181);
+  a missing file is only a warning too (line 191), so the gate must be checked in the log
+  (`Creating id resolver for [9606] ... from data file`);
+* after reading the file it writes a **cache**, `idresolver.cache`, to the working directory of the JVM
+  (`resolver.writeToFile(new File(idResolverCachedFileName))`, line 189; the name is in
+  `IdResolverFactory.java:40`), and on the next call restores it from the *classpath*
+  (`getClassLoader().getResource("idresolver.cache")`, `IdResolverFactory.java:93-99`), preferring it to the
+  data file. A stale cache therefore silently overrides a changed entrez file, which is why the build deletes
+  it. For the Gradle `:dbmodel:integrate` run the working directory is the mine's `dbmodel/` (or the mine
+  root), so the delete looks three levels down from the mine checkout. After a `--from integrate_sources`
+  resume that follows a change of `--resolver-scope`, delete it by hand.
+
+`--use-cached-data` and `--offline` verify the raw group and re-filter it (a few seconds); no filtered copy of
+the resolver file is cached.
 
 Large raw data: UniProt Swiss-Prot human is 175 MB gzipped, IntAct human 1 GB, the genome FASTA
 973 MB. In the sandbox set `RDFC2IM_STOCK_DIR` (or `RDFC2IM_DATA_ROOT`) to a directory under
