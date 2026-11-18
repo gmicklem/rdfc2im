@@ -34,11 +34,16 @@
 #     stage_as       the file name the converter expects (the loaders read plain text only: no .gz)
 #     filter         none (the file is used whole), or {format, ids, column, taxon, keep_header}:
 #                    tools/subset_raw.py filter --format F --ids <idsets>/<ids>.txt [--column N]
-#                    [--taxon T] [--keep-comments]
+#                    [--taxon T] [--keep-comments]; format psi-xml also takes xref_db (the xref db
+#                    names whose ids are matched) and reads a zip's member glob itself, one filtered
+#                    file per member, staged under the members' names [im-9n4.13]
 #   notes            anything a later task must know (format drift since HumanMine's 2022 load, ...)
 #
-# Loaders gated by the ID resolver (psi, biogrid, panther, omim, the HumanMine expression sources)
-# are filter: none here: T0.3's filtered ${resolver.file.rootpath}/entrez does their gene cut.
+# Loaders gated by the ID resolver (omim, the HumanMine expression sources) are filter: none here:
+# T0.3's filtered ${resolver.file.rootpath}/entrez does their gene cut. With the all-human resolver
+# (D-1) that cuts nothing for a human-gene file, so the interaction and orthologue files (psi-intact,
+# biogrid, panther) are pre-filtered to records with at least one panel gene; the resolver then
+# decides whether the partner loads.
 #
 # Every URL was checked on 17 Nov 2026 unless the file says verified: false.
 
@@ -277,9 +282,14 @@ sources:
       intact.organisms: "9606"
     after: [psi-mi-ontology]
     notes: >-
-      1.06 GB zip of PSI-MI XML files (member layout unverified; unpacked size unknown, likely
-      several GB: needs the data root on the large disk). No PSI XML filter exists yet, so the
-      cut is the resolver gate (T0.3), which keeps panel-to-panel pairs only (plan 50 2.2).
+      1.06 GB zip of PSI-MI 2.5 XML files in the compact form, human_01.xml ... (im-9n4.13). Read
+      straight from the zip by `subset_raw.py filter --format psi-xml`, never unpacked: an
+      interaction is kept when at least one participant's interactor has a panel UniProt
+      accession (uniprotkb xref, isoforms and chains on their base accession), with exactly the
+      interactors and experiments it references, one filtered file per member. With the
+      all-human resolver (D-1) the partner then loads as a Gene stub. The filter also drops the
+      version of the Ensembl xref ids: PsiConverter resolves a human interactor by them
+      (9606.datasource = ensembl) and gene_info has none.
     files:
       - id: human
         url: https://ftp.ebi.ac.uk/pub/databases/intact/current/psi25/species/human.zip
@@ -288,7 +298,7 @@ sources:
         last_modified: "2026-10-24"
         unpack: zip
         member: "*.xml"
-        filter: none
+        filter: {format: psi-xml, ids: uniprot, xref_db: [uniprotkb]}
 
   biogrid:
     type: biogrid
@@ -301,16 +311,22 @@ sources:
     after: [psi-mi-ontology]
     notes: >-
       The converter needs the BIOGRID-ORGANISM-<Genus_species>-<version>.psi25.xml file name
-      layout (it reads the organism out of it). The server sends no Content-Length; over 140 MB.
-      Resolver gate (T0.3).
+      layout (it reads the organism out of it at substring(17)); the psi-xml filter writes the
+      member under its own name. The server sends no Content-Length and dates the file at the
+      request (Last-Modified is always now, so it is fetched again on every run without
+      --use-cached-data); 208 MB zip, the human member 5.8 GB (release 5.0.263, im-9n4.13).
+      Compact PSI-MI 2.5; an interaction is kept when one participant's interactor has a panel
+      Entrez id (its `entrez gene/locuslink` xref). BioGridConverter itself takes the human gene
+      from the interactor's shortLabel (the symbol) through the ID resolver.
     files:
       - id: organisms
         url: https://downloads.thebiogrid.org/Download/BioGRID/Latest-Release/BIOGRID-ORGANISM-LATEST.psi25.zip
         verified: true
+        size: 208061555
         last_modified: "2026-11-17"
         unpack: zip
         member: "BIOGRID-ORGANISM-Homo_sapiens-*.psi25.xml"
-        filter: none
+        filter: {format: psi-xml, ids: entrez, xref_db: ["entrez gene/locuslink"]}
 
   psi-mi-ontology:
     type: psi-mi-ontology

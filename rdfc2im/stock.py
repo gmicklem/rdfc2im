@@ -38,8 +38,11 @@ JAR_ORIGINS = ("intermine", "humanmine-bio-sources")
 # HumanMine's project.xml carries version="4.3.0", and the dbmodel plugin resolves that version.
 HUMANMINE_BIO_VERSION = "4.3.0"
 # tools/subset_raw.py's interface (plan 50, T0.2)
-FORMATS = ("gaf", "gff3", "uniprot-xml", "fasta", "tab", "gene_info")
-NEEDS_IDS = ("gaf", "gff3", "uniprot-xml", "fasta", "tab")
+FORMATS = ("gaf", "gff3", "uniprot-xml", "fasta", "tab", "gene_info", "psi-xml")
+NEEDS_IDS = ("gaf", "gff3", "uniprot-xml", "fasta", "tab", "psi-xml")
+# formats whose filter reads a zip itself and writes one file per member of a glob (into the work
+# directory, staged under the members' own names): PSI-MI XML, IntAct's human.zip holds dozens [im-9n4.13]
+MULTI_MEMBER_FORMATS = ("psi-xml",)
 # entrez..symbol: the panel id sets; chromosomes: the RefSeq accessions of the GRCh38 chromosomes
 # the ncbi-gff loader maps (not panel-dependent; `subset_raw.py idsets` writes it too)
 ID_KINDS = ("entrez", "ensembl", "uniprot", "symbol", "chromosomes", "mgi", "rgd", "none")
@@ -191,8 +194,18 @@ def validate_table(table: Dict[str, dict]) -> List[str]:
                     if not isinstance(kt, list) or not kt or not all(
                             isinstance(t, str) and re.match(r"^[A-Za-z0-9_-]+$", t) for t in kt):
                         out.append(f"{fw}: `keep_types` must be a list of GFF feature types")
-                if multi:
-                    out.append(f"{fw}: a member glob unpacks several files; only a single file can be filtered")
+                if multi and fmt not in MULTI_MEMBER_FORMATS:
+                    out.append(f"{fw}: a member glob unpacks several files; only a single file can be filtered "
+                               f"(except by {', '.join(MULTI_MEMBER_FORMATS)})")
+                if multi and unpack != "zip":
+                    out.append(f"{fw}: format {fmt} reads several members from a zip only")
+                xdb = flt.get("xref_db")
+                if xdb is not None:
+                    if fmt != "psi-xml":
+                        out.append(f"{fw}: `xref_db` is for format psi-xml only")
+                    if not isinstance(xdb, list) or not xdb or not all(
+                            isinstance(d, str) and re.match(r"^[A-Za-z0-9_./ -]+$", d) for d in xdb):
+                        out.append(f"{fw}: `xref_db` must be a list of xref db names")
         cl = e.get("chromosome_lengths")
         if cl is not None:
             if not isinstance(cl, dict):
@@ -403,6 +416,8 @@ def filter_spec(f: dict) -> str:
         parts.append("keep_header")
     if flt.get("keep_types"):
         parts.append("keep_types=" + "+".join(flt["keep_types"]))
+    if flt.get("xref_db"):
+        parts.append("xref_db=" + "+".join(flt["xref_db"]))
     return ",".join(parts)
 
 
@@ -420,13 +435,14 @@ def lengths_sources(table: Dict[str, dict], names: List[str]) -> List[Tuple[str,
 
 def file_rows(table: Dict[str, dict], names: List[str], stock_dir: str, raw_cache: str,
               local_dir: Optional[str] = None) -> List[str]:
-    """One row per upstream file, 17 fields:
+    """One row per upstream file, 18 fields:
 
       source, file id, origin (download|local|derived), url, raw path, unpack, member,
       format, ids, column, taxon, keep_header (0|1),
       work dir (where filtering/unpacking writes; '-' when the raw file is staged as it is),
       kind (filtered|whole|asis|derived), stage dir (relative to the data root),
-      stage name ('-' = member names), keep_types (gff3: comma-separated feature types)
+      stage name ('-' = member names), keep_types (gff3: comma-separated feature types),
+      xref_db (psi-xml: comma-separated xref db names; '-' for any db)
 
     `filtered` work dirs are what the source's filtered cache group holds; `whole` ones are files
     used complete but decompressed or unpacked (derived from the raw group again on every build,
@@ -455,14 +471,15 @@ def file_rows(table: Dict[str, dict], names: List[str], stock_dir: str, raw_cach
             rows.append(_row(n, f["id"], origin, f.get("url"), raw, f.get("unpack"), f.get("member"),
                              fl.get("format"), fl.get("ids"), fl.get("column"), fl.get("taxon"),
                              1 if fl.get("keep_header") else 0, work, kind, e["data_dir"].strip("/"),
-                             f.get("stage_as"), ",".join(fl.get("keep_types") or [])))
+                             f.get("stage_as"), ",".join(fl.get("keep_types") or []),
+                             ",".join(fl.get("xref_db") or [])))
         cl = e.get("chromosome_lengths")
         if cl:
             work, sname = works[cl["from"]]
             rows.append(_row(n, "chromosome-lengths", "derived", None, os.path.join(work, sname), None, None,
                              LENGTHS_FORMAT, None, None, "9606", 0,
                              os.path.join(stock_dir, "subset", n, "chromosome-lengths"), "derived",
-                             cl["data_dir"].strip("/"), LENGTHS_FILE, None))
+                             cl["data_dir"].strip("/"), LENGTHS_FILE, None, None))
     return rows
 
 

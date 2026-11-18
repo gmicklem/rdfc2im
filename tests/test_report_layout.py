@@ -175,3 +175,26 @@ def test_the_committed_humanmine_templates_parse_and_every_name_is_unique():
     names = [n for n, _ in templates]
     assert len(names) > 50 and len(set(names)) == len(names)
     assert {"Gene_GO", "Gene_Orth2"} & set(names) == {"Gene_GO"}   # Gene_Orth2 is not public on humanmine.org
+
+
+def test_the_cytoscape_tool_is_kept_exactly_when_every_path_of_its_query_resolves():
+    """[im-9n4.13] psi-intact/biogrid add Gene.interactions; the guard then lets the tool back by itself."""
+    import copy
+    cyto = {"bluegenesToolCytoscape": {"config": {"classes": ["Gene", "Protein"]}}}
+    layout = {"Gene": [category("Interactions", entry("bluegenesToolCytoscape", "tool"))]}
+    kept, dropped = arl.filter_layout(layout, CLASSES, cyto, set())
+    assert kept == {} and dropped[0][5] == "tool queries Gene.interactions.participant2.symbol, not in the model"
+    model = copy.deepcopy(MODEL)
+    cl = model["model"]["classes"]
+    cl["BioEntity"]["attributes"]["symbol"] = {}
+    cl["BioEntity"]["collections"] = {"interactions": {"referencedType": "Interaction"}}
+    cl["Interaction"] = {"references": {"participant2": {"referencedType": "BioEntity"}},
+                         "collections": {"details": {"referencedType": "InteractionDetail"}}}
+    cl["InteractionDetail"] = {"attributes": {"name": {}, "role1": {}, "role2": {}, "type": {}}}
+    # no InteractionDetail.dataSets yet: still dropped, on the last path
+    kept, dropped = arl.filter_layout(layout, arl.model_classes(model), cyto, set())
+    assert dropped[0][5] == "tool queries Gene.interactions.details.dataSets.name, not in the model"
+    cl["InteractionDetail"]["collections"] = {"dataSets": {"referencedType": "DataSet"}}
+    cl["DataSet"] = {"attributes": {"name": {}}}
+    kept, dropped = arl.filter_layout(layout, arl.model_classes(model), cyto, set())
+    assert values(kept) == [["bluegenesToolCytoscape"]] and dropped == []

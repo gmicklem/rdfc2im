@@ -9,10 +9,12 @@ written transparently by file suffix.
   subset_raw.py idsets --genes FILE --out DIR [--items-root DIR] [--lookup-dir DIR] [--taxon ID]
       Derive the panel id sets (entrez.txt, ensembl.txt, uniprot.txt, symbol.txt, idsets.json).
 
-  subset_raw.py filter --format gaf|gff3|uniprot-xml|fasta|tab|gene_info --in PATH --out PATH
+  subset_raw.py filter --format gaf|gff3|uniprot-xml|fasta|tab|gene_info|psi-xml --in PATH --out PATH
                        [--ids FILE] [--column N[,N...]] [--taxon ID] [--keep-comments]
       Filter one raw file; prints one JSON line with the record counts. gff3 also takes
-      --keep-types gene (rows of that type kept for every id, without descendants).
+      --keep-types gene (rows of that type kept for every id, without descendants). psi-xml
+      (PSI-MI 2.5 XML) takes --xref-db DB[,DB...] (which xrefs carry the panel ids) and, for a zip
+      input, --member GLOB; --out is then a directory, one filtered file per member.
 
   subset_raw.py partner-ids --in PANTHER_FILE --ids UNIPROT_IDS --out DIR
       mgi.txt and rgd.txt: the MGI and RGD ids of every gene on a PANTHER row with a panel gene.
@@ -33,8 +35,8 @@ import re
 import sys
 import xml.etree.ElementTree as ET
 
-FORMATS = ("gaf", "gff3", "uniprot-xml", "fasta", "tab", "gene_info")
-NEEDS_IDS = ("gaf", "gff3", "uniprot-xml", "fasta", "tab")
+FORMATS = ("gaf", "gff3", "uniprot-xml", "fasta", "tab", "gene_info", "psi-xml")
+NEEDS_IDS = ("gaf", "gff3", "uniprot-xml", "fasta", "tab", "psi-xml")
 
 
 class SubsetError(Exception):
@@ -433,6 +435,353 @@ def filter_tab(src, dst, ids, columns, keep_comments=False):
     return _summary("tab", n_in, n_out, ids, matched)
 
 
+# ---------------------------------------------------------------- PSI-MI 2.5 XML (IntAct, BioGRID)
+
+# The three element kinds the filter keeps or drops whole, an <entry> start tag and its end tag.
+# '(?=[\s>/])' keeps <interactor from matching <interactorRef>/<interactorList>/<interactorType>, and
+# <interaction from matching <interactionList>/<interactionType>/<interactionDetectionMethod>.
+_PSI_TOKEN_RE = re.compile(r"<(experimentDescription|interactor|interaction)(?=[\s>/])|<entry(?=[\s>/])|</entry>")
+_PSI_NESTED_RE = re.compile(r"<(?:interactor|experimentDescription)(?=[\s>/])")
+_PSI_XREF_RE = re.compile(r"<(?:primaryRef|secondaryRef)\b[^>]*>")
+_PSI_ATTR_RE = re.compile(r'([\w:]+)="([^"]*)"')
+_PSI_IREF_RE = re.compile(r"<interactorRef>\s*([^<\s]+)\s*</interactorRef>")
+_PSI_EREF_RE = re.compile(r"<experimentRef>\s*([^<\s]+)\s*</experimentRef>")
+_ENSEMBL_VERSION_RE = re.compile(r'^(ENS[A-Z]*\d{6,})\.\d+$')
+_PSI_NEGATIVE_RE = re.compile(r"<negative>\s*true\s*</negative>")
+# one <participant> of an interaction, with the whitespace before it ('<participant(?=...)' is not
+# <participantList> or <participantIdentificationMethod>)
+_PSI_PARTICIPANT_RE = re.compile(r"(\s*)(<participant(?=[\s>/])[^>]*>.*?</participant>)", re.S)
+_PSI_ROLE_RE = re.compile(r"<experimentalRole\b.*?<names>\s*<shortLabel>([^<]*)</shortLabel>", re.S)
+_SPOKE_ROLE = "prey"    # both converters' SPOKE_MODEL: no pair is made between two preys
+_PSI_TAIL = 64          # longer than any token the scanner looks for
+
+
+def _psi_start_tag_attrs(text):
+    """Attributes of the first (start) tag of a block."""
+    end = text.find(">")
+    return dict(_PSI_ATTR_RE.findall(text[:end if end >= 0 else len(text)]))
+
+
+def _psi_scan(fh, where):
+    """Tokens of a PSI-MI XML text stream, in order, covering every character once:
+    ('text', s), ('entry', start_tag), ('end_entry', s) and ('block', kind, id, s) for each
+    <experimentDescription>, <interactor> and <interaction> element (kind is the tag). Streams in
+    1 MB chunks; a block is held whole (the largest are a few hundred kB)."""
+    buf, pos, eof = "", 0, False
+
+    def fill():
+        nonlocal buf, pos, eof
+        chunk = fh.read(_CHUNK)
+        buf = buf[pos:] + chunk
+        pos = 0
+        if not chunk:
+            eof = True
+
+    while True:
+        m = _PSI_TOKEN_RE.search(buf, pos)
+        if m is None:
+            if eof:
+                if pos < len(buf):
+                    yield ("text", buf[pos:])
+                return
+            keep = max(pos, len(buf) - _PSI_TAIL)
+            if keep > pos:
+                yield ("text", buf[pos:keep])
+                pos = keep
+            fill()
+            continue
+        tok = m.group(0)
+        if tok == "</entry>":
+            if m.start() > pos:
+                yield ("text", buf[pos:m.start()])
+            yield ("end_entry", tok)
+            pos = m.end()
+            continue
+        gt = buf.find(">", m.end())
+        if gt < 0:
+            if eof:
+                raise SubsetError(f"{where}: unterminated tag {tok}")
+            fill()
+            continue
+        if m.group(1) is None:                        # <entry ...>
+            if m.start() > pos:
+                yield ("text", buf[pos:m.start()])
+            yield ("entry", buf[m.start():gt + 1])
+            pos = gt + 1
+            continue
+        kind = m.group(1)
+        if buf[gt - 1] == "/":
+            end = gt + 1                              # an empty element
+        else:
+            close = buf.find(f"</{kind}>", gt)
+            if close < 0:
+                if eof:
+                    raise SubsetError(f"{where}: unterminated <{kind}>")
+                fill()
+                continue
+            end = close + len(kind) + 3
+        if m.start() > pos:
+            yield ("text", buf[pos:m.start()])
+        block = buf[m.start():end]
+        yield ("block", kind, _psi_start_tag_attrs(block).get("id"), block)
+        pos = end
+
+
+def _psi_xrefs(block):
+    """(db lower-cased, id) of every primaryRef/secondaryRef in a block."""
+    out = []
+    for tag in _PSI_XREF_RE.findall(block):
+        a = dict(_PSI_ATTR_RE.findall(tag))
+        if a.get("db") and a.get("id"):
+            out.append((a["db"].lower(), a["id"]))
+    return out
+
+
+def _psi_hit(block, ids, xref_dbs):
+    """The panel id an <interactor> block matches through an xref of one of xref_dbs, or None. An isoform
+    or chain accession (P26367-2, P26367-PRO_0000050180) also matches on its base accession."""
+    for db, ident in _psi_xrefs(block):
+        if xref_dbs and db not in xref_dbs:
+            continue
+        if ident in ids:
+            return ident
+        base = ident.split("-", 1)[0]
+        if base in ids:
+            return base
+    return None
+
+
+def _unversion_ensembl(block):
+    """Drop the version of every Ensembl xref id in a block ('ENSG00000185022.14' -> 'ENSG00000185022').
+    Returns (block, number changed). PsiConverter resolves a human interactor by its `ensembl` xrefs
+    (psi-intact_config.properties 9606.datasource = ensembl) against NCBI gene_info, whose Ensembl
+    cross-references carry no version; IntAct writes versioned ids since HumanMine's 2022 load, so
+    without this no human interactor would resolve."""
+    n = 0
+
+    def fix(m):
+        nonlocal n
+        tag = m.group(0)
+        a = dict(_PSI_ATTR_RE.findall(tag))
+        if (a.get("db") or "").lower() != "ensembl":
+            return tag
+        v = _ENSEMBL_VERSION_RE.match(a.get("id") or "")
+        if not v:
+            return tag
+        n += 1
+        return tag.replace(f'id="{a["id"]}"', f'id="{v.group(1)}"', 1)
+
+    return _PSI_XREF_RE.sub(fix, block), n
+
+
+def _psi_participants(text):
+    """(participant id, interactorRef, experimental role lower-cased) of each participant of an interaction."""
+    out = []
+    for _, part in _PSI_PARTICIPANT_RE.findall(text):
+        ref = _PSI_IREF_RE.findall(part)
+        roles = _PSI_ROLE_RE.findall(part)
+        out.append((_psi_start_tag_attrs(part).get("id"), ref[0] if ref else None,
+                    roles[-1].strip().lower() if roles else ""))
+    return out
+
+
+def _psi_pair_partners(parts, panel):
+    """The participants an n-ary interaction must keep so that the converters still make every pair that has
+    a panel interactor: the panel participants and every participant the converter pairs with one of them
+    (any two distinct interactors, except two preys). The others would only make pairs between two
+    non-panel genes."""
+    keep = []
+    for pid, ref, role in parts:
+        if ref in panel or any(r in panel and r != ref and not (ro == _SPOKE_ROLE and role == _SPOKE_ROLE)
+                               for _, r, ro in parts):
+            keep.append((pid, ref))
+    return keep
+
+
+def _psi_plan(open_stream, where, ids, xref_dbs):
+    """Pass 1 over one PSI-MI file: per <entry> (by position), the ids of the interactions to keep (those
+    with at least one participant whose interactor matches the panel), and of the interactors and
+    experiments they reference. An interaction with more than two participants (a complex, or one bait
+    with many preys) keeps only its panel participants and those the converter pairs with them
+    (_psi_pair_partners): both converters turn a record into every pair of its participants but two
+    preys, so a 583-member complex with one panel gene would load 56,814 pairs of which 204 involve it
+    (IntAct human, Oct 2026). `trim` maps such an interaction to the participant ids it keeps. Raises
+    SubsetError on the expanded form (interactors or experiments written inside each interaction):
+    PsiConverter and BioGridConverter read the compact form only."""
+    plan, counts, matched = [], {"interactions": 0, "interactors": 0, "experiments": 0, "negative": 0,
+                                 "trimmed": 0, "participants_dropped": 0}, set()
+    panel, cur = set(), None
+    with open_stream() as fh:
+        for tok in _psi_scan(fh, where):
+            if tok[0] == "entry":
+                panel, cur = set(), {"interaction": set(), "interactor": set(), "experimentDescription": set(),
+                                     "trim": {}}
+                plan.append(cur)
+            elif tok[0] == "block":
+                _, kind, bid, text = tok
+                if cur is None:
+                    raise SubsetError(f"{where}: <{kind}> outside an <entry>")
+                if kind == "interactor":
+                    counts["interactors"] += 1
+                    hit = _psi_hit(text, ids, xref_dbs)
+                    if hit:
+                        matched.add(hit)
+                        panel.add(bid)
+                elif kind == "experimentDescription":
+                    counts["experiments"] += 1
+                else:
+                    counts["interactions"] += 1
+                    if _PSI_NESTED_RE.search(text, 1):
+                        raise SubsetError(f"{where}: interaction {bid} holds its interactors or experiments "
+                                          "inline (expanded PSI-MI form); the loaders read the compact form only")
+                    if _PSI_NEGATIVE_RE.search(text):
+                        counts["negative"] += 1       # "these do NOT interact": the converters cannot tell
+                        continue
+                    refs = _PSI_IREF_RE.findall(text)
+                    if any(r in panel for r in refs):
+                        cur["interaction"].add(bid)
+                        cur["experimentDescription"].update(_PSI_EREF_RE.findall(text))
+                        parts = _psi_participants(text)
+                        if len(parts) > 2:
+                            keep = _psi_pair_partners(parts, panel)
+                            if len(keep) < len(parts):
+                                cur["trim"][bid] = {pid for pid, _ in keep}
+                                counts["trimmed"] += 1
+                                counts["participants_dropped"] += len(parts) - len(keep)
+                                refs = [r for _, r in keep]
+                        cur["interactor"].update(refs)
+    return plan, counts, matched
+
+
+def _psi_trim(text, keep_ids):
+    """An interaction's text without the participants whose id is not in keep_ids."""
+    return _PSI_PARTICIPANT_RE.sub(
+        lambda m: m.group(0) if _psi_start_tag_attrs(m.group(2)).get("id") in keep_ids else "", text)
+
+
+def _psi_write(open_stream, where, plan, fout):
+    """Pass 2: copy one PSI-MI file, keeping only the planned blocks of each entry. Everything else (the
+    entrySet and entry tags, <source>, the list tags, attributes) is copied as it is; the whitespace before
+    a dropped block is dropped with it. An interactor already written earlier in the same file (same id) is
+    not written again: both converters key interactors by id per file and PsiConverter throws on a repeat."""
+    stats = {"interactions": 0, "interactors": 0, "experiments": 0, "ensembl_unversioned": 0,
+             "repeated_interactors_dropped": 0}
+    written_interactors = set()
+    entry = -1
+    pending = ""
+    with open_stream() as fh:
+        for tok in _psi_scan(fh, where):
+            if tok[0] in ("text", "entry", "end_entry"):
+                if tok[0] == "entry":
+                    entry += 1
+                fout.write(pending)
+                pending = tok[-1]
+                continue
+            _, kind, bid, text = tok
+            keep = bid in plan[entry][kind]
+            if keep and kind == "interaction" and bid in plan[entry]["trim"]:
+                text = _psi_trim(text, plan[entry]["trim"][bid])
+            if keep and kind == "interactor":
+                if bid in written_interactors:
+                    keep = False
+                    stats["repeated_interactors_dropped"] += 1
+                else:
+                    written_interactors.add(bid)
+                    text, n = _unversion_ensembl(text)
+                    stats["ensembl_unversioned"] += n
+            if keep:
+                fout.write(pending + text)
+                stats[{"interaction": "interactions", "interactor": "interactors",
+                       "experimentDescription": "experiments"}[kind]] += 1
+            else:
+                fout.write(pending.rstrip(" \t\r\n"))
+            pending = ""
+        fout.write(pending)
+    return stats
+
+
+def _psi_members(src, member):
+    """Sorted member names of zip `src` matching the glob `member` (on the full name or its basename)."""
+    import fnmatch
+    import zipfile
+    with zipfile.ZipFile(src) as z:
+        names = [i.filename for i in z.infolist() if not i.is_dir()]
+    pat = member or "*"
+    return sorted(n for n in names if fnmatch.fnmatch(n, pat) or fnmatch.fnmatch(os.path.basename(n), pat))
+
+
+def filter_psi_xml(src, dst, ids, xref_dbs=(), member=None):
+    """PSI-MI 2.5 XML (compact form: <entry> holding <experimentList>, <interactorList> and
+    <interactionList>, the participants pointing at interactors by <interactorRef>), as IntAct's species
+    files and BioGRID's ORGANISM files are. Keeps every interaction with AT LEAST ONE participant whose
+    interactor has an xref (primaryRef or secondaryRef, db one of xref_dbs; any db when empty) holding a
+    panel id, trimmed to the participants that pair with a panel one (_psi_plan), and exactly the
+    interactors and experiments those interactions reference; whether the
+    partner then loads is the converter's (and the ID resolver's) decision. Ensembl xref ids lose their
+    version (_unversion_ensembl). A negative interaction (<negative>true</negative>: shown NOT to
+    interact; IntAct's human_NN_negative.xml files) is dropped, since neither converter reads the flag and
+    it would load as an interaction. Two streaming passes per file (plan, then copy), so memory holds
+    only the kept ids.
+
+    src is one XML file (dst the output file) or a zip (dst a directory, `member` a glob picking the
+    files): each member with a kept interaction is written to dst under its own base name, which the
+    loaders need (BioGridConverter reads the organism out of the file name); a member with none is not
+    written."""
+    import zipfile
+    xref_dbs = {d.strip().lower() for d in (xref_dbs or ()) if d.strip()}
+    totals = {"files_in": 0, "files_out": 0, "records_in": 0, "records_out": 0, "negative_dropped": 0,
+              "trimmed": 0, "participants_dropped": 0, "interactors_in": 0,
+              "interactors_out": 0, "experiments_in": 0, "experiments_out": 0, "ensembl_unversioned": 0,
+              "repeated_interactors_dropped": 0}
+    matched = set()
+    if src.endswith(".zip"):
+        members = _psi_members(src, member)
+        if not members:
+            raise SubsetError(f"{src}: no member matches {member!r}")
+        z = zipfile.ZipFile(src)
+        os.makedirs(dst, exist_ok=True)
+        jobs = [(f"{src}:{m}", (lambda m=m: io.TextIOWrapper(z.open(m), encoding="utf-8", newline="")),
+                 os.path.join(dst, os.path.basename(m))) for m in members]
+    else:
+        if member:
+            raise SubsetError("--member is for a zip input")
+        z = None
+        jobs = [(src, lambda: open_text(src), dst)]
+    out_files = []
+    try:
+        for where, opener, out in jobs:
+            plan, counts, hit = _psi_plan(opener, where, ids, xref_dbs)
+            matched |= hit
+            totals["files_in"] += 1
+            totals["records_in"] += counts["interactions"]
+            totals["interactors_in"] += counts["interactors"]
+            totals["experiments_in"] += counts["experiments"]
+            totals["negative_dropped"] += counts["negative"]
+            totals["trimmed"] += counts["trimmed"]
+            totals["participants_dropped"] += counts["participants_dropped"]
+            if z is not None and not any(e["interaction"] for e in plan):
+                continue
+            tmp = out + ".part"
+            with open_text(tmp, "w") as fout:
+                st = _psi_write(opener, where, plan, fout)
+            os.replace(tmp, out)
+            out_files.append(os.path.basename(out))
+            totals["files_out"] += 1
+            totals["records_out"] += st["interactions"]
+            totals["interactors_out"] += st["interactors"]
+            totals["experiments_out"] += st["experiments"]
+            totals["ensembl_unversioned"] += st["ensembl_unversioned"]
+            totals["repeated_interactors_dropped"] += st["repeated_interactors_dropped"]
+    finally:
+        if z is not None:
+            z.close()
+    res = _summary("psi-xml", totals["records_in"], totals["records_out"], ids, matched)
+    res.update({k: v for k, v in totals.items() if k not in ("records_in", "records_out")})
+    if z is not None:
+        res["files"] = out_files
+    return res
+
+
 # ---------------------------------------------------------------- PANTHER partner ids
 
 def _panther_cell_ids(cell):
@@ -744,6 +1093,10 @@ def run_filter(a):
         raise SubsetError("--keep-types is for format gff3 only")
     if os.path.abspath(a.infile) == os.path.abspath(a.outfile):
         raise SubsetError("--in and --out are the same file")
+    if (a.member or a.xref_db) and fmt != "psi-xml":
+        raise SubsetError("--member and --xref-db are for format psi-xml only")
+    if fmt == "psi-xml" and a.infile.endswith(".zip"):
+        return run_filter_psi_zip(a, ids)
     out_dir = os.path.dirname(os.path.abspath(a.outfile))
     os.makedirs(out_dir, exist_ok=True)
     tmp = a.outfile + ".part"
@@ -760,12 +1113,34 @@ def run_filter(a):
             res = filter_fasta(a.infile, tmp, ids)
         elif fmt == "tab":
             res = filter_tab(a.infile, tmp, ids, parse_columns(a.column), a.keep_comments)
+        elif fmt == "psi-xml":
+            res = filter_psi_xml(a.infile, tmp, ids, parse_types(a.xref_db))
         else:
             res = filter_gene_info(a.infile, tmp, ids, a.taxon)
         os.replace(tmp, a.outfile)
     except BaseException:
         if os.path.exists(tmp):
             os.remove(tmp)
+        raise
+    print(json.dumps(res))
+
+
+def run_filter_psi_zip(a, ids):
+    """psi-xml from a zip: the filtered members go to the directory --out, written in a sibling .part
+    directory first so a failed run leaves no half-filtered set behind."""
+    import shutil
+    out = os.path.abspath(a.outfile).rstrip("/")
+    if os.path.isfile(out):
+        raise SubsetError(f"--out {out}: a zip input writes a directory, and this is a file")
+    tmp = out + ".part"
+    shutil.rmtree(tmp, ignore_errors=True)
+    try:
+        res = filter_psi_xml(a.infile, tmp, ids, parse_types(a.xref_db), a.member)
+        if os.path.isdir(out):
+            shutil.rmtree(out)
+        os.rename(tmp, out)
+    except BaseException:
+        shutil.rmtree(tmp, ignore_errors=True)
         raise
     print(json.dumps(res))
 
@@ -789,6 +1164,8 @@ def build_parser():
     f.add_argument("--taxon", help="gene_info: keep this tax_id")
     f.add_argument("--keep-comments", action="store_true", help="tab: also keep the first line (a header without '#')")
     f.add_argument("--keep-types", help="gff3: feature types kept for every id, without descendants (e.g. gene)")
+    f.add_argument("--xref-db", help="psi-xml: xref db names (comma separated, any case) whose ids are matched")
+    f.add_argument("--member", help="psi-xml from a zip: glob of the members to filter (default every file)")
     q = sub.add_parser("partner-ids", help="mgi.txt / rgd.txt: the partner genes of the panel's PANTHER rows")
     q.add_argument("--in", dest="infile", required=True, help="the filtered PANTHER file")
     q.add_argument("--ids", required=True, help="the panel's UniProt id set")

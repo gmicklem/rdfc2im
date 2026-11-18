@@ -40,7 +40,14 @@ DEFAULT_BLUEGENES = "http://localhost:15001"
 PROPERTY_KEY = "layout.report"
 # Paths a tool queries without declaring them in its package.json "depends" (found by running it: the
 # Cytoscape tool asks the mine for Gene.interactions.* and the mine answers 400 when the model lacks it).
-TOOL_QUERIES = {"bluegenesToolCytoscape": ["Gene.interactions"]}
+# The Cytoscape list is the view of the Gene_Interactions query bundled in its dist/bundle.js
+# (@intermine/cytoscape-intermine), constrained on Gene.interactions.details.type = physical
+# [im-9n4.13]: every one must resolve, or a model with Interaction but not, say, InteractionDetail.dataSets
+# would still answer 400.
+TOOL_QUERIES = {"bluegenesToolCytoscape": [
+    "Gene.interactions.participant2.symbol", "Gene.interactions.participant2.primaryIdentifier",
+    "Gene.interactions.details.name", "Gene.interactions.details.role1", "Gene.interactions.details.role2",
+    "Gene.interactions.details.type", "Gene.interactions.details.dataSets.name"]}
 MAX_QUERY = 6000   # a PUT carries its value in the query string; longer than this goes DELETE + POST
 
 

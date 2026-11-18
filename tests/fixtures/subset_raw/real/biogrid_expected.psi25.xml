@@ -1,0 +1,490 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<entrySet level="2" minorVersion="3" version="5" xmlns="net:sf:psidev:mi" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="net:sf:psidev:mi http://psidev.sourceforge.net/mi/rel25/src/MIF253.xsd">
+  <entry>
+    <source release="5.0.263" releaseDate="2026-10-29">
+      <names>
+        <shortLabel>BIOGRID: All Interactions for Organism Homo sapiens (NCBITax: 9606)</shortLabel>
+        <fullName>The BioGRID: A General Repository for Interaction Datasets</fullName>
+      </names>
+      <bibref>
+        <xref>
+          <primaryRef db="pubmed" dbAc="MI:0446" id="16381927" refType="primary-reference" refTypeAc="MI:0358" />
+        </xref>
+      </bibref>
+      <xref>
+        <primaryRef db="psi-mi" dbAc="MI:0488" id="MI:0463" refType="primary-reference" refTypeAc="MI:0358" />
+      </xref>
+      <attributeList>
+        <attribute name="url">https://thebiogrid.org</attribute>
+        <attribute name="postalAddress">Institute for Research in Immunology and Cancer, IRIC, Universite de Montreal, Montreal, Quebec, Canada</attribute>
+        <attribute name="contactEmail">biogridadmin@gmail.com</attribute>
+      </attributeList>
+    </source>
+    <experimentList>
+      <experimentDescription id="569">
+        <names>
+          <shortLabel>Ploski JE (2004)</shortLabel>
+          <fullName>Paired-type homeodomain transcription factors are imported into the nucleus by karyopherin 13.</fullName>
+        </names>
+        <bibref>
+          <xref>
+            <primaryRef db="pubmed" dbAc="MI:0446" id="15143176" refType="primary-reference" refTypeAc="MI:0358" />
+          </xref>
+        </bibref>
+        <hostOrganismList>
+          <hostOrganism ncbiTaxId="32644">
+            <names>
+              <shortLabel>unspecified</shortLabel>
+            </names>
+          </hostOrganism>
+        </hostOrganismList>
+        <interactionDetectionMethod>
+          <names>
+            <shortLabel>two hybrid</shortLabel>
+            <fullName>two hybrid</fullName>
+          </names>
+          <xref>
+            <primaryRef db="psi-mi" dbAc="MI:0488" id="MI:0018" refType="identity" refTypeAc="MI:0356" />
+          </xref>
+        </interactionDetectionMethod>
+      </experimentDescription>
+      <experimentDescription id="639">
+        <names>
+          <shortLabel>Rual JF (2005)</shortLabel>
+          <fullName>Towards a proteome-scale map of the human protein-protein interaction network.</fullName>
+        </names>
+        <bibref>
+          <xref>
+            <primaryRef db="pubmed" dbAc="MI:0446" id="16189514" refType="primary-reference" refTypeAc="MI:0358" />
+          </xref>
+        </bibref>
+        <hostOrganismList>
+          <hostOrganism ncbiTaxId="32644">
+            <names>
+              <shortLabel>unspecified</shortLabel>
+            </names>
+          </hostOrganism>
+        </hostOrganismList>
+        <interactionDetectionMethod>
+          <names>
+            <shortLabel>two hybrid</shortLabel>
+            <fullName>two hybrid</fullName>
+          </names>
+          <xref>
+            <primaryRef db="psi-mi" dbAc="MI:0488" id="MI:0018" refType="identity" refTypeAc="MI:0356" />
+          </xref>
+        </interactionDetectionMethod>
+      </experimentDescription>
+      <experimentDescription id="1627">
+        <names>
+          <shortLabel>Ploski JE (2004)</shortLabel>
+          <fullName>Paired-type homeodomain transcription factors are imported into the nucleus by karyopherin 13.</fullName>
+        </names>
+        <bibref>
+          <xref>
+            <primaryRef db="pubmed" dbAc="MI:0446" id="15143176" refType="primary-reference" refTypeAc="MI:0358" />
+          </xref>
+        </bibref>
+        <hostOrganismList>
+          <hostOrganism ncbiTaxId="32644">
+            <names>
+              <shortLabel>unspecified</shortLabel>
+            </names>
+          </hostOrganism>
+        </hostOrganismList>
+        <interactionDetectionMethod>
+          <names>
+            <shortLabel>pull down</shortLabel>
+            <fullName>pull down</fullName>
+          </names>
+          <xref>
+            <primaryRef db="psi-mi" dbAc="MI:0488" id="MI:0096" refType="identity" refTypeAc="MI:0356" />
+          </xref>
+        </interactionDetectionMethod>
+      </experimentDescription>
+    </experimentList>
+    <interactorList>
+      <interactor id="996">
+        <names>
+          <shortLabel>IPO13</shortLabel>
+          <alias type="systematic name">RP11-7O11.4</alias>
+          <alias type="synonym">IMP13</alias>
+          <alias type="synonym">KAP13</alias>
+          <alias type="synonym">LGL2</alias>
+          <alias type="synonym">RANBP13</alias>
+        </names>
+        <xref>
+          <primaryRef db="refseq" dbAc="MI:0481" id="NP_055467" refType="identity" refTypeAc="MI:0356" />
+          <secondaryRef db="entrez gene/locuslink" dbAc="MI:0477" id="9670" />
+          <secondaryRef db="omim" dbAc="MI:0480" id="610411" />
+          <secondaryRef db="refseq" dbAc="MI:0481" id="NM_014652" />
+          <secondaryRef db="refseq" dbAc="MI:0481" id="XM_003846624" />
+          <secondaryRef db="uniprot knowledge base" dbAc="MI:0486" id="Q9UFR1" />
+          <secondaryRef db="uniprot knowledge base" dbAc="MI:0486" id="Q7LC04" />
+          <secondaryRef db="uniprot knowledge base" dbAc="MI:0486" id="Q5T4X3" />
+          <secondaryRef db="uniprot knowledge base" dbAc="MI:0486" id="Q96HS3" />
+          <secondaryRef db="uniprot knowledge base" dbAc="MI:0486" id="D3DPY4" />
+          <secondaryRef db="uniprot knowledge base" dbAc="MI:0486" id="Q9H8N3" />
+          <secondaryRef db="hgnc" dbAc="MI:1095" id="16853" />
+          <secondaryRef db="uniprot/swiss-prot" dbAc="MI:1098" id="O94829" refType="identity" refTypeAc="MI:0356" />
+          <secondaryRef db="ensembl" dbAc="MI:0476" id="ENSP00000361418" />
+          <secondaryRef db="hprd" dbAc="MI:0468" id="13742" />
+          <secondaryRef db="biogrid" dbAc="MI:0463" id="115025" />
+        </xref>
+        <interactorType>
+          <names>
+            <shortLabel>protein</shortLabel>
+            <fullName>protein</fullName>
+          </names>
+          <xref>
+            <primaryRef db="psi-mi" dbAc="MI:0488" id="MI:0326" refType="identity" refTypeAc="MI:0356" />
+          </xref>
+        </interactorType>
+        <organism ncbiTaxId="9606">
+          <names>
+            <shortLabel>Human</shortLabel>
+            <fullName>Homo sapiens</fullName>
+          </names>
+        </organism>
+      </interactor>
+      <interactor id="997">
+        <names>
+          <shortLabel>PAX6</shortLabel>
+          <alias type="synonym">AN</alias>
+          <alias type="synonym">AN2</alias>
+          <alias type="synonym">D11S812E</alias>
+          <alias type="synonym">FVH1</alias>
+          <alias type="synonym">MGDA</alias>
+          <alias type="synonym">WAGR</alias>
+        </names>
+        <xref>
+          <primaryRef db="refseq" dbAc="MI:0481" id="XP_005253015" refType="identity" refTypeAc="MI:0356" />
+          <secondaryRef db="refseq" dbAc="MI:0481" id="NM_001258465" />
+          <secondaryRef db="refseq" dbAc="MI:0481" id="XM_006718246" />
+          <secondaryRef db="refseq" dbAc="MI:0481" id="NM_001258464" />
+          <secondaryRef db="refseq" dbAc="MI:0481" id="XM_006718244" />
+          <secondaryRef db="refseq" dbAc="MI:0481" id="XM_005252958" />
+          <secondaryRef db="refseq" dbAc="MI:0481" id="XM_005252956" />
+          <secondaryRef db="refseq" dbAc="MI:0481" id="XM_005252954" />
+          <secondaryRef db="refseq" dbAc="MI:0481" id="NM_000280" />
+          <secondaryRef db="refseq" dbAc="MI:0481" id="XM_005252957" />
+          <secondaryRef db="refseq" dbAc="MI:0481" id="XM_005252955" />
+          <secondaryRef db="refseq" dbAc="MI:0481" id="NM_001258463" />
+          <secondaryRef db="refseq" dbAc="MI:0481" id="NM_001604" />
+          <secondaryRef db="refseq" dbAc="MI:0481" id="XM_006718245" />
+          <secondaryRef db="refseq" dbAc="MI:0481" id="NM_001258462" />
+          <secondaryRef db="refseq" dbAc="MI:0481" id="NM_001127612" />
+          <secondaryRef db="omim" dbAc="MI:0480" id="607108" />
+          <secondaryRef db="entrez gene/locuslink" dbAc="MI:0477" id="5080" />
+          <secondaryRef db="uniprot/trembl" dbAc="MI:1099" id="F1T0F8" />
+          <secondaryRef db="uniprot/trembl" dbAc="MI:1099" id="Q66SS1" />
+          <secondaryRef db="ensembl" dbAc="MI:0476" id="ENSP00000480026" />
+          <secondaryRef db="ensembl" dbAc="MI:0476" id="ENSP00000368410" />
+          <secondaryRef db="ensembl" dbAc="MI:0476" id="ENSP00000404100" />
+          <secondaryRef db="hprd" dbAc="MI:0468" id="06167" />
+          <secondaryRef db="uniprot/swiss-prot" dbAc="MI:1098" id="P26367" refType="identity" refTypeAc="MI:0356" />
+          <secondaryRef db="uniprot knowledge base" dbAc="MI:0486" id="Q6N006" />
+          <secondaryRef db="uniprot knowledge base" dbAc="MI:0486" id="Q99413" />
+          <secondaryRef db="hgnc" dbAc="MI:1095" id="8620" />
+          <secondaryRef db="biogrid" dbAc="MI:0463" id="111114" />
+        </xref>
+        <interactorType>
+          <names>
+            <shortLabel>protein</shortLabel>
+            <fullName>protein</fullName>
+          </names>
+          <xref>
+            <primaryRef db="psi-mi" dbAc="MI:0488" id="MI:0326" refType="identity" refTypeAc="MI:0356" />
+          </xref>
+        </interactorType>
+        <organism ncbiTaxId="9606">
+          <names>
+            <shortLabel>Human</shortLabel>
+            <fullName>Homo sapiens</fullName>
+          </names>
+        </organism>
+      </interactor>
+    </interactorList>
+    <interactionList>
+      <interaction id="778">
+        <names>
+          <shortLabel>IPO13-PAX6</shortLabel>
+        </names>
+        <xref>
+          <primaryRef db="biogrid" dbAc="MI:0463" id="28464" refType="identity" refTypeAc="MI:0356" />
+          <secondaryRef db="psi-mi" dbAc="MI:0488" id="MI:0463" refType="source reference" refTypeAc="MI:0685" />
+        </xref>
+        <experimentList>
+          <experimentRef>569</experimentRef>
+        </experimentList>
+        <participantList>
+          <participant id="2996255">
+            <interactorRef>996</interactorRef>
+            <participantIdentificationMethodList>
+              <participantIdentificationMethod>
+                <names>
+                  <shortLabel>predetermined participant</shortLabel>
+                  <fullName>predetermined participant</fullName>
+                </names>
+                <xref>
+                  <primaryRef db="psi-mi" dbAc="MI:0488" id="MI:0396" refType="identity" refTypeAc="MI:0356" />
+                </xref>
+              </participantIdentificationMethod>
+            </participantIdentificationMethodList>
+            <biologicalRole>
+              <names>
+                <shortLabel>unspecified role</shortLabel>
+                <fullName>unspecified role</fullName>
+              </names>
+              <xref>
+                <primaryRef db="psi-mi" dbAc="MI:0488" id="MI:0499" refType="identity" refTypeAc="MI:0356" />
+              </xref>
+            </biologicalRole>
+            <experimentalRoleList>
+              <experimentalRole>
+                <names>
+                  <shortLabel>bait</shortLabel>
+                  <fullName>bait</fullName>
+                </names>
+                <xref>
+                  <primaryRef db="psi-mi" dbAc="MI:0488" id="MI:0496" refType="identity" refTypeAc="MI:0356" />
+                </xref>
+              </experimentalRole>
+            </experimentalRoleList>
+          </participant>
+          <participant id="2996256">
+            <interactorRef>997</interactorRef>
+            <participantIdentificationMethodList>
+              <participantIdentificationMethod>
+                <names>
+                  <shortLabel>predetermined participant</shortLabel>
+                  <fullName>predetermined participant</fullName>
+                </names>
+                <xref>
+                  <primaryRef db="psi-mi" dbAc="MI:0488" id="MI:0396" refType="identity" refTypeAc="MI:0356" />
+                </xref>
+              </participantIdentificationMethod>
+            </participantIdentificationMethodList>
+            <biologicalRole>
+              <names>
+                <shortLabel>unspecified role</shortLabel>
+                <fullName>unspecified role</fullName>
+              </names>
+              <xref>
+                <primaryRef db="psi-mi" dbAc="MI:0488" id="MI:0499" refType="identity" refTypeAc="MI:0356" />
+              </xref>
+            </biologicalRole>
+            <experimentalRoleList>
+              <experimentalRole>
+                <names>
+                  <shortLabel>prey</shortLabel>
+                  <fullName>prey</fullName>
+                </names>
+                <xref>
+                  <primaryRef db="psi-mi" dbAc="MI:0488" id="MI:0498" refType="identity" refTypeAc="MI:0356" />
+                </xref>
+              </experimentalRole>
+            </experimentalRoleList>
+          </participant>
+        </participantList>
+        <interactionType>
+          <names>
+            <shortLabel>direct interaction</shortLabel>
+          </names>
+          <xref>
+            <primaryRef db="psi-mi" dbAc="MI:0488" id="MI:0407" refType="identity" refTypeAc="MI:0356" />
+          </xref>
+        </interactionType>
+        <attributeList>
+          <attribute name="BioGRID Evidence Code">Two-hybrid</attribute>
+        </attributeList>
+      </interaction>
+      <interaction id="2443">
+        <names>
+          <shortLabel>PAX6-IPO13</shortLabel>
+        </names>
+        <xref>
+          <primaryRef db="biogrid" dbAc="MI:0463" id="120546" refType="identity" refTypeAc="MI:0356" />
+          <secondaryRef db="psi-mi" dbAc="MI:0488" id="MI:0463" refType="source reference" refTypeAc="MI:0685" />
+        </xref>
+        <experimentList>
+          <experimentRef>639</experimentRef>
+        </experimentList>
+        <participantList>
+          <participant id="2999585">
+            <interactorRef>997</interactorRef>
+            <participantIdentificationMethodList>
+              <participantIdentificationMethod>
+                <names>
+                  <shortLabel>predetermined participant</shortLabel>
+                  <fullName>predetermined participant</fullName>
+                </names>
+                <xref>
+                  <primaryRef db="psi-mi" dbAc="MI:0488" id="MI:0396" refType="identity" refTypeAc="MI:0356" />
+                </xref>
+              </participantIdentificationMethod>
+            </participantIdentificationMethodList>
+            <biologicalRole>
+              <names>
+                <shortLabel>unspecified role</shortLabel>
+                <fullName>unspecified role</fullName>
+              </names>
+              <xref>
+                <primaryRef db="psi-mi" dbAc="MI:0488" id="MI:0499" refType="identity" refTypeAc="MI:0356" />
+              </xref>
+            </biologicalRole>
+            <experimentalRoleList>
+              <experimentalRole>
+                <names>
+                  <shortLabel>bait</shortLabel>
+                  <fullName>bait</fullName>
+                </names>
+                <xref>
+                  <primaryRef db="psi-mi" dbAc="MI:0488" id="MI:0496" refType="identity" refTypeAc="MI:0356" />
+                </xref>
+              </experimentalRole>
+            </experimentalRoleList>
+          </participant>
+          <participant id="2999586">
+            <interactorRef>996</interactorRef>
+            <participantIdentificationMethodList>
+              <participantIdentificationMethod>
+                <names>
+                  <shortLabel>predetermined participant</shortLabel>
+                  <fullName>predetermined participant</fullName>
+                </names>
+                <xref>
+                  <primaryRef db="psi-mi" dbAc="MI:0488" id="MI:0396" refType="identity" refTypeAc="MI:0356" />
+                </xref>
+              </participantIdentificationMethod>
+            </participantIdentificationMethodList>
+            <biologicalRole>
+              <names>
+                <shortLabel>unspecified role</shortLabel>
+                <fullName>unspecified role</fullName>
+              </names>
+              <xref>
+                <primaryRef db="psi-mi" dbAc="MI:0488" id="MI:0499" refType="identity" refTypeAc="MI:0356" />
+              </xref>
+            </biologicalRole>
+            <experimentalRoleList>
+              <experimentalRole>
+                <names>
+                  <shortLabel>prey</shortLabel>
+                  <fullName>prey</fullName>
+                </names>
+                <xref>
+                  <primaryRef db="psi-mi" dbAc="MI:0488" id="MI:0498" refType="identity" refTypeAc="MI:0356" />
+                </xref>
+              </experimentalRole>
+            </experimentalRoleList>
+          </participant>
+        </participantList>
+        <interactionType>
+          <names>
+            <shortLabel>direct interaction</shortLabel>
+          </names>
+          <xref>
+            <primaryRef db="psi-mi" dbAc="MI:0488" id="MI:0407" refType="identity" refTypeAc="MI:0356" />
+          </xref>
+        </interactionType>
+        <attributeList>
+          <attribute name="BioGRID Evidence Code">Two-hybrid</attribute>
+        </attributeList>
+      </interaction>
+      <interaction id="9098">
+        <names>
+          <shortLabel>PAX6-IPO13</shortLabel>
+        </names>
+        <xref>
+          <primaryRef db="biogrid" dbAc="MI:0463" id="251672" refType="identity" refTypeAc="MI:0356" />
+          <secondaryRef db="psi-mi" dbAc="MI:0488" id="MI:0463" refType="source reference" refTypeAc="MI:0685" />
+        </xref>
+        <experimentList>
+          <experimentRef>1627</experimentRef>
+        </experimentList>
+        <participantList>
+          <participant id="3012895">
+            <interactorRef>997</interactorRef>
+            <participantIdentificationMethodList>
+              <participantIdentificationMethod>
+                <names>
+                  <shortLabel>predetermined participant</shortLabel>
+                  <fullName>predetermined participant</fullName>
+                </names>
+                <xref>
+                  <primaryRef db="psi-mi" dbAc="MI:0488" id="MI:0396" refType="identity" refTypeAc="MI:0356" />
+                </xref>
+              </participantIdentificationMethod>
+            </participantIdentificationMethodList>
+            <biologicalRole>
+              <names>
+                <shortLabel>unspecified role</shortLabel>
+                <fullName>unspecified role</fullName>
+              </names>
+              <xref>
+                <primaryRef db="psi-mi" dbAc="MI:0488" id="MI:0499" refType="identity" refTypeAc="MI:0356" />
+              </xref>
+            </biologicalRole>
+            <experimentalRoleList>
+              <experimentalRole>
+                <names>
+                  <shortLabel>bait</shortLabel>
+                  <fullName>bait</fullName>
+                </names>
+                <xref>
+                  <primaryRef db="psi-mi" dbAc="MI:0488" id="MI:0496" refType="identity" refTypeAc="MI:0356" />
+                </xref>
+              </experimentalRole>
+            </experimentalRoleList>
+          </participant>
+          <participant id="3012896">
+            <interactorRef>996</interactorRef>
+            <participantIdentificationMethodList>
+              <participantIdentificationMethod>
+                <names>
+                  <shortLabel>predetermined participant</shortLabel>
+                  <fullName>predetermined participant</fullName>
+                </names>
+                <xref>
+                  <primaryRef db="psi-mi" dbAc="MI:0488" id="MI:0396" refType="identity" refTypeAc="MI:0356" />
+                </xref>
+              </participantIdentificationMethod>
+            </participantIdentificationMethodList>
+            <biologicalRole>
+              <names>
+                <shortLabel>unspecified role</shortLabel>
+                <fullName>unspecified role</fullName>
+              </names>
+              <xref>
+                <primaryRef db="psi-mi" dbAc="MI:0488" id="MI:0499" refType="identity" refTypeAc="MI:0356" />
+              </xref>
+            </biologicalRole>
+            <experimentalRoleList>
+              <experimentalRole>
+                <names>
+                  <shortLabel>prey</shortLabel>
+                  <fullName>prey</fullName>
+                </names>
+                <xref>
+                  <primaryRef db="psi-mi" dbAc="MI:0488" id="MI:0498" refType="identity" refTypeAc="MI:0356" />
+                </xref>
+              </experimentalRole>
+            </experimentalRoleList>
+          </participant>
+        </participantList>
+        <interactionType>
+          <names>
+            <shortLabel>direct interaction</shortLabel>
+          </names>
+          <xref>
+            <primaryRef db="psi-mi" dbAc="MI:0488" id="MI:0407" refType="identity" refTypeAc="MI:0356" />
+          </xref>
+        </interactionType>
+        <attributeList>
+          <attribute name="BioGRID Evidence Code">Reconstituted Complex</attribute>
+        </attributeList>
+      </interaction>
+    </interactionList>
+  </entry>
+</entrySet>
