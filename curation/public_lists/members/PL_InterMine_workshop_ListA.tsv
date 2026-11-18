@@ -1,0 +1,190 @@
+Protein.primaryAccession	Protein.primaryIdentifier	Protein.symbol	Protein.name	Protein.organism.name
+O00170	AIP_HUMAN	""	AH receptor-interacting protein	Homo sapiens
+O00555	CAC1A_HUMAN	""	Voltage-dependent P/Q-type calcium channel subunit alpha-1A	Homo sapiens
+O14672	ADA10_HUMAN	""	Disintegrin and metalloproteinase domain-containing protein 10	Homo sapiens
+O14763	TR10B_HUMAN	""	Tumor necrosis factor receptor superfamily member 10B	Homo sapiens
+O15118	NPC1_HUMAN	""	NPC intracellular cholesterol transporter 1	Homo sapiens
+O15119	TBX3_HUMAN	""	T-box transcription factor TBX3	Homo sapiens
+O15239	NDUA1_HUMAN	""	NADH dehydrogenase [ubiquinone] 1 alpha subcomplex subunit 1	Homo sapiens
+O15265	ATX7_HUMAN	""	Ataxin-7	Homo sapiens
+O15273	TELT_HUMAN	""	Telethonin	Homo sapiens
+O43181	NDUS4_HUMAN	""	NADH dehydrogenase [ubiquinone] iron-sulfur protein 4, mitochondrial	Homo sapiens
+O43186	CRX_HUMAN	""	Cone-rod homeobox protein	Homo sapiens
+O43272	PROD_HUMAN	""	Proline dehydrogenase 1, mitochondrial	Homo sapiens
+O43426	SYNJ1_HUMAN	""	Synaptojanin-1	Homo sapiens
+O43464	HTRA2_HUMAN	""	Serine protease HTRA2, mitochondrial	Homo sapiens
+O43914	TYOBP_HUMAN	""	TYRO protein tyrosine kinase-binding protein	Homo sapiens
+O60260	PRKN_HUMAN	""	E3 ubiquitin-protein ligase parkin	Homo sapiens
+O60733	PLPL9_HUMAN	""	85/88 kDa calcium-independent phospholipase A2	Homo sapiens
+O75061	AUXI_HUMAN	""	Putative tyrosine-protein phosphatase auxilin	Homo sapiens
+O75112	LDB3_HUMAN	""	LIM domain-binding protein 3	Homo sapiens
+O75165	DJC13_HUMAN	""	DnaJ homolog subfamily C member 13	Homo sapiens
+O75197	LRP5_HUMAN	""	Low-density lipoprotein receptor-related protein 5	Homo sapiens
+O75251	NDUS7_HUMAN	""	NADH dehydrogenase [ubiquinone] iron-sulfur protein 7, mitochondrial	Homo sapiens
+O75306	NDUS2_HUMAN	""	NADH dehydrogenase [ubiquinone] iron-sulfur protein 2, mitochondrial	Homo sapiens
+O75603	GCM2_HUMAN	""	Chorion-specific transcription factor GCMb	Homo sapiens
+O75787	RENR_HUMAN	""	Renin receptor	Homo sapiens
+O75874	IDHC_HUMAN	""	Isocitrate dehydrogenase [NADP] cytoplasmic	Homo sapiens
+O76024	WFS1_HUMAN	""	Wolframin	Homo sapiens
+O95263	PDE8B_HUMAN	""	High affinity cAMP-specific and IBMX-insensitive 3',5'-cyclic phosphodiesterase 8B	Homo sapiens
+P00156	CYB_HUMAN	""	Cytochrome b	Homo sapiens
+P00395	COX1_HUMAN	""	Cytochrome c oxidase subunit 1	Homo sapiens
+P00414	COX3_HUMAN	""	Cytochrome c oxidase subunit 3	Homo sapiens
+P00439	PH4H_HUMAN	""	Phenylalanine-4-hydroxylase	Homo sapiens
+P00480	OTC_HUMAN	""	Ornithine transcarbamylase, mitochondrial	Homo sapiens
+P00846	ATP6_HUMAN	""	ATP synthase subunit a	Homo sapiens
+P01009	A1AT_HUMAN	""	Alpha-1-antitrypsin	Homo sapiens
+P01034	CYTC_HUMAN	""	Cystatin-C	Homo sapiens
+P01185	NEU2_HUMAN	""	Vasopressin-neurophysin 2-copeptin	Homo sapiens
+P01270	PTHY_HUMAN	""	Parathyroid hormone	Homo sapiens
+P02452	CO1A1_HUMAN	""	Collagen alpha-1(I) chain	Homo sapiens
+P02649	APOE_HUMAN	""	Apolipoprotein E	Homo sapiens
+P02766	TTHY_HUMAN	""	Transthyretin	Homo sapiens
+P03886	NU1M_HUMAN	""	NADH-ubiquinone oxidoreductase chain 1	Homo sapiens
+P03891	NU2M_HUMAN	""	NADH-ubiquinone oxidoreductase chain 2	Homo sapiens
+P03897	NU3M_HUMAN	""	NADH-ubiquinone oxidoreductase chain 3	Homo sapiens
+P03901	NU4LM_HUMAN	""	NADH-ubiquinone oxidoreductase chain 4L	Homo sapiens
+P03905	NU4M_HUMAN	""	NADH-ubiquinone oxidoreductase chain 4	Homo sapiens
+P03915	NU5M_HUMAN	""	NADH-ubiquinone oxidoreductase chain 5	Homo sapiens
+P03923	NU6M_HUMAN	""	NADH-ubiquinone oxidoreductase chain 6	Homo sapiens
+P04062	GLCM_HUMAN	""	Lysosomal acid glucosylceramidase	Homo sapiens
+P04156	PRIO_HUMAN	""	Major prion protein	Homo sapiens
+P04350	TBB4A_HUMAN	""	Tubulin beta-4A chain	Homo sapiens
+P04424	""	""	""	Homo sapiens
+P04626	ERBB2_HUMAN	""	Receptor tyrosine-protein kinase erbB-2	Homo sapiens
+P04628	WNT1_HUMAN	""	Proto-oncogene Wnt-1	Homo sapiens
+P04637	P53_HUMAN	""	Cellular tumor antigen p53	Homo sapiens
+P05067	A4_HUMAN	""	Amyloid-beta precursor protein	Homo sapiens
+P05106	""	""	""	Homo sapiens
+P07333	CSF1R_HUMAN	""	Macrophage colony-stimulating factor 1 receptor	Homo sapiens
+P08172	ACM2_HUMAN	""	Muscarinic acetylcholine receptor M2	Homo sapiens
+P08514	ITA2B_HUMAN	""	Integrin alpha-IIb	Homo sapiens
+P08575	PTPRC_HUMAN	""	Receptor-type tyrosine-protein phosphatase C	Homo sapiens
+P09936	UCHL1_HUMAN	""	Ubiquitin carboxyl-terminal hydrolase isozyme L1	Homo sapiens
+P10253	LYAG_HUMAN	""	Lysosomal alpha-glucosidase	Homo sapiens
+P10635	CP2D6_HUMAN	""	Cytochrome P450 2D6	Homo sapiens
+P10636	TAU_HUMAN	""	Microtubule-associated protein tau	Homo sapiens
+P12271	RLBP1_HUMAN	""	Retinaldehyde-binding protein 1	Homo sapiens
+P12883	MYH7_HUMAN	""	Myosin-7	Homo sapiens
+P13473	LAMP2_HUMAN	""	Lysosome-associated membrane glycoprotein 2	Homo sapiens
+P13797	PLST_HUMAN	""	Plastin-3	Homo sapiens
+P15289	ARSA_HUMAN	""	Arylsulfatase A	Homo sapiens
+P17301	ITA2_HUMAN	""	Integrin alpha-2	Homo sapiens
+P17405	ASM_HUMAN	""	Sphingomyelin phosphodiesterase	Homo sapiens
+P19429	TNNI3_HUMAN	""	Troponin I, cardiac muscle	Homo sapiens
+P20226	TBP_HUMAN	""	TATA-box-binding protein	Homo sapiens
+P22314	UBA1_HUMAN	""	Ubiquitin-like modifier-activating enzyme 1	Homo sapiens
+P22607	FGFR3_HUMAN	""	Fibroblast growth factor receptor 3	Homo sapiens
+P23771	GATA3_HUMAN	""	Trans-acting T-cell-specific transcription factor GATA-3	Homo sapiens
+P23942	PRPH2_HUMAN	""	Peripherin-2	Homo sapiens
+P25054	APC_HUMAN	""	Adenomatous polyposis coli protein	Homo sapiens
+P25063	CD24_HUMAN	""	Signal transducer CD24	Homo sapiens
+P26678	PPLA_HUMAN	""	Cardiac phospholamban	Homo sapiens
+P28331	NDUS1_HUMAN	""	NADH-ubiquinone oxidoreductase 75 kDa subunit, mitochondrial	Homo sapiens
+P28799	GRN_HUMAN	""	Progranulin	Homo sapiens
+P30793	GCH1_HUMAN	""	GTP cyclohydrolase 1	Homo sapiens
+P35222	CTNB1_HUMAN	""	Catenin beta-1	Homo sapiens
+P35462	DRD3_HUMAN	""	D(3) dopamine receptor	Homo sapiens
+P35475	IDUA_HUMAN	""	Alpha-L-iduronidase	Homo sapiens
+P37231	PPARG_HUMAN	""	Peroxisome proliferator-activated receptor gamma	Homo sapiens
+P37840	SYUA_HUMAN	""	Alpha-synuclein	Homo sapiens
+P38935	SMBP2_HUMAN	""	DNA-binding protein SMUBP-2	Homo sapiens
+P42858	HD_HUMAN	""	Huntingtin	Homo sapiens
+P43699	NKX21_HUMAN	""	Homeobox protein Nkx-2.1	Homo sapiens
+P48735	IDHP_HUMAN	""	Isocitrate dehydrogenase [NADP], mitochondrial	Homo sapiens
+P49768	PSN1_HUMAN	""	Presenilin-1	Homo sapiens
+P49798	RGS4_HUMAN	""	Regulator of G-protein signaling 4	Homo sapiens
+P49810	PSN2_HUMAN	""	Presenilin-2	Homo sapiens
+P49815	TSC2_HUMAN	""	Tuberin	Homo sapiens
+P49821	NDUV1_HUMAN	""	NADH dehydrogenase [ubiquinone] flavoprotein 1, mitochondrial	Homo sapiens
+P50336	PPOX_HUMAN	""	Protoporphyrinogen oxidase	Homo sapiens
+P51531	SMCA2_HUMAN	""	Probable global transcription activator SNF2L2	Homo sapiens
+P51787	KCNQ1_HUMAN	""	Potassium voltage-gated channel subfamily KQT member 1	Homo sapiens
+P51811	XK_HUMAN	""	Membrane transport protein XK	Homo sapiens
+P54252	ATX3_HUMAN	""	Ataxin-3	Homo sapiens
+P54253	ATX1_HUMAN	""	Ataxin-1	Homo sapiens
+P54259	ATN1_HUMAN	""	Atrophin-1	Homo sapiens
+P56539	CAV3_HUMAN	""	Caveolin-3	Homo sapiens
+P60484	PTEN_HUMAN	""	Phosphatidylinositol 3,4,5-trisphosphate 3-phosphatase and dual-specificity protein phosphatase PTEN	Homo sapiens
+P63092	GNAS2_HUMAN	""	Guanine nucleotide-binding protein G(s) subunit alpha isoforms short	Homo sapiens
+P68032	ACTC_HUMAN	""	Actin, alpha cardiac muscle 1	Homo sapiens
+P82279	CRUM1_HUMAN	""	Protein crumbs homolog 1	Homo sapiens
+Q06787	FMR1_HUMAN	""	Synaptic functional regulator FMR1	Homo sapiens
+Q08357	S20A2_HUMAN	""	Sodium-dependent phosphate transporter 2	Homo sapiens
+Q09013	DMPK_HUMAN	""	Myotonin-protein kinase	Homo sapiens
+Q13286	CLN3_HUMAN	""	Battenin	Homo sapiens
+Q13501	SQSTM_HUMAN	""	Sequestosome-1	Homo sapiens
+Q13568	IRF5_HUMAN	""	Interferon regulatory factor 5	Homo sapiens
+Q14203	DCTN1_HUMAN	""	Dynactin subunit 1	Homo sapiens
+Q14524	SCN5A_HUMAN	""	Sodium channel protein type 5 subunit alpha	Homo sapiens
+Q14765	STAT4_HUMAN	""	Signal transducer and activator of transcription 4	Homo sapiens
+Q14896	MYPC3_HUMAN	""	Myosin-binding protein C, cardiac-type	Homo sapiens
+Q16595	FRDA_HUMAN	""	Frataxin, mitochondrial	Homo sapiens
+Q16610	ECM1_HUMAN	""	Extracellular matrix protein 1	Homo sapiens
+Q29980	MICB_HUMAN	""	MHC class I polypeptide-related sequence B	Homo sapiens
+Q30201	HFE_HUMAN	""	Hereditary hemochromatosis protein	Homo sapiens
+Q330K2	NDUF6_HUMAN	""	NADH dehydrogenase (ubiquinone) complex I, assembly factor 6	Homo sapiens
+Q5S007	LRRK2_HUMAN	""	Leucine-rich repeat serine/threonine-protein kinase 2	Homo sapiens
+Q5TEU4	NDUF5_HUMAN	""	Arginine-hydroxylase NDUFAF5, mitochondrial	Homo sapiens
+Q6Y7W6	GGYF2_HUMAN	""	GRB10-interacting GYF protein 2	Homo sapiens
+Q86U42	PABP2_HUMAN	""	Polyadenylate-binding protein 2	Homo sapiens
+Q86Y39	NDUAB_HUMAN	""	NADH dehydrogenase [ubiquinone] 1 alpha subcomplex subunit 11	Homo sapiens
+Q8IV08	PLD3_HUMAN	""	5'-3' exonuclease PLD3	Homo sapiens
+Q8IWU9	TPH2_HUMAN	""	Tryptophan 5-hydroxylase 2	Homo sapiens
+Q8N490	PNKD_HUMAN	""	Probable hydrolase PNKD	Homo sapiens
+Q8N5M1	ATPF2_HUMAN	""	ATP synthase mitochondrial F1 complex assembly factor 2	Homo sapiens
+Q8TB37	NUBPL_HUMAN	""	Iron-sulfur protein NUBPL	Homo sapiens
+Q8TD43	TRPM4_HUMAN	""	Transient receptor potential cation channel subfamily M member 4	Homo sapiens
+Q8WWQ2	HPSE2_HUMAN	""	Inactive heparanase-2	Homo sapiens
+Q8WXH2	JPH3_HUMAN	""	Junctophilin-3	Homo sapiens
+Q92542	NICA_HUMAN	""	Nicastrin	Homo sapiens
+Q92574	TSC1_HUMAN	""	Hamartin	Homo sapiens
+Q92673	SORL_HUMAN	""	Sortilin-related receptor	Homo sapiens
+Q96CU9	FXRD1_HUMAN	""	FAD-dependent oxidoreductase domain-containing protein 1	Homo sapiens
+Q96DA2	RB39B_HUMAN	""	Ras-related protein Rab-39B	Homo sapiens
+Q96DP5	FMT_HUMAN	""	Methionyl-tRNA formyltransferase, mitochondrial	Homo sapiens
+Q96H96	COQ2_HUMAN	""	4-hydroxybenzoate polyprenyltransferase, mitochondrial	Homo sapiens
+Q96LT7	CI072_HUMAN	""	Guanine nucleotide exchange C9orf72	Homo sapiens
+Q96P31	FCRL3_HUMAN	""	Fc receptor-like protein 3	Homo sapiens
+Q96QK1	VPS35_HUMAN	""	Vacuolar protein sorting-associated protein 35	Homo sapiens
+Q96QS3	ARX_HUMAN	""	Homeobox protein ARX	Homo sapiens
+Q96QT4	TRPM7_HUMAN	""	Transient receptor potential cation channel subfamily M member 7	Homo sapiens
+Q96RL7	VP13A_HUMAN	""	Vacuolar protein sorting-associated protein 13A	Homo sapiens
+Q99497	PARK7_HUMAN	""	Parkinson disease protein 7	Homo sapiens
+Q99574	NEUS_HUMAN	""	Neuroserpin	Homo sapiens
+Q99700	ATX2_HUMAN	""	Ataxin-2	Homo sapiens
+Q99743	NPAS2_HUMAN	""	Neuronal PAS domain-containing protein 2	Homo sapiens
+Q9BU61	NDUF3_HUMAN	""	NADH dehydrogenase [ubiquinone] 1 alpha subcomplex assembly factor 3	Homo sapiens
+Q9BXB1	LGR4_HUMAN	""	Leucine-rich repeat-containing G-protein coupled receptor 4	Homo sapiens
+Q9BXM7	PINK1_HUMAN	""	Serine/threonine-protein kinase PINK1, mitochondrial	Homo sapiens
+Q9BZ23	PANK2_HUMAN	""	Pantothenate kinase 2, mitochondrial	Homo sapiens
+Q9H015	S22A4_HUMAN	""	Solute carrier family 22 member 4	Homo sapiens
+Q9H0Q3	FXYD6_HUMAN	""	FXYD domain-containing ion transport regulator 6	Homo sapiens
+Q9H1R3	MYLK2_HUMAN	""	Myosin light chain kinase 2, skeletal/cardiac muscle	Homo sapiens
+Q9NQ11	AT132_HUMAN	""	Polyamine-transporting ATPase 13A2	Homo sapiens
+Q9NR56	MBNL1_HUMAN	""	Muscleblind-like protein 1	Homo sapiens
+Q9NRI5	DISC1_HUMAN	""	Disrupted in schizophrenia 1 protein	Homo sapiens
+Q9NUM4	T106B_HUMAN	""	Transmembrane protein 106B	Homo sapiens
+Q9NWF9	RN216_HUMAN	""	E3 ubiquitin-protein ligase RNF216	Homo sapiens
+Q9NXR8	ING3_HUMAN	""	Inhibitor of growth protein 3	Homo sapiens
+Q9NZC2	TREM2_HUMAN	""	Triggering receptor expressed on myeloid cells 2	Homo sapiens
+Q9P032	NDUF4_HUMAN	""	NADH dehydrogenase [ubiquinone] 1 alpha subcomplex assembly factor 4	Homo sapiens
+Q9P0W8	SPAT7_HUMAN	""	Spermatogenesis-associated protein 7	Homo sapiens
+Q9P202	WHRN_HUMAN	""	Whirlin	Homo sapiens
+Q9UBC1	IKBL1_HUMAN	""	NF-kappa-B inhibitor-like protein 1	Homo sapiens
+Q9UGJ0	AAKG2_HUMAN	""	5'-AMP-activated protein kinase subunit gamma-2	Homo sapiens
+Q9UGM3	DMBT1_HUMAN	""	Deleted in malignant brain tumors 1 protein	Homo sapiens
+Q9UHD2	TBK1_HUMAN	""	Serine/threonine-protein kinase TBK1	Homo sapiens
+Q9UK53	ING1_HUMAN	""	Inhibitor of growth protein 1	Homo sapiens
+Q9UM07	PADI4_HUMAN	""	Protein-arginine deiminase type-4	Homo sapiens
+Q9UM47	NOTC3_HUMAN	""	Neurogenic locus notch homolog protein 3	Homo sapiens
+Q9UMX1	SUFU_HUMAN	""	Suppressor of fused homolog	Homo sapiens
+Q9UQN3	CHM2B_HUMAN	""	Charged multivesicular body protein 2b	Homo sapiens
+Q9Y223	GLCNE_HUMAN	""	Bifunctional UDP-N-acetylglucosamine 2-epimerase/N-acetylmannosamine kinase	Homo sapiens
+Q9Y287	ITM2B_HUMAN	""	Integral membrane protein 2B	Homo sapiens
+Q9Y2R2	PTN22_HUMAN	""	Tyrosine-protein phosphatase non-receptor type 22	Homo sapiens
+Q9Y2Z2	MTO1_HUMAN	""	Protein MTO1 homolog, mitochondrial	Homo sapiens
+Q9Y3I1	FBX7_HUMAN	""	F-box only protein 7	Homo sapiens
+Q9Y4J8	DTNA_HUMAN	""	Dystrobrevin alpha	Homo sapiens
+Q9Y6C5	PTC2_HUMAN	""	Protein patched homolog 2	Homo sapiens
+Q9Y6H5	SNCAP_HUMAN	""	Synphilin-1	Homo sapiens

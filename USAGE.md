@@ -209,6 +209,37 @@ python3 tools/panelapp_lists.py resolve --in DIR --mine URL --out FILE [--organi
 
 Tests: `tests/test_panelapp_lists.py` (recorded panels in `tests/fixtures/panelapp/`, no network).
 
+## Public lists on a mine (tools/apply_public_lists.py) [im-9n4.22]
+
+Makes the PanelApp lists above and HumanMine's 13 other public lists (`curation/public_lists/`) public lists of a mine, as
+the superuser, through its web service. It archives the mine's current public lists first, and a re-run replaces the lists
+without duplicates (BUILD.md, "`apply_public_lists`", has the service calls and the rules). Standard library only.
+
+```
+python3 tools/apply_public_lists.py --mine http://localhost:18090/humanmine \
+    --panelapp-cache CACHE_GROUP_DIR --legacy curation/public_lists \
+    --archive-repo /path/to/historic_artefacts [--mine-label ut-demo] [--select all|100k] [--keep-2021-names|--current-names] \
+    [--user superuser@intermine.org --password intermine] [--wait SECONDS] [--report run.json] [--dry-run]
+```
+
+* `--panelapp-cache`: the rdfc2im cache group `panelapp` (its `data/` holds `META.json` and `panels/`; a directory that
+  holds them itself works too). The group's md5s are checked unless `--dry-run`.
+* `--archive-repo`: each run adds `<mine-label>-public-lists/<date>[-N]/` (the layout of `historic_artefacts`: `lists.json`,
+  `lists.tsv`, `members/`, `export.log`, plus `archive.json`). The export script is
+  `<archive-repo>/scripts/export_humanmine_public_lists.py`, or `--export-script` / `PUBLIC_LISTS_EXPORT_SCRIPT`. Existing
+  directories are never overwritten; if the archive step fails nothing is uploaded or removed.
+* `--dry-run` resolves (read-only `/service/ids` jobs) and prints what would happen: lists to upload with sizes, lists
+  skipped with the reason, public panel lists that would be removed. No archive, no login, no write.
+* `--i-know-this-is-production`: without it a mine on a public host (`www.humanmine.org`, any `*.org`) is refused.
+* Exit code 0 when every list uploaded and read back as sent; 1 otherwise (the report says which).
+
+In `tools/full-build.sh`: `--public-lists CACHE_GROUP_DIR --public-lists-archive ARCHIVE_REPO [--public-lists-select all|100k]
+[--public-lists-names 2021|current]` (phase `apply_public_lists`, off without the flag).
+
+Tests: `tests/test_apply_public_lists.py` (the web service and the export script injected, no network),
+`tests/test_full_build_public_lists.py` (dry-run), and three live checks in `tests/test_live_mine.py` that skip unless the
+mine has the Genomics England lists.
+
 ## Not yet exercised
 
 `linkml-validate` is not wired into `check`. (`fetch` against the real endpoints and a real

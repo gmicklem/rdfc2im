@@ -1,0 +1,206 @@
+{
+ "lists": [
+  {
+   "authorized": false,
+   "dateCreated": "2015-06-02T12:58:29+0000",
+   "description": "Gene set from the Cardiovascular Gene Ontology Annotation Initiative. This initiative (www.cardiovasculargeneontology.com/), headed by Prof. Philippa Talmud, represents a collaboration between University College London and the European Bioinformatics Institute (EBI), funded by the British Heart Foundation. The UniProtKB-GOA group produces, in collaboration with the Cardiovascular GO Annotation Initiative, a BHF-UCL gene association file, which contains all GO annotations for over 4,000 human proteins implicated in cardiovascular development or disease (http://www.ebi.ac.uk/GOA/CVI/).",
+   "id": 26000036,
+   "name": "PL_BHF_UCL_cardiovascGenes",
+   "size": 4103,
+   "status": "CURRENT",
+   "tags": [
+    "im:favourite",
+    "im:public"
+   ],
+   "timestamp": 1433249909443,
+   "title": "PL_BHF_UCL_cardiovascGenes",
+   "type": "Gene"
+  },
+  {
+   "authorized": false,
+   "dateCreated": "2015-06-02T12:49:11+0000",
+   "description": "Potential disease susceptibility Genes reported in published Obesity and Diabetes GWAS experiments with p-value of less than 10-4. [Please tell us if you find missing or erroneous Genes in this set - thank you ]",
+   "id": 26000034,
+   "name": "PL_DiabesityGWAS_pval-4",
+   "size": 711,
+   "status": "CURRENT",
+   "tags": [
+    "im:favourite",
+    "im:public"
+   ],
+   "timestamp": 1433249351576,
+   "title": "PL_DiabesityGWAS_pval-4",
+   "type": "Gene"
+  },
+  {
+   "authorized": false,
+   "dateCreated": "2016-10-13T11:54:49+0000",
+   "description": "Genes associated with all forms of Diabetes according to OMIM (http://www.omim.org/).",
+   "id": 58000019,
+   "name": "PL_DiabetesGenes",
+   "size": 65,
+   "status": "CURRENT",
+   "tags": [
+    "im:public"
+   ],
+   "timestamp": 1476359689208,
+   "title": "PL_DiabetesGenes",
+   "type": "Gene"
+  },
+  {
+   "authorized": false,
+   "dateCreated": "2017-10-18T13:07:00+0000",
+   "description": "List A for InterMine workshop",
+   "id": 80000025,
+   "name": "PL_InterMine_workshop_ListA",
+   "size": 189,
+   "status": "CURRENT",
+   "tags": [
+    "EBIworkshop",
+    "im:public"
+   ],
+   "timestamp": 1508332020307,
+   "title": "PL_InterMine_workshop_ListA",
+   "type": "Protein"
+  },
+  {
+   "authorized": false,
+   "dateCreated": "2015-02-26T12:33:28+0000",
+   "description": "",
+   "id": 17000035,
+   "name": "PL_IntermineUseCase_geneList",
+   "size": 183,
+   "status": "CURRENT",
+   "tags": [
+    "im:public"
+   ],
+   "timestamp": 1424954008376,
+   "title": "PL_IntermineUseCase_geneList",
+   "type": "Gene"
+  },
+  {
+   "authorized": false,
+   "dateCreated": "2019-01-30T14:54:46+0000",
+   "description": "pax6 targets",
+   "id": 96000095,
+   "name": "PL_Pax6_Targets",
+   "size": 319,
+   "status": "CURRENT",
+   "tags": [
+    "im:public"
+   ],
+   "timestamp": 1548860086021,
+   "title": "PL_Pax6_Targets",
+   "type": "Gene"
+  },
+  {
+   "authorized": false,
+   "dateCreated": "2015-06-02T13:00:41+0000",
+   "description": "Genes located in the Prader-Willi region of chromosome 15. Prader&ndash;Willi syndrome (abbreviated PWS) is a rare genetic disorder in which seven genes (or some subset thereof) on chromosome 15 (q 11-13: 20,700,000-33,600,000) are deleted or unexpressed (chromosome 15q partial deletion) on the paternal chromosome. PWS is characterized by severe hypotonia and feeding difficulties in early infancy, followed in later infancy or early childhood by excessive eating and gradual development of morbid obesity (unless eating is externally controlled). 31Jan2011",
+   "id": 26000037,
+   "name": "PL_PraderWilliRegion_Genes",
+   "size": 120,
+   "status": "CURRENT",
+   "tags": [
+    "im:favourite",
+    "im:public"
+   ],
+   "timestamp": 1433250041482,
+   "title": "PL_PraderWilliRegion_Genes",
+   "type": "Gene"
+  },
+  {
+   "authorized": false,
+   "dateCreated": "2016-05-18T10:38:29+0000",
+   "description": "From: Nik-Zainal S et al., Landscape of somatic mutations in 560 breast cancer whole-genome sequences. Nature. 2016 May 2. doi: 10.1038/nature17676. PubMed PMID: 27135926.\n\r&lt;br/&gt;Whole-genome sequences of 560 breast cancers were analysed to advance understanding of the driver mutations conferring clonal advantage and the mutational processes generating somatic mutations. Protein-coding cancer genes identified as carrying probable driver mutations are shown in this list. ",
+   "id": 50000026,
+   "name": "PL_Protein coding cancer genes containing probable driver mutations",
+   "size": 94,
+   "status": "CURRENT",
+   "tags": [
+    "im:favourite",
+    "im:public"
+   ],
+   "timestamp": 1463567909533,
+   "title": "PL_Protein coding cancer genes containing probable driver mutations",
+   "type": "Gene"
+  },
+  {
+   "authorized": false,
+   "dateCreated": "2015-06-02T13:09:04+0000",
+   "description": "Proposed causative SNPs associated with Type 2 diabetes susceptibility from: Voight, BF et al. Twelve type 2 diabetes susceptibility loci identified through large-scale association analysis. Nat Genet. 2010;42(7):579-89",
+   "id": 26000040,
+   "name": "PL_T2DcandSNPs_Voight2010",
+   "size": 29,
+   "status": "CURRENT",
+   "tags": [
+    "im:public"
+   ],
+   "timestamp": 1433250544485,
+   "title": "PL_T2DcandSNPs_Voight2010",
+   "type": "SNP"
+  },
+  {
+   "authorized": false,
+   "dateCreated": "2016-03-03T10:37:43+0000",
+   "description": "",
+   "id": 43000074,
+   "name": "PL_integrativeOmics_proteinlist",
+   "size": 186,
+   "status": "CURRENT",
+   "tags": [
+    "im:public"
+   ],
+   "timestamp": 1457001463939,
+   "title": "PL_integrativeOmics_proteinlist",
+   "type": "Protein"
+  },
+  {
+   "authorized": false,
+   "dateCreated": "2015-06-02T13:06:53+0000",
+   "description": "Genes associated with Monogenic Disorders of Glucose Tolerance. Taken from O'Rahilly S. Human genetics illuminates the paths to metabolic disease. Nature. 2009;462(7271):307-14. 31Jan2011",
+   "id": 26000039,
+   "name": "PL_monogenGlucTolerance_ORahilly09",
+   "size": 20,
+   "status": "CURRENT",
+   "tags": [
+    "im:favourite",
+    "im:public"
+   ],
+   "timestamp": 1433250413371,
+   "title": "PL_monogenGlucTolerance_ORahilly09",
+   "type": "Gene"
+  },
+  {
+   "authorized": false,
+   "dateCreated": "2015-06-02T12:46:35+0000",
+   "description": "Genetic Variants associated with Obesity. Taken from Day F and Loos R. Developments in Obesity Genetics in the Era of Genome-Wide Association Studies. J Nutrigenet Nutrigenomics. 2011;4(4):222-38. added 25Jan2012",
+   "id": 26000033,
+   "name": "PL_obesityLociReview_Day2011",
+   "size": 60,
+   "status": "CURRENT",
+   "tags": [
+    "im:public"
+   ],
+   "timestamp": 1433249195427,
+   "title": "PL_obesityLociReview_Day2011",
+   "type": "Gene"
+  },
+  {
+   "authorized": false,
+   "dateCreated": "2015-06-02T13:03:40+0000",
+   "description": "Genes associated with Monogenic Disorders Leading to Human Obesity. Taken from O'Rahilly S. Human genetics illuminates the paths to metabolic disease. Nature. 2009;462(7271):307-14. 31Jan2011",
+   "id": 26000038,
+   "name": "PL_obesityMonogen_ORahilly09",
+   "size": 9,
+   "status": "CURRENT",
+   "tags": [
+    "im:favourite",
+    "im:public"
+   ],
+   "timestamp": 1433250220898,
+   "title": "PL_obesityMonogen_ORahilly09",
+   "type": "Gene"
+  }
+ ]
+}
