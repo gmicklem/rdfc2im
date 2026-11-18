@@ -84,6 +84,14 @@ def test_an_uninstalled_tool_or_one_with_a_missing_dependency_or_wrong_class_is_
     assert why["proteinonly"] == "tool does not accept Gene"
 
 
+def test_a_tool_that_queries_a_path_the_model_lacks_is_dropped(monkeypatch):
+    monkeypatch.setitem(arl.TOOL_QUERIES, "protvis", ["Gene.interactions"])
+    kept, dropped = arl.filter_layout({"Gene": [category("T", entry("protvis", "tool"))]}, CLASSES, TOOLS, set())
+    assert kept == {} and dropped[0][5] == "tool queries Gene.interactions, not in the model"
+    monkeypatch.setitem(arl.TOOL_QUERIES, "protvis", ["Gene.proteins"])
+    assert arl.filter_layout({"Gene": [category("T", entry("protvis", "tool"))]}, CLASSES, TOOLS, set())[1] == []
+
+
 def test_a_template_the_mine_lacks_is_dropped():
     layout = {"Gene": [category("T", entry("Have", "template"), entry("Lack", "template"))]}
     kept, dropped = arl.filter_layout(layout, CLASSES, TOOLS, {"Have"})

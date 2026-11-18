@@ -11,8 +11,8 @@ This script takes that reference (curation/humanmine_bluegenes_properties.json, 
 show, drops the rest with a printed reason, and sets the result on the mine:
 
   class     kept when Gene.<value> is a collection or reference in the mine's /service/model
-  tool      kept when BlueGenes lists it (/api/tools/all), accepts the class, and the classes it
-            depends on are in the model
+  tool      kept when BlueGenes lists it (/api/tools/all), accepts the class, the classes it
+            depends on are in the model, and the paths it queries (TOOL_QUERIES) resolve
   template  kept when the mine serves a template of that name (/service/templates)
 
 A category left with no entry is dropped too. Run it after tools/apply_humanmine_templates.py, so the
@@ -38,6 +38,9 @@ import urllib.request
 DEFAULT_MINE = "http://localhost:18090/humanmine"
 DEFAULT_BLUEGENES = "http://localhost:15001"
 PROPERTY_KEY = "layout.report"
+# Paths a tool queries without declaring them in its package.json "depends" (found by running it: the
+# Cytoscape tool asks the mine for Gene.interactions.* and the mine answers 400 when the model lacks it).
+TOOL_QUERIES = {"bluegenesToolCytoscape": ["Gene.interactions"]}
 MAX_QUERY = 6000   # a PUT carries its value in the query string; longer than this goes DELETE + POST
 
 
@@ -214,6 +217,9 @@ def _child_problem(cls, child, classes, tools, templates):
         missing = [d for d in (config.get("depends") or []) if d not in classes]
         if missing:
             return "tool depends on %s, not in the model" % ", ".join(missing)
+        for path in TOOL_QUERIES.get(value, []):
+            if resolve_path(classes, path):
+                return "tool queries %s, not in the model" % path
         return None
     if kind == "template":
         return None if value in templates else "template not in the mine"

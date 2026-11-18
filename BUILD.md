@@ -752,7 +752,9 @@ for the mine:
   path that fails.
 - `tools/apply_report_layout.py curation/humanmine_bluegenes_properties.json`: HumanMine's Gene categories and order,
   keeping a class entry when `Gene.<name>` is a collection or reference in the model, a tool when BlueGenes lists it
-  (`/api/tools/all`), accepts Gene and the classes it depends on are in the model, a template when the mine serves it;
+  (`/api/tools/all`), accepts Gene, the classes it depends on are in the model and the paths it queries resolve
+  (`TOOL_QUERIES`: the Cytoscape tool needs `Gene.interactions` and its query fails with a 400 without it), a template
+  when the mine serves it;
   the rest are printed with the reason, and a category left empty goes. It sets `layout.report` (`POST` the first time,
   `PUT` after) and reads it back; a second run changes nothing. `--dry-run` prints without writing. Run it again after a
   build that loads more data: the dropped list shrinks.
