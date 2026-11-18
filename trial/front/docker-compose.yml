@@ -7,6 +7,8 @@
 #   ALIGNER_SRC    directory of the sequence-alignment-service checkout (required)
 #   IMJS_DIR       directory holding imjs/im.min.js (up.sh fills it; required)
 #   ALIGNER_HTTP_PORT   loopback port of the aligner (default 13000; nginx.conf expects 13000)
+#   JBROWSE2_CONFIG     the generated JBrowse 2 config.json (up.sh runs gen-jbrowse-config.sh; required)
+#   JBROWSE2_HTTP_PORT  loopback port of JBrowse 2 (default 14881; nginx.conf expects 14881)
 name: rdfc2im-ut-front
 services:
   aligner:
@@ -17,6 +19,17 @@ services:
     restart: unless-stopped
     ports:
       - 127.0.0.1:${ALIGNER_HTTP_PORT:-13000}:3000
+  jbrowse2:
+    # Built by build-jbrowse2.sh from the repos/jbrowse2 checkout (up.sh builds it when missing).
+    # Loopback only: the browser reaches it as http://localhost:15001/jbrowse2/ through the front.
+    container_name: rdfc2im-ut-front-jbrowse2
+    image: rdfc2im-jbrowse2:latest
+    pull_policy: never
+    restart: unless-stopped
+    ports:
+      - 127.0.0.1:${JBROWSE2_HTTP_PORT:-14881}:80
+    volumes:
+      - ${JBROWSE2_CONFIG:?set JBROWSE2_CONFIG}:/usr/share/nginx/html/config.json:ro
   nginx:
     container_name: rdfc2im-ut-front-nginx
     image: nginx:alpine
@@ -30,3 +43,4 @@ services:
       - ${IMJS_DIR:?set IMJS_DIR}:/usr/share/nginx/vendor/imjs:ro
     depends_on:
       - aligner
+      - jbrowse2
