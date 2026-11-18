@@ -18,6 +18,14 @@
 #   --genes FILE        Gene-panel file for --genes-scoped sources (default: demo panel).
 #   --taxon LIST        Comma-separated NCBI taxon ids, passed to rdfc2im --taxon (default: 9606).
 #   --skip-templates    Don't apply curation/demo_public_templates.sql.
+#   --report-layout FILE  After the demo templates, in phase apply_templates: load the HumanMine templates the
+#                       mine's model can run (tools/apply_humanmine_templates.py on the sibling file
+#                       humanmine_templates.xml) and set HumanMine's Gene report layout, filtered to what this mine
+#                       and BlueGenes can show, as the bluegenes-properties key layout.report
+#                       (tools/apply_report_layout.py FILE). FILE is HumanMine's /service/bluegenes-properties
+#                       response: curation/humanmine_bluegenes_properties.json. Both write through the web service
+#                       as the superuser, so the mine must be up (they wait up to 5 minutes); BUILD.md,
+#                       "The report layout". Default off.
 #   --use-cached-data   Restore the fetched raw data (SPARQL results, the Reactome download) from
 #                       cached_raw_data/ instead of fetching it again. Every file is checked
 #                       against its md5 first, and a cache fetched for a different gene panel,
@@ -202,6 +210,7 @@ SOURCES=${SOURCES:-"go ncbigene reactome hgnc ensembl uniprot clinvar gwascatalo
 GENE_PANEL=${GENE_PANEL:-"$HERE/curation/demo_gene_panel.txt"}
 TAXON=${TAXON:-9606}
 SKIP_TEMPLATES=0
+REPORT_LAYOUT=""
 USE_CACHED_DATA=0
 OFFLINE=0
 [ "${RDFC2IM_OFFLINE:-}" = 1 ] && { OFFLINE=1; USE_CACHED_DATA=1; }
@@ -304,6 +313,7 @@ while [ $# -gt 0 ]; do
     --genes) GENE_PANEL=$2; shift ;;
     --taxon) TAXON=$2; shift ;;
     --skip-templates) SKIP_TEMPLATES=1 ;;
+    --report-layout) REPORT_LAYOUT=$2; shift ;;
     --use-cached-data) USE_CACHED_DATA=1 ;;
     --offline) OFFLINE=1; USE_CACHED_DATA=1 ;;
     --cache-dir) RAW_CACHE_DIR=$2; shift ;;
@@ -1992,10 +2002,24 @@ phase_start_mine_stack() {
 }
 
 phase_apply_templates() {
-  [ "$SKIP_TEMPLATES" -eq 1 ] && { log "skipped (--skip-templates)"; return 0; }
-  [ -f curation/demo_public_templates.sql ] || { log "no curation/demo_public_templates.sql - skipping"; return 0; }
-  run bash -c "docker exec -i $PG_CONTAINER psql -U intermine -d humanmine-userprofile < curation/demo_public_templates.sql"
-  run docker restart "$MINE_CONTAINER" "$BG_CONTAINER"
+  if [ "$SKIP_TEMPLATES" -eq 1 ]; then
+    log "skipped (--skip-templates)"
+  elif [ ! -f curation/demo_public_templates.sql ]; then
+    log "no curation/demo_public_templates.sql - skipping"
+  else
+    run bash -c "docker exec -i $PG_CONTAINER psql -U intermine -d humanmine-userprofile < curation/demo_public_templates.sql"
+    run docker restart "$MINE_CONTAINER" "$BG_CONTAINER"
+  fi
+  [ -z "$REPORT_LAYOUT" ] || apply_report_layout
+}
+
+# --report-layout: through the web service, so after the restart above. Templates first, as the layout drops
+# an entry whose template the mine does not serve.
+apply_report_layout() {
+  [ -f "$REPORT_LAYOUT" ] || die "--report-layout: no such file: $REPORT_LAYOUT"
+  local mine="http://localhost:$MINE_PORT/humanmine" bg="http://localhost:$BG_PORT"
+  run python3 tools/apply_humanmine_templates.py "$(dirname "$REPORT_LAYOUT")/humanmine_templates.xml" --mine "$mine" --wait 300
+  run python3 tools/apply_report_layout.py "$REPORT_LAYOUT" --mine "$mine" --bluegenes "$bg" --wait 300
 }
 
 phase_verify() {
