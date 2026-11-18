@@ -1162,7 +1162,8 @@ the option to fetch afresh and re-save.
 | 17 | `stage_artifacts` | `tools/trial-stage.sh`: explodes the war, patches its baked-in DB/Solr hosts to the compose network's |
 | 18 | `start_mine_stack` | `docker compose up -d mine bluegenes`, then restarts the webapp and BlueGenes (it reads the DB once, at startup) |
 | 19 | `apply_templates` | Loads `curation/demo_public_templates.sql` into the userprofile DB; restarts the webapp and BlueGenes |
-| 20 | `verify` | `/service/version`, `/service/model`, BlueGenes' root |
+| 20 | `apply_public_lists` | `--public-lists DIR` only: archives the mine's public lists, then makes the Genomics England PanelApp lists and HumanMine's 13 other public lists public lists of the mine (`tools/apply_public_lists.py`); a logged no-op without the flag |
+| 21 | `verify` | `/service/version`, `/service/model`, BlueGenes' root |
 
 Load order in phase 13 is read back out of `project.xml` rather than re-decided, because the
 `alongside` sources (`uniprot`, `reactome`) must integrate *after* the stock source they
@@ -1323,8 +1324,8 @@ that is meant to show JBrowse 2, `trial/front/gen-jbrowse-config.sh` regenerates
 
 `tools/panelapp_lists.py` (USAGE.md, "Genomics England gene lists") makes HumanMine's `PL_GenomicsEngland_GenePanel:<Panel_name>`
 lists from the PanelApp. It reads the PanelApp and, in `resolve`, a mine's `/service/ids` (a read-only job); it never
-writes to a mine. T2.3's phase `apply_public_lists` (after `apply_templates`; not written yet, and `tools/full-build.sh`
-is not changed by this task) is meant to call it like this:
+writes to a mine. Phase `apply_public_lists` (T2.3, next section) does the writing with `tools/apply_public_lists.py`,
+which imports this tool's code. What T2.2 planned for it was:
 
 ```
 python3 -m rdfc2im cache restore panelapp $RAW_CACHE_DIR/panelapp-data    # or: tools/panelapp_lists.py fetch --out DIR
@@ -1357,6 +1358,86 @@ data is "publicly accessible ... also available for the scientific and clinical 
 sandbox's firewall blocked that host, so the terms themselves were **not read**, and the API's OpenAPI document names
 a terms URL (`/policies/terms/`) that answers 404. Nothing states a rate limit. Until someone reads the PDF, the group is
 kept out of release assets (`cache check-release` reports it) and `panelapp` is not on `RELEASE_ALLOWED_UNFLAGGED`.
+
+### `apply_public_lists`: the lists on the mine [im-9n4.22]
+
+`--public-lists DIR --public-lists-archive DIR2` (`DIR` is the PanelApp cache group, `DIR2` the archive repository, a
+`historic_artefacts` checkout with `scripts/`) makes phase `apply_public_lists` run, once, after `apply_templates`:
+
+```
+python3 tools/apply_public_lists.py --mine http://localhost:$MINE_PORT/humanmine --panelapp-cache DIR \
+    --legacy curation/public_lists --archive-repo DIR2 --select all --keep-2021-names --report $LOG_DIR/public-lists-$RUN_ID.json --wait 300
+```
+
+Without the flag the phase logs that it did nothing, and every other phase is as before. The web-service calls, as
+exercised on the ut demo (superuser token from `POST /service/login`, `Authorization: Token ...`):
+
+* **Upload**: `POST /service/lists?name=&type=Gene&description=&tags=a;b&extraValue=H. sapiens&replaceExisting=true`,
+  `Content-Type: text/plain`, one identifier per line. The answer is `{"listId","listName","listSize","type",
+  "unmatchedIdentifiers":[...],"wasSuccessful":true}`. 0.25 to 0.5 s for a panel list.
+* **Replace**: `replaceExisting=true` deletes a list of that name first, then makes the new one under a temporary name and
+  renames it; without it an existing name is a 400 ("Attempt to overwrite an existing bag"). A re-run therefore gives
+  new list ids and never a second list of the same name.
+* **Tags and description**: `tags` is split on `;`; `im:public` (and any `im:` tag) needs the superuser, who is the owner,
+  so the list is public at once. `description` is taken as given (a newline, `;`, quotes and `&` survive a round trip).
+* **Names**: no character is refused. `:`, `/`, spaces, commas, `&` and brackets worked and read back unchanged (a legacy
+  list is named `PL_Protein coding cancer genes containing probable driver mutations`). `panelapp_lists.py` still maps the
+  one `/` of a current panel name to `_`, because BlueGenes puts the name in a URL.
+* **Delete**: `DELETE /service/lists?name=` (400 "doesn't exists" for an unknown name). **Read back**: `GET /service/lists?format=json`,
+  anonymous: the public lists, each with `name`, `type`, `size`, `description`, `tags`, `dateCreated`; a visitor and
+  BlueGenes see exactly this.
+* **Identifiers**: the Entrez `primaryIdentifier` of each gene as the mine resolved it (HGNC id, then Ensembl id, then
+  symbol, as `panelapp_lists.py resolve`), so every identifier is a key match and nothing lands in `unmatchedIdentifiers`.
+  On the demo every one of the 4,308 distinct Green genes resolved: 4,307 by HGNC id, one (RMRP) by Ensembl id.
+
+What it does, in order:
+
+1. **Archive first.** The mine's current public lists go to `<archive>/<mine-label>-public-lists/<YYYY-MM-DD>[-N]/` with
+   the T2.1 script, `historic_artefacts/scripts/export_humanmine_public_lists.py`, imported (not copied; its 0.3 s pause is
+   switched off for a local mine). The label is the last part of the mine URL (`humanmine`; `--mine-label` overrides it:
+   give a demo a label of its own so that its archive is not taken for HumanMine's). A directory is created, never reused:
+   the same day again is `-2`, `-3`. A mine with no public list gets an empty dated record (`lists.json` with no lists), and
+   the run goes on. If the export fails or does not add up (a `MISMATCH` in its log, a missing member file) the directory
+   keeps a `FAILED.txt`, and the run stops before it logs in. The tool adds `archive.json` (mine, date, count). The script's
+   own `--help` text says it takes a service URL and an output directory; nothing in it had to change.
+2. **Resolve and upload** the lists below, as the superuser; **read every list back** and print a table (name, type, size,
+   expected, public, ok): size, type, tags and description must be what was sent, once.
+3. **Remove stale lists**: a list that is public, named `PL_...` and tagged `Genomics England gene panel`, which this
+   run does not produce (a retired panel, a panel renamed with `--current-names`, a narrower `--select`). Printed and
+   in the report; nothing else is deleted.
+4. A JSON **run report** (`--report`): the archive path, every list uploaded with its size, members in and unresolved
+   members, the skipped lists with the reason, the lists removed, the read-back result.
+
+Which lists:
+
+* **PanelApp**: all 433 current panels, Green genes only, the panel version in the description. 8 panels have no Green
+  gene and are skipped and reported (a list cannot be empty): Familial Neural Tube Defects, Testicular cancer pertinent
+  cancer susceptibility, PHACE(S) syndrome, Ultra-rare undescribed monogenic disorders, Undiagnosed monogenic disorder
+  seen in a specialist genetics clinic, Lung cancer pertinent cancer susceptibility, Juvenile dermatomyositis, Severe
+  familial anorexia: 425 lists. `--public-lists-select 100k` is the 175 panels of HumanMine's 2021 scope.
+* **Names**: the 17 panels renamed in PanelApp since 2021 keep the **2021 list name** (the name BlueGenes and users of
+  the lists know) and the description says `PanelApp now names this panel "<current name>"; the list keeps the name it had
+  in 2021.` One switch: `--keep-2021-names` (default; `KEEP_2021_NAMES_DEFAULT` in the tool) or `--current-names`
+  (`--public-lists-names 2021|current` in `full-build.sh`). Flipping it renames those 17 lists: the old names are public
+  `PL_` panel lists the run no longer produces, so they are removed.
+* **The 13 other HumanMine lists** (`curation/public_lists/`, from the 17 November 2026 archive; its README has the
+  provenance): each with its original name, description and tags. The members are the archived identifiers (Entrez ids,
+  UniProt accessions, SNP ids) and count only if the mine matches them to one object by a key field, the test the upload
+  applies. A list that resolves partly is uploaded with ` [Note: this mine holds N of the M members of the original
+  HumanMine list.]` appended; one that resolves to nothing, or whose class the model lacks, is skipped. On the ut demo
+  12 of 13 resolve whole (the two Protein lists too) and `PL_T2DcandSNPs_Voight2010` holds 2 of 29 SNPs.
+
+**A mine rebuild wipes the userprofile database**, and the lists live there: after a rebuild the phase has to run again
+(`--public-lists`). `--from apply_public_lists` re-runs only it. The first run after a rebuild archives an empty mine.
+
+**Production guard.** `--mine` on a host that is not local or private (`www.humanmine.org`, anything `*.org` or public)
+is refused unless `--i-know-this-is-production` is given. Local means `localhost`, `127.0.0.0/8`, `::1`, private
+addresses, `host.docker.internal`, single-label names (a compose service) and `.local`, `.internal`, `.localhost`, `.test`
+and `.lan` names. `full-build.sh` only ever passes `http://localhost:$MINE_PORT/humanmine`.
+
+Timing on the ut demo (4,308 genes, 438 lists, 35,670 members): 13 s to resolve everything, about 2.5 minutes in all for
+a run, the archive of 438 lists included. `GET /service/lists` with 438 public lists: 270 KB, 70 ms. The BlueGenes lists
+page shows the first rows 0.3 to 0.6 s after load (22 pages of 20).
 
 ## Watching a build
 

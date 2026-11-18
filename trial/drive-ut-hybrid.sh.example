@@ -39,6 +39,12 @@ DRIVE_SOURCES=${DRIVE_SOURCES-"go ncbigene reactome hgnc ensembl uniprot clinvar
 DRIVE_EXTRA=${DRIVE_EXTRA---gene-identifiers all}
 ARGS=(--intermine-src "$INTERMINE_SRC" --stack-name "$STACK_NAME" --stock-sources "$DRIVE_STOCK"
       --report-layout curation/humanmine_bluegenes_properties.json --tools-url http://localhost:15001)
+# Milestone 2 (phase apply_public_lists, after apply_templates): the Genomics England PanelApp lists and HumanMine's 13 other
+# public lists, tagged im:public. A rebuild wipes the userprofile database, so every rebuild needs this again. The PanelApp
+# cache group is NOT redistributable yet (BUILD.md, "Genomics England gene lists"), so it is not in this example's
+# defaults: uncomment with your own paths. The archive is a historic_artefacts checkout (with scripts/): the mine's
+# current public lists are exported to a new dated directory there before they are replaced.
+#ARGS+=(--public-lists "$D/panelapp_cache/panelapp" --public-lists-archive "$D/public_lists_archive")
 if [ "${DRIVE_DOWNLOAD:-0}" != 1 ]; then
   if [ "${DRIVE_OFFLINE-1}" = 1 ]; then ARGS=(--offline "${ARGS[@]}"); else ARGS=(--use-cached-data "${ARGS[@]}"); fi
 fi

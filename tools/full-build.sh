@@ -29,6 +29,18 @@
 #   --tools-url URL     The BlueGenes whose /api/tools/all lists the tools the layout may keep (default
 #                       http://localhost:$BG_PORT, the stack's bare BlueGenes, which has no patched tools; for the
 #                       ut demo give the front, http://localhost:15001). Also REPORT_LAYOUT_TOOLS_URL.
+#   --public-lists DIR  In phase apply_public_lists (after apply_templates), make the Genomics England PanelApp lists
+#                       (one per panel, Green genes only) and HumanMine's 13 other public lists
+#                       (curation/public_lists) public lists of the mine, as the superuser, through the web service
+#                       (tools/apply_public_lists.py). DIR is the PanelApp cache group (rdfc2im cache save panelapp,
+#                       which is not redistributable yet: BUILD.md, "Genomics England gene lists"). The mine's current
+#                       public lists are archived first, to a new dated directory of --public-lists-archive. A rebuild
+#                       wipes the userprofile database, so a rebuild needs this flag again. Default off.
+#   --public-lists-archive DIR  The archive repository (a historic_artefacts checkout, with scripts/): each run adds
+#                       DIR/humanmine-public-lists/<date>[-N]/. Required with --public-lists.
+#   --public-lists-select all|100k  All panels (default), or the 175 of HumanMine's 2021 scope.
+#   --public-lists-names 2021|current  The 17 panels renamed in PanelApp since 2021 keep their 2021 list names
+#                       (default) or take the current panel names.
 #   --use-cached-data   Restore the fetched raw data (SPARQL results, the Reactome download) from
 #                       cached_raw_data/ instead of fetching it again. Every file is checked
 #                       against its md5 first, and a cache fetched for a different gene panel,
@@ -223,6 +235,10 @@ TAXON=${TAXON:-9606}
 SKIP_TEMPLATES=0
 REPORT_LAYOUT=""
 TOOLS_URL=${REPORT_LAYOUT_TOOLS_URL:-}
+PUBLIC_LISTS=""
+PUBLIC_LISTS_ARCHIVE=""
+PUBLIC_LISTS_SELECT=all
+PUBLIC_LISTS_NAMES=2021
 USE_CACHED_DATA=0
 OFFLINE=0
 [ "${RDFC2IM_OFFLINE:-}" = 1 ] && { OFFLINE=1; USE_CACHED_DATA=1; }
@@ -263,7 +279,7 @@ STATUS_FILE="$LOG_DIR/build-$RUN_ID.status"   # one line, current phase - `watch
 PHASES=(check_prereqs fetch_inputs rdfc2im_pipeline rdfc2im_project build_humanmine_items
         build_stock_sources fetch_stock_data subset_stock_data prepare_mine_checkout stage_src_data
         start_databases build_dbmodel integrate_sources postprocess build_webapp
-        resolve_bluegenes_deps stage_artifacts start_mine_stack apply_templates verify)
+        resolve_bluegenes_deps stage_artifacts start_mine_stack apply_templates apply_public_lists verify)
 
 # ============================================================== logging & timing
 # Every log line goes to both the terminal and $LOGFILE, timestamped, so `tail -f "$LOGFILE"`
@@ -328,6 +344,10 @@ while [ $# -gt 0 ]; do
     --skip-templates) SKIP_TEMPLATES=1 ;;
     --report-layout) REPORT_LAYOUT=$2; shift ;;
     --tools-url) TOOLS_URL=$2; shift ;;
+    --public-lists) PUBLIC_LISTS=$2; shift ;;
+    --public-lists-archive) PUBLIC_LISTS_ARCHIVE=$2; shift ;;
+    --public-lists-select) PUBLIC_LISTS_SELECT=$2; shift ;;
+    --public-lists-names) PUBLIC_LISTS_NAMES=$2; shift ;;
     --use-cached-data) USE_CACHED_DATA=1 ;;
     --offline) OFFLINE=1; USE_CACHED_DATA=1 ;;
     --cache-dir) RAW_CACHE_DIR=$2; shift ;;
@@ -371,6 +391,19 @@ case "$GENE_IDENTIFIERS" in
   all) SCOPE_MODE[ncbigene]=full; SCOPE_MODE[hgnc]=full ;;
   *) echo "--gene-identifiers wants panel or all, not '$GENE_IDENTIFIERS'" >&2; exit 2 ;;
 esac
+
+case "$PUBLIC_LISTS_SELECT" in
+  all|100k) ;;
+  *) echo "--public-lists-select wants all or 100k, not '$PUBLIC_LISTS_SELECT'" >&2; exit 2 ;;
+esac
+case "$PUBLIC_LISTS_NAMES" in
+  2021|current) ;;
+  *) echo "--public-lists-names wants 2021 or current, not '$PUBLIC_LISTS_NAMES'" >&2; exit 2 ;;
+esac
+if [ -n "$PUBLIC_LISTS" ] && [ -z "$PUBLIC_LISTS_ARCHIVE" ]; then
+  echo "--public-lists needs --public-lists-archive DIR: the mine's current public lists are archived before they are replaced" >&2
+  exit 2
+fi
 
 case "$REACTOME_LEVELS" in
   default|all) ;;
@@ -2145,6 +2178,22 @@ apply_report_layout() {
   local mine="http://localhost:$MINE_PORT/humanmine" bg=${TOOLS_URL:-"http://localhost:$BG_PORT"}
   run python3 tools/apply_humanmine_templates.py "$(dirname "$REPORT_LAYOUT")/humanmine_templates.xml" --mine "$mine" --wait 300
   run python3 tools/apply_report_layout.py "$REPORT_LAYOUT" --mine "$mine" --bluegenes "$bg" --wait 300
+}
+
+# --public-lists: through the web service, after the template phase's restart. The tool archives the mine's current public
+# lists first and stops before any upload if that fails.
+phase_apply_public_lists() {
+  if [ -z "$PUBLIC_LISTS" ]; then
+    log "no --public-lists: the Genomics England lists and HumanMine's other public lists are not applied"
+    return 0
+  fi
+  [ -d "$PUBLIC_LISTS" ] || die "--public-lists: no such directory: $PUBLIC_LISTS"
+  [ -d "$PUBLIC_LISTS_ARCHIVE" ] || die "--public-lists-archive: no such directory: $PUBLIC_LISTS_ARCHIVE"
+  local mine="http://localhost:$MINE_PORT/humanmine" names=--keep-2021-names
+  [ "$PUBLIC_LISTS_NAMES" = current ] && names=--current-names
+  run python3 tools/apply_public_lists.py --mine "$mine" --panelapp-cache "$PUBLIC_LISTS" --legacy curation/public_lists \
+      --archive-repo "$PUBLIC_LISTS_ARCHIVE" --select "$PUBLIC_LISTS_SELECT" "$names" \
+      --report "$LOG_DIR/public-lists-$RUN_ID.json" --wait 300
 }
 
 phase_verify() {

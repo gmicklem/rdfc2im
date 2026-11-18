@@ -1196,3 +1196,62 @@ def test_a_non_panel_gene_resolves_by_symbol_hgnc_id_and_ensembl_id():
         found = [m for kind in ("MATCH", "OTHER") for e in res["matches"][kind]
                  for m in (e.get("matches") or [e])]
         assert {m["summary"]["symbol"] for m in found} == {"BRCA2"}, (ident, res)
+
+
+# --- the public lists of tools/apply_public_lists.py [im-9n4.22, T2.3] --------------------------------------------
+
+RADIAL_LIST = "PL_GenomicsEngland_GenePanel:Radial_dysplasia"
+
+
+def _public_lists():
+    return _get_json(f"{MINE_BASE}/service/lists?format=json")["lists"]
+
+
+def _lists_skip():
+    """None when the mine serves the Genomics England lists (build with --public-lists), else a skip."""
+    if not mine_up():
+        return _skip(f"live checks off or no mine at {MINE_BASE} (make test-live)")
+    if not any(l["name"] == RADIAL_LIST for l in _public_lists()):
+        return _skip("mine has no Genomics England lists (tools/full-build.sh --public-lists, or tools/apply_public_lists.py)")
+    return None
+
+
+def test_the_genomics_england_lists_are_public_and_tagged_without_duplicates():
+    """An anonymous GET /service/lists shows every panel list with both tags, once each, and every list in it is
+    public; the BlueGenes example name resolves (it is hard-coded in its tool documentation)."""
+    if (s := _lists_skip()) is not None:
+        return s
+    lists = _public_lists()
+    names = [l["name"] for l in lists]
+    assert len(names) == len(set(names)), sorted({n for n in names if names.count(n) > 1})
+    panels = [l for l in lists if l["name"].startswith("PL_GenomicsEngland_GenePanel:")]
+    assert len(panels) >= 100
+    for l in panels:
+        assert {"Genomics England gene panel", "im:public"} <= set(l["tags"]), l
+        assert l["type"] == "Gene" and l["size"] > 0 and "version" in l["description"], l
+    assert all("im:public" in l["tags"] for l in lists)
+
+
+def test_radial_dysplasia_resolves_and_its_members_are_the_lists_size():
+    """The name BlueGenes documents. The list is made from the PanelApp's Green genes (47 on 18 Nov 2026); what
+    this checks is that the list's members, read through a query, number what the list says and include BRCA2."""
+    if (s := _lists_skip()) is not None:
+        return s
+    size = next(l["size"] for l in _public_lists() if l["name"] == RADIAL_LIST)
+    assert size > 20
+    rows = query_rows_q('<query model="genomic" view="Gene.primaryIdentifier Gene.symbol">'
+                        f'<constraint path="Gene" op="IN" value="{RADIAL_LIST}"/></query>')
+    assert len(rows) == size and "BRCA2" in {r[1] for r in rows}
+
+
+def test_the_legacy_humanmine_lists_that_resolve_are_public_with_their_own_names():
+    """curation/public_lists: 13 lists HumanMine had besides the panels; this mine holds all of them but the SNP list
+    only in part, which its description says."""
+    if (s := _lists_skip()) is not None:
+        return s
+    by = {l["name"]: l for l in _public_lists()}
+    if "PL_Pax6_Targets" not in by:
+        return _skip("mine built without the legacy lists (--legacy)")
+    assert by["PL_Pax6_Targets"]["size"] == 319 and "im:public" in by["PL_Pax6_Targets"]["tags"]
+    snp = by.get("PL_T2DcandSNPs_Voight2010")
+    assert snp is None or "of the 29 members of the original HumanMine list" in snp["description"] or snp["size"] == 29
