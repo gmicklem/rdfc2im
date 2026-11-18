@@ -361,7 +361,7 @@ def test_gene_panel_is_panel_sized():
     """
     if not mine_up():
         return _skip(f"live checks off or no mine at {MINE_BASE} (make test-live)")
-    rows = query_rows("Gene.primaryIdentifier", "Gene.primaryIdentifier", "!=", "__none__")
+    rows = query_rows("Gene.primaryIdentifier", "Gene.organism.taxonId", "=", "9606")   # panther adds partner genes of other taxa
     assert 0 < len(rows) < 1000, (
         f"expected a panel-sized Gene table, got {len(rows)} - is a source unscoped?")
 
@@ -691,3 +691,130 @@ def test_jbrowse_serves_the_chromosomes_and_the_example_gene():
     feats = _get_json(f"{MINE_BASE}/service/jbrowse/9606/features/{chrom}?start={start}&end={end}&type=Gene")
     names = {f.get("symbol") or f.get("name") for f in feats.get("features", [])}
     assert sym in names, feats
+
+
+# ----------------------------------------------------------------- stock go-annotation, interpro-go [im-9n4.11]
+GO_DATA_SET = "GO Annotation data set"       # GoConverter's data set title
+
+
+def stock_go_loaded() -> bool:
+    try:
+        return bool(query_rows("DataSet.name", "DataSet.name", "=", GO_DATA_SET))
+    except Exception:
+        return False
+
+
+def _go_skip():
+    if not mine_up():
+        return _skip(f"live checks off or no mine at {MINE_BASE} (make test-live)")
+    if not stock_go_loaded():
+        return _skip("mine built without --stock-sources go-annotation")
+    return None
+
+
+def test_the_example_genes_have_go_annotations_copied_from_their_proteins():
+    """GoPostprocess (do-sources) copies Protein annotations to the Gene: CYP2D6 has 33 distinct terms in
+    goa_human, PAX6 57 (HumanMine's 79 is an older release)."""
+    if (s := _go_skip()) is not None:
+        return s
+    for sym, floor in ((EXAMPLE_GENE, 25), ("PAX6", 40)):
+        rows = query_rows("Gene.symbol Gene.goAnnotation.ontologyTerm.identifier", "Gene.symbol", "=", sym)
+        assert len({r[1] for r in rows}) >= floor, (sym, len(rows))
+
+
+def test_go_terms_are_not_duplicated_beside_the_rdf_go_source():
+    """go-annotation and interpro-go key GOTerm on identifier, as the RDF go source does: one object each."""
+    if (s := _go_skip()) is not None:
+        return s
+    ids = [r[0] for r in query_rows("GOTerm.identifier", "GOTerm.identifier", "CONTAINS", "GO:")]
+    assert len(ids) > 40000 and len(ids) == len(set(ids)), (len(ids), len(set(ids)))
+
+
+def test_go_annotation_makes_no_stub_proteins():
+    """The loader also creates a Protein for every UniProt 'with' value; none may lack an organism."""
+    if (s := _go_skip()) is not None:
+        return s
+    rows = query_rows_q('<query model="genomic" view="Protein.primaryAccession"><join path="Protein.organism" style="OUTER"/>'
+                        '<constraint path="Protein.organism" op="IS NULL"/></query>')
+    assert rows == [], rows[:5]
+
+
+def test_the_go_enrichment_widget_is_served_and_enriches_a_list_of_panel_genes():
+    """go_enrichment_for_gene stayed dropped from the web config of a rebuilt mine until build_dbmodel put the
+    upstream file back before reducing it."""
+    if (s := _go_skip()) is not None:
+        return s
+    import base64
+    widgets = {w["name"] for w in _get_json(f"{MINE_BASE}/service/widgets?format=json")["widgets"]}
+    assert "go_enrichment_for_gene" in widgets, widgets
+    auth = {"Authorization": "Basic " + base64.b64encode(b"superuser@intermine.org:intermine").decode()}
+    name = "tmp_live_go_enrichment"
+
+    def call(url, data=None, method=None):
+        req = urllib.request.Request(url, data=data, method=method, headers={**auth, "Content-Type": "text/plain"})
+        return json.loads(urllib.request.urlopen(req, timeout=120).read().decode())
+
+    try:
+        r = call(f"{MINE_BASE}/service/lists?" + urllib.parse.urlencode({"name": name, "type": "Gene", "format": "json"}),
+                 b"1565\n1559\n1557\n1576\n1544\n5080", "POST")
+        assert r["wasSuccessful"] and r["listSize"] == 6, r
+        e = call(f"{MINE_BASE}/service/list/enrichment?" + urllib.parse.urlencode(
+            {"widget": "go_enrichment_for_gene", "list": name, "correction": "Holm-Bonferroni", "maxp": "0.05",
+             "filter": "biological_process", "format": "json"}))
+        assert e["wasSuccessful"] and e["results"], e
+    finally:
+        try:
+            call(f"{MINE_BASE}/service/lists?" + urllib.parse.urlencode({"name": name, "format": "json"}), None, "DELETE")
+        except Exception:
+            pass
+
+
+# ----------------------------------------------------------------- stock panther, mgi-identifiers [im-9n4.12]
+PANTHER_DATA_SET = "Panther orthologue and paralogue predictions"   # PantherConverter's data set title
+
+
+def stock_panther_loaded() -> bool:
+    try:
+        return bool(query_rows("DataSet.name", "DataSet.name", "=", PANTHER_DATA_SET))
+    except Exception:
+        return False
+
+
+def _panther_skip():
+    if not mine_up():
+        return _skip(f"live checks off or no mine at {MINE_BASE} (make test-live)")
+    if not stock_panther_loaded():
+        return _skip("mine built without --stock-sources panther")
+    return None
+
+
+def test_the_example_genes_have_homologues_in_the_partner_organisms():
+    """PAX6 (Entrez 5080) has 12 here (HumanMine 10): mouse, rat, zebrafish (3), fly (5), worm (2)."""
+    if (s := _panther_skip()) is not None:
+        return s
+    rows = query_rows("Gene.homologues.homologue.primaryIdentifier Gene.homologues.homologue.organism.taxonId",
+                      "Gene.primaryIdentifier", "=", "5080")
+    assert len(rows) >= 10 and {r[1] for r in rows} >= {"10090", "7227", "7955", "6239"}, rows
+    assert len(query_rows("Gene.homologues.homologue.primaryIdentifier", "Gene.primaryIdentifier", "=", EXAMPLE_GENE_ID)) >= 20
+
+
+def test_mouse_partner_genes_have_their_mgi_symbols_and_every_gene_has_an_organism():
+    """Panther makes partner genes from an id alone; mgi-identifiers (cut to those genes) adds symbol and name."""
+    if (s := _panther_skip()) is not None:
+        return s
+    rows = query_rows("Gene.homologues.homologue.symbol Gene.homologues.homologue.primaryIdentifier", "Gene.primaryIdentifier", "=", "5080")
+    assert ("Pax6", "MGI:97490") in {tuple(r) for r in rows}, rows
+    nameless = query_rows_q('<query model="genomic" view="Gene.primaryIdentifier"><join path="Gene.organism" style="OUTER"/>'
+                            '<constraint path="Gene.organism" op="IS NULL"/></query>')
+    assert nameless == [], nameless[:5]
+
+
+def test_no_gene_is_duplicated_across_the_homologue_organisms():
+    """One Gene per primaryIdentifier (the panther and mgi-identifiers keys) and one per symbol within a taxon."""
+    if (s := _panther_skip()) is not None:
+        return s
+    rows = query_rows("Gene.primaryIdentifier Gene.symbol Gene.organism.taxonId", "Gene.primaryIdentifier", "CONTAINS", "")
+    ids = [r[0] for r in rows]
+    assert len(ids) == len(set(ids)), "duplicate Gene.primaryIdentifier"
+    syms = [(r[2], r[1]) for r in rows if r[1]]
+    assert len(syms) == len(set(syms)), "duplicate Gene.symbol within a taxon"

@@ -206,12 +206,17 @@ sources:
     licence: PANTHER terms of use, free with citation (unverified)
     redistributable: true
     data_dir: panther/current
+    resolver_taxa: [10116, 7955]
     properties:
       panther.organisms: "9606"
     notes: >-
-      Every file in the directory is parsed as tab-separated orthologues. The gene cells
-      (HUMAN|HGNC=5|UniProtKB=P...) do not split into ids that subset_raw's tab filter matches,
-      so the cut is the resolver gate (T0.3). PANTHER 19 (Apr 2024).
+      Every file in the directory is parsed as tab-separated orthologues. A row is
+      `HUMAN|HGNC=8620|UniProtKB=P26367  MOUSE|MGI=MGI=97490|UniProtKB=P63015  LDO  Euarchontoglires  PTHR45636`;
+      the cut keeps a row when either gene cell holds a panel UniProt accession (subset_raw's tab filter reads
+      the `UniProtKB=` token, [im-9n4.11]). The converter resolves only human, rat and zebrafish genes through
+      the ID resolver (human by HGNC id to the Entrez id, as the primary identifier); mouse, fly, worm and yeast
+      ids pass through as they are, and rat and fish ones too when the resolver has no file for them, so
+      `resolver_taxa` has the build fetch NCBI's rat and zebrafish gene_info for the resolver. PANTHER 19 (Apr 2024).
     files:
       - id: orthologs
         url: https://data.pantherdb.org/ftp/ortholog/current_release/RefGenomeOrthologs.tar.gz
@@ -221,7 +226,46 @@ sources:
         unpack: tar.gz
         member: RefGenomeOrthologs
         stage_as: RefGenomeOrthologs
-        filter: none
+        filter: {format: tab, ids: uniprot, column: "1,2"}
+
+  mgi-identifiers:
+    type: mgi-identifiers
+    jar: intermine
+    licence: MGI data are free to use with citation (Mouse Genome Informatics)
+    redistributable: true
+    data_dir: mgi-identifiers/current
+    needs: [panther]      # its cut is the genes on panther's rows
+    notes: >-
+      Gives the mouse genes their symbol and name (panther creates them with an MGI id alone). The loader reads
+      every row of MRK_List2.rpt (78 MB, about 70,000 markers) and makes a Gene of each marker of type Gene; the
+      cut keeps the rows of the genes on PANTHER rows with a panel gene (`subset_raw.py partner-ids` writes
+      idsets/mgi.txt from the filtered PANTHER file, so panther is cut first). Column 1 is `MGI:97490`.
+    files:
+      - id: markers
+        url: https://www.informatics.jax.org/downloads/reports/MRK_List2.rpt
+        verified: true
+        size: 78776476
+        last_modified: "2026-11-16"
+        stage_as: MRK_List2.rpt
+        filter: {format: tab, ids: mgi, column: "1"}
+
+  rgd-identifiers:
+    type: rgd-identifiers
+    jar: intermine
+    licence: RGD data are free to use with citation (Rat Genome Database)
+    redistributable: true
+    data_dir: rgd-identifiers/current
+    needs: [panther]      # its cut is the genes on panther's rows
+    notes: >-
+      As mgi-identifiers, for rat: GENES_RAT.txt, column 1 the bare RGD number (the loader makes `RGD:<n>`).
+      Not verified: download.rgd.mcw.edu is behind this sandbox's firewall (HTTP 403, approval needed), so the
+      URL is HumanMine's own and was never fetched here.
+    files:
+      - id: genes
+        url: https://download.rgd.mcw.edu/data_release/GENES_RAT.txt
+        verified: false
+        stage_as: GENES_RAT.txt
+        filter: {format: tab, ids: rgd, column: "1", keep_header: true}
 
   psi-intact:
     type: psi

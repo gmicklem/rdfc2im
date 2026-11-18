@@ -552,6 +552,86 @@ named like "1 unlocalized genomic scaffold". Dry-run tested only, never run here
 of `Chromosome.sequence` in Postgres plus the transferred feature sequences, and a filter pass over 3 GB
 (minutes). Its lengths equal the GFF's, so the two loaders agree.
 
+#### GO annotation: go-annotation and interpro-go [im-9n4.11]
+
+`--stock-sources "uniprot uniprot-fasta uniprot-keywords ncbi-gff go-annotation interpro-go"` on the ut stack, same
+panel. `go_enrichment_for_gene` and the `GOAnnotation` model are what it restores.
+
+* **Downloads** (once): `goa_human.gaf.gz` 15,041,996 B, `interpro2go` 3,057,468 B.
+* **Filter.** `subset_raw.py filter --format gaf` on the panel's UniProt ids (1,547 ids, TrEMBL included):
+  906,445 rows in, **9,121 out**, **114 accessions matched**. GOA human holds no row for any panel TrEMBL
+  accession, so "annotate TrEMBL too" has nothing to add: the 114 Swiss-Prot canonicals carry every annotation, and
+  HumanMine's go-annotation annotates `Protein.primaryAccession` too (`9606.typeAnnotated=protein`). interpro2go is
+  loaded whole (`filter: none`, 3 MB): 5,556 GO terms for 14,776 ProteinDomain stubs (`primaryIdentifier` only;
+  they merge with any later `interpro` data).
+* **Result.** GOAnnotation 40,516 (7,019 on Protein, 29,922 on ProteinDomain, 3,575 on Gene via GoPostprocess), GOEvidence
+  7,139, all 114 panel genes annotated; objects 458,469 (was 395,183). Integrate about 2 min, postprocess 105 s.
+  CYP2D6 33 and PAX6 57 distinct GO terms on the Gene: that is what the GAF holds (33 and 57 distinct `GO:` columns for
+  P10635 and P26367); HumanMine's 79 for PAX6 comes from an older GOA release.
+* **Merging.** GOTerm (keyed on `identifier`) 78,100, every one also in the RDF `go` source's data set: no duplicates
+  and no new terms from the GAF or interpro2go. Protein stays 13,723: the loader creates a stub Protein for each
+  UniProt `with` value, but every one matches an existing accession, so no Protein lacks an organism and none is
+  duplicated. 29,760 of the RDF terms are not GO terms at all (identifiers `Reactome:...`, `RHEA:...`, `EC:...`)
+  and have no name; that is the RDF side's, not this source's.
+* **Widget.** `go_enrichment_for_gene` was missing although `GOAnnotation` was now in the model: the mine checkout is copied
+  once and `reduce_mine.py webconfig` only removes, so the widget dropped in the earlier GOA-less builds never came back
+  (the same for the ProteinDomain autocomplete lines of `objectstoresummary.config.properties`). `build_dbmodel` now puts
+  both files back from the upstream checkout (the Solr port edit made again) before reducing them
+  (`_restore_unreduced`). An enrichment request on six panel genes (`/service/list/enrichment`,
+  `widget=go_enrichment_for_gene`, `filter=biological_process`) returns terpenoid metabolic process (p 2.9e-4) and
+  demethylation.
+* **Priorities.** interpro-go declares `ProteinDomain` but not `ProteinDomain.shortName` (interpro's), and HumanMine's
+  `ProteinDomain.shortName = interpro, uniprot, *` made `IntegrationWriter` fail for every source ("ProteinDomain does not
+  have a field shortName"). `reduce_mine.py priorities` now drops lines whose field the model lacks as well as those of absent
+  classes.
+* **The ID resolver.** go-annotation is the first loader to use it (`IdResolverService.getIdResolverForMOD`, taxa
+  7227 7955 10090 10116 4932 6239 9606), though it needs it only for gene-annotated organisms and human is
+  protein-annotated. The integrate log has `EntrezGeneIdResolverFactory - Creating id resolver for [10090, 9606, 7955,
+  4932, 10116] and gene from data file and writing to: .../stock_ut/resolver/entrez` (6239 is in the factory's
+  `taxon.ignored`), then `No records in gene_info file for species: [10090, 559292, 7955, 10116]` (the file holds human
+  only; yeast is looked up as strain 559292) and `Writing id resolver to file: idresolver.cache`. The cache lands in the
+  **mine's root directory** (`$TRIAL_HOME/humanmine/idresolver.cache`, the Gradle JVM's working directory); the integrate
+  task itself prints `deleting idresolver cache` at its start, so a stale one cannot survive a run, and
+  `prepare_mine_checkout`'s delete finds it too. The same run warns `Resolver file does not exist: .../resolver/wormid`
+  (WormBase resolver, not used for human).
+
+#### Homologues: panther and mgi-identifiers [im-9n4.12]
+
+`--stock-sources "... go-annotation interpro-go panther mgi-identifiers"` on the ut stack, same panel.
+
+* **Downloads** (once): `RefGenomeOrthologs.tar.gz` 5.9 MB (PANTHER 19), `MRK_List2.rpt` 78.8 MB (MGI, 16 Nov 2026), and
+  NCBI's `Rattus_norvegicus.gene_info.gz` (2.6 MB) and `Danio_rerio.gene_info.gz` (2.2 MB) for the resolver.
+* **Filter.** A PANTHER row is `HUMAN|HGNC=8620|UniProtKB=P26367<TAB>MOUSE|MGI=MGI=97490|UniProtKB=P63015<TAB>LDO<TAB>Euarchontoglires<TAB>PTHR45636`.
+  The tab filter keeps a row when either of columns 1 and 2 holds a panel UniProt accession (`ids: uniprot`, `column: "1,2"`).
+  `subset_raw.py`'s cell matcher knew `db:id` only; it now also strips `db=` (`UniProtKB=P26367`, `MGI=MGI=97490`), with tests.
+  908,678 rows in, **2,289 out**, 113 of the 114 panel genes matched (HNMT, P50135, has no PANTHER row).
+* **Partner genes and symbols.** PantherConverter creates every partner gene from its id alone (`MGI:97490`, `RGD:3258`,
+  `FBgn...`, `ZDB-GENE-...`, `WBGene...`): no symbol. In HumanMine only mouse and rat get one, from `mgi-identifiers`
+  (MRK_List2.rpt) and `rgd-identifiers` (GENES_RAT.txt); fly, worm, zebrafish and yeast partners have a primary identifier
+  only there too. Both identifier loaders read every marker of their genome, so they are cut to the partner genes:
+  `subset_raw.py partner-ids` writes `idsets/mgi.txt` (182 ids) and `idsets/rgd.txt` (170) from the filtered PANTHER file
+  (panther is therefore cut first, `needs: [panther]` on both), and MRK_List2.rpt is filtered on column 1 to those ids
+  (656,902 markers in, 182 out). The cache group of each also records the md5 of its id set.
+  **rgd-identifiers is in the table but not loaded: `download.rgd.mcw.edu` is behind the sandbox firewall (HTTP 403,
+  "Approval required"), so the URL is unverified (`verified: false`) and the 165 rat genes have no symbol.**
+* **Result.** Homologue 3,166 (2,568 orthologue, 598 least diverged), Gene 1,111 (human 114, worm 257, fly 216, mouse 182,
+  rat 165, zebrafish 152, yeast 25), all objects 465,814 (was 458,469). PAX6 has 12 homologues (HumanMine 10: mouse,
+  rat, 3 fish, 5 fly, 2 worm), CYP2D6 67. 0 duplicate `Gene.primaryIdentifier`, 0 duplicate symbol within a taxon, no Gene
+  without an organism. Only the 114 human and 182 mouse genes have a symbol. Integrate 297 s (was about 2 min), postprocess 101 s.
+* **No human partners outside the panel**: the file has no paralogue rows, so every human Gene is a panel gene.
+* **The ID resolver, now with a real consumer.** PantherConverter resolves only human (HGNC id to Entrez id, the primary
+  identifier), rat and zebrafish genes; mouse, fly, worm and yeast ids are never looked up and pass through. When the
+  resolver holds no file for rat or fish the id passes through too (`no resolver available` is logged). With only the
+  human file that is what happened; now `resolver_taxa: [10116, 7955]` makes the build fetch one NCBI file per
+  taxon (cache group `stock-raw-resolver-<taxon>`, `rdfc2im stock resolver`), cut each to its taxon and append it to
+  `resolver/entrez` (HumanMine's own is one multi-species `gene_info`). The log shows `Gene ... does not have xref
+  pattern: ZFIN` for the fish genes without a ZFIN id and `RESOLVER: failed to resolve gene to one identifier, ignoring
+  gene` 16 times (Ensembl-only or ZFIN-less fish ids and one rat id): the converter drops those. Mouse, fly and yeast
+  files are not fetched: nothing here resolves them (go-annotation's `getIdResolverForMOD` asks for them but annotates human
+  proteins only; it logs `No records in gene_info file for species: [10090, 559292]`).
+* **Layout.** Homology now keeps `homologues`; HumanMine's `Gene_Orth2` is not one of its public templates, so the
+  category holds the class table only.
+
 ### The ID-resolver gate [im-9n4.4]
 
 The stock loaders for psi, biogrid, panther, omim and the HumanMine expression sources have no gene filter; the
@@ -561,6 +641,9 @@ table leaves them `filter: none`. What cuts them is the mine's ID resolver: each
 
 * `fetch_stock_data` downloads NCBI's `Homo_sapiens.gene_info.gz` (public domain, 5.2 MB; cache group
   `stock-raw-resolver` in the stock cache, same URL / `Last-Modified` rules as the other raw groups).
+* A source with `resolver_taxa` in the table (panther: rat 10116 and zebrafish 7955) adds NCBI's per-organism file of each
+  taxon (`rdfc2im stock resolver`; cache group `stock-raw-resolver-<taxon>`); each is cut to its taxon and appended to
+  `entrez` [im-9n4.12].
 * `subset_stock_data` runs `subset_raw.py filter --format gene_info --taxon 9606` on it and writes the result
   uncompressed as `$RDFC2IM_STOCK_DIR/resolver/entrez`. The default keeps **every** human gene, because the mine
   holds all human genes as identifiers (deep annotation only for the panel): interaction and orthologue
@@ -908,6 +991,11 @@ Both read HumanMine's own responses, kept as reference input (fetched 2026-11-18
 `curation/humanmine_templates.xml` is `/service/templates?format=xml` (its production templates live in its userprofile
 database; the humanmine repository's `default-template-queries.xml` holds three). The property and the templates are in
 the mine's userprofile database, so a rebuild removes them until `--report-layout` is passed again.
+
+`--tools-url URL` (or `REPORT_LAYOUT_TOOLS_URL`) names the BlueGenes whose `/api/tools/all` the layout is checked against
+[im-9n4.34]. The default is the stack's own BlueGenes (`http://localhost:$BG_PORT`), which has no patched tools, so every
+tool was dropped from the layout of the ut demo; give it the front, `--tools-url http://localhost:15001`. After a rebuild
+that is meant to show JBrowse 2, `trial/front/gen-jbrowse-config.sh` regenerates the JBrowse 2 config from the mine.
 
 ## Watching a build
 

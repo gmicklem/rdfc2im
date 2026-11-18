@@ -228,7 +228,7 @@ def test_file_rows_say_how_each_file_is_made_and_staged(tmp_path):
     assert u[7:9] == ["uniprot-xml", "uniprot"] and u[12:16] == [
         "/S/subset/uniprot/sprot", "filtered", "uniprot/current", "9606_uniprot_sprot.xml"]
     p = by[("panther", "orthologs")]
-    assert p[5:7] == ["tar.gz", "RefGenomeOrthologs"] and p[12:14] == ["/S/whole/panther/orthologs", "whole"]
+    assert p[5:7] == ["tar.gz", "RefGenomeOrthologs"] and p[12:14] == ["/S/subset/panther/orthologs", "filtered"]
     assert by[("psi-mi-ontology", "obo")][12:16] == ["-", "asis", "psi/ontology/current", "psi-mi.obo"]
     assert by[("biogrid", "organisms")][15] == "-"          # a member glob: staged under member names
     (tmp_path / "omim").mkdir()
@@ -342,3 +342,24 @@ def test_stock_check_cli(capsys):
     assert "not redistributable" in capsys.readouterr().err
     assert main(["stock", "meta", "uniprot", "--restore"]) == 0
     assert capsys.readouterr().out.startswith("--meta spec_md5=")
+
+
+def test_resolver_rows_are_the_taxon_then_the_selected_sources_partner_organisms():
+    table = stock.load_table()
+    rows = [r.split("\t") for r in stock.resolver_rows(table, ["panther", "uniprot"], "9606")]
+    assert [r[0] for r in rows] == ["9606", "10116", "7955"]
+    assert rows[1][1] == "https://ftp.ncbi.nlm.nih.gov/gene/DATA/GENE_INFO/Mammalia/Rattus_norvegicus.gene_info.gz"
+    assert [r[0] for r in map(lambda x: x.split("\t"), stock.resolver_rows(table, ["uniprot"], "9606"))] == ["9606"]
+
+
+def test_a_resolver_taxon_without_a_known_gene_info_file_is_refused():
+    table = copy.deepcopy(stock.load_table())
+    table["panther"]["resolver_taxa"] = [99999]
+    assert any("resolver_taxa" in p for p in stock.validate_table(table))
+
+
+def test_mgi_and_rgd_are_cut_to_the_partner_id_sets():
+    table = stock.load_table()
+    assert table["mgi-identifiers"]["files"][0]["filter"] == {"format": "tab", "ids": "mgi", "column": "1"}
+    assert table["rgd-identifiers"]["files"][0]["filter"]["ids"] == "rgd"
+    assert table["panther"]["files"][0]["filter"] == {"format": "tab", "ids": "uniprot", "column": "1,2"}

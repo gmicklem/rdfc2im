@@ -53,3 +53,34 @@ def test_a_missing_layout_file_is_refused(tmp_path):
     if "[check_prereqs] FATAL" in out:
         return
     assert r.returncode != 0 and "no such file" in out, out
+
+
+def _layout_cmd(plan):
+    return next(c for c in _cmds(plan, "apply_templates") if "tools/apply_report_layout.py" in c)
+
+
+def test_tools_url_option_points_the_layout_at_the_given_blue_genes(tmp_path):
+    """im-9n4.34: the stack's bare BlueGenes has no patched tools; --tools-url names the one that has."""
+    plan = _plan(tmp_path, "--only", "apply_templates", "--report-layout", LAYOUT,
+                 "--tools-url", "http://localhost:15001")
+    if plan is None:
+        return
+    assert "--bluegenes http://localhost:15001 " in _layout_cmd(plan)
+
+
+def test_tools_url_environment_variable_is_the_same_thing(tmp_path):
+    plan = _plan(tmp_path, "--only", "apply_templates", "--report-layout", LAYOUT,
+                 env_extra={"REPORT_LAYOUT_TOOLS_URL": "http://localhost:15001"})
+    if plan is None:
+        return
+    assert "--bluegenes http://localhost:15001 " in _layout_cmd(plan)
+
+
+def test_the_option_wins_over_the_environment_and_the_default_is_the_stack_port(tmp_path):
+    plan = _plan(tmp_path, "--only", "apply_templates", "--report-layout", LAYOUT, "--tools-url", "http://h:1",
+                 env_extra={"REPORT_LAYOUT_TOOLS_URL": "http://localhost:15001"})
+    if plan is not None:
+        assert "--bluegenes http://h:1 " in _layout_cmd(plan)
+    plan = _plan(tmp_path, "--only", "apply_templates", "--report-layout", LAYOUT)
+    if plan is not None:
+        assert "--bluegenes http://localhost:" in _layout_cmd(plan) and "15001" not in _layout_cmd(plan)

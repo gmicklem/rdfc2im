@@ -26,6 +26,9 @@
 #                       response: curation/humanmine_bluegenes_properties.json. Both write through the web service
 #                       as the superuser, so the mine must be up (they wait up to 5 minutes); BUILD.md,
 #                       "The report layout". Default off.
+#   --tools-url URL     The BlueGenes whose /api/tools/all lists the tools the layout may keep (default
+#                       http://localhost:$BG_PORT, the stack's bare BlueGenes, which has no patched tools; for the
+#                       ut demo give the front, http://localhost:15001). Also REPORT_LAYOUT_TOOLS_URL.
 #   --use-cached-data   Restore the fetched raw data (SPARQL results, the Reactome download) from
 #                       cached_raw_data/ instead of fetching it again. Every file is checked
 #                       against its md5 first, and a cache fetched for a different gene panel,
@@ -211,6 +214,7 @@ GENE_PANEL=${GENE_PANEL:-"$HERE/curation/demo_gene_panel.txt"}
 TAXON=${TAXON:-9606}
 SKIP_TEMPLATES=0
 REPORT_LAYOUT=""
+TOOLS_URL=${REPORT_LAYOUT_TOOLS_URL:-}
 USE_CACHED_DATA=0
 OFFLINE=0
 [ "${RDFC2IM_OFFLINE:-}" = 1 ] && { OFFLINE=1; USE_CACHED_DATA=1; }
@@ -314,6 +318,7 @@ while [ $# -gt 0 ]; do
     --taxon) TAXON=$2; shift ;;
     --skip-templates) SKIP_TEMPLATES=1 ;;
     --report-layout) REPORT_LAYOUT=$2; shift ;;
+    --tools-url) TOOLS_URL=$2; shift ;;
     --use-cached-data) USE_CACHED_DATA=1 ;;
     --offline) OFFLINE=1; USE_CACHED_DATA=1 ;;
     --cache-dir) RAW_CACHE_DIR=$2; shift ;;
@@ -384,7 +389,6 @@ STOCK_FILTERED_CACHE=${RDFC2IM_STOCK_FILTERED_CACHE:-}; STOCK_FILTERED_CACHE=${S
 # The ID resolver's data directory (resolver.file.rootpath): EntrezGeneIdResolverFactory reads
 # $RESOLVER_ROOT/entrez, plain text in NCBI gene_info format (plan 50 2.2). Only used with --stock-sources.
 RESOLVER_ROOT="$STOCK_DIR/resolver"
-RESOLVER_URL=https://ftp.ncbi.nlm.nih.gov/gene/DATA/GENE_INFO/Mammalia/Homo_sapiens.gene_info.gz
 RESOLVER_GROUP=stock-raw-resolver
 PG_CONTAINER="$RDFC2IM_PREFIX-postgres"
 SOLR_CONTAINER="$RDFC2IM_PREFIX-solr"
@@ -1103,37 +1107,49 @@ phase_fetch_stock_data() {
   done
 }
 
-# The ID resolver's gene_info (plan 50 2.2): one raw cache group, stock-raw-resolver, beside the stock
-# sources', fetched under the same rules (Last-Modified check, --use-cached-data only verifies). Public
-# domain (NCBI), so the group says redistributable=true; it lives in the stock cache, not cached_raw_data/.
+# The ID resolver's gene_info (plan 50 2.2): one raw cache group per taxon, stock-raw-resolver for the --taxon one
+# and stock-raw-resolver-<taxon> for the partner organisms the selected sources resolve (`rdfc2im stock resolver`:
+# panther's rat and zebrafish, NCBI's per-organism files), beside the stock sources', fetched under the same rules
+# (Last-Modified check, --use-cached-data only verifies). Public domain (NCBI), so the groups say
+# redistributable=true; they live in the stock cache, not cached_raw_data/.
 _fetch_resolver_data() {
-  local raw; raw=$(basename "$RESOLVER_URL")
-  local meta=(--meta "url.gene_info=$RESOLVER_URL")
+  local rows t url
+  rows=$(python3 -m rdfc2im stock resolver $STOCK_SOURCES --taxon "$TAXON") || die "rdfc2im stock resolver failed"
+  while IFS=$'\t' read -r -u 4 t url _; do
+    _fetch_resolver_file "$t" "$url"
+  done 4<<< "$rows"
+}
+
+_resolver_group() { [ "$1" = "$TAXON" ] && echo "$RESOLVER_GROUP" || echo "$RESOLVER_GROUP-$1"; }
+
+_fetch_resolver_file() {
+  local t=$1 url=$2 raw group; raw=$(basename "$url"); group=$(_resolver_group "$t")
+  local meta=(--meta "url.gene_info=$url")
   if [ "$USE_CACHED_DATA" -eq 1 ]; then
-    if [ -f "$STOCK_RAW_CACHE/$RESOLVER_GROUP/META.json" ] || [ "$DRY_RUN" -eq 1 ]; then
-      run python3 -m rdfc2im cache verify "$RESOLVER_GROUP" --cache-dir "$STOCK_RAW_CACHE" "${meta[@]}"
+    if [ -f "$STOCK_RAW_CACHE/$group/META.json" ] || [ "$DRY_RUN" -eq 1 ]; then
+      run python3 -m rdfc2im cache verify "$group" --cache-dir "$STOCK_RAW_CACHE" "${meta[@]}"
     else
-      die "resolver: nothing cached in $STOCK_RAW_CACHE/$RESOLVER_GROUP - run once without --use-cached-data/--offline"
+      die "resolver: nothing cached in $STOCK_RAW_CACHE/$group - run once without --use-cached-data/--offline"
     fi
     return 0
   fi
   local lm
   if [ "$DRY_RUN" -eq 1 ]; then
-    log "+ curl -fsSIL $RESOLVER_URL  (its Last-Modified)"; lm=dry-run
+    log "+ curl -fsSIL $url  (its Last-Modified)"; lm=dry-run
   else
-    lm=$(_last_modified "$RESOLVER_URL")
+    lm=$(_last_modified "$url")
   fi
   meta+=(--meta "last_modified.gene_info=$lm")
-  if [ "$DRY_RUN" -eq 0 ] && [ "$lm" != unknown ] && [ -f "$STOCK_RAW_CACHE/$RESOLVER_GROUP/META.json" ] &&
-     python3 -m rdfc2im cache verify "$RESOLVER_GROUP" --cache-dir "$STOCK_RAW_CACHE" "${meta[@]}" >/dev/null 2>&1; then
-    log "resolver: cached gene_info is current (same URL and Last-Modified) - not fetched again"
+  if [ "$DRY_RUN" -eq 0 ] && [ "$lm" != unknown ] && [ -f "$STOCK_RAW_CACHE/$group/META.json" ] &&
+     python3 -m rdfc2im cache verify "$group" --cache-dir "$STOCK_RAW_CACHE" "${meta[@]}" >/dev/null 2>&1; then
+    log "resolver: cached gene_info for taxon $t is current (same URL and Last-Modified) - not fetched again"
     return 0
   fi
-  local incoming="$STOCK_DIR/incoming/resolver"
+  local incoming="$STOCK_DIR/incoming/resolver-$t"
   run rm -rf "$incoming"
   run mkdir -p "$incoming"
-  run curl -fsSL --retry 3 --retry-delay 10 -o "$incoming/$raw" "$RESOLVER_URL"
-  run python3 -m rdfc2im cache save "$RESOLVER_GROUP" "$incoming" --cache-dir "$STOCK_RAW_CACHE" "${meta[@]}" \
+  run curl -fsSL --retry 3 --retry-delay 10 -o "$incoming/$raw" "$url"
+  run python3 -m rdfc2im cache save "$group" "$incoming" --cache-dir "$STOCK_RAW_CACHE" "${meta[@]}" \
     --meta redistributable=true --meta licence=public_domain_NCBI
   run rm -rf "$incoming"
 }
@@ -1211,20 +1227,41 @@ phase_subset_stock_data() {
   # identifiers (deep annotation only for the panel), so the default keeps every row of the taxon;
   # --resolver-scope panel keeps only the panel's Entrez ids. prepare_mine_checkout sets
   # resolver.file.rootpath. The factory reads plain text, so the output has no .gz suffix.
+  # One NCBI file per taxon (the --taxon one first, then the selected sources' `resolver_taxa`: panther's rat and
+  # zebrafish), each cut to its taxon and appended to the one `entrez` file the factory reads [im-9n4.11].
+  # --resolver-scope panel cuts the --taxon file to the panel's Entrez ids; the partner organisms stay whole.
   run mkdir -p "$RESOLVER_ROOT"
-  local rargs=(--format gene_info --in "$STOCK_RAW_CACHE/$RESOLVER_GROUP/data/$(basename "$RESOLVER_URL")"
-               --out "$RESOLVER_ROOT/entrez" --taxon "$TAXON")
-  [ "$RESOLVER_SCOPE" = panel ] && rargs+=(--ids "$STOCK_DIR/idsets/entrez.txt")
-  run python3 tools/subset_raw.py filter "${rargs[@]}"
+  local rrows rt rurl first=1
+  rrows=$(python3 -m rdfc2im stock resolver $STOCK_SOURCES --taxon "$TAXON") || die "rdfc2im stock resolver failed"
+  while IFS=$'\t' read -r -u 4 rt rurl _; do
+    local rargs=(--format gene_info --in "$STOCK_RAW_CACHE/$(_resolver_group "$rt")/data/$(basename "$rurl")" --taxon "$rt")
+    if [ "$first" -eq 1 ]; then
+      first=0
+      rargs+=(--out "$RESOLVER_ROOT/entrez")
+      [ "$RESOLVER_SCOPE" = panel ] && rargs+=(--ids "$STOCK_DIR/idsets/entrez.txt")
+      run python3 tools/subset_raw.py filter "${rargs[@]}"
+    else
+      rargs+=(--out "$STOCK_DIR/unpacked/resolver-$rt.gene_info")
+      run python3 tools/subset_raw.py filter "${rargs[@]}"
+      run bash -c "cat '$STOCK_DIR/unpacked/resolver-$rt.gene_info' >> '$RESOLVER_ROOT/entrez'"
+    fi
+  done 4<<< "$rrows"
   local genes_md5; genes_md5=$(md5sum "$GENE_PANEL" | cut -d' ' -f1)
-  local src
-  for src in $STOCK_SOURCES; do
+  # panther goes first: mgi-identifiers and rgd-identifiers are cut to the genes on its filtered rows
+  # (idsets/mgi.txt, idsets/rgd.txt, `subset_raw.py partner-ids` after the panther step below) [im-9n4.11]
+  local src ordered=""
+  for src in $STOCK_SOURCES; do [ "$src" = panther ] && ordered="panther $ordered" || ordered="$ordered $src"; done
+  for src in $ordered; do
     local cdir group="stock-$src" filtered=0 spec more restore=0
     cdir=$(_stock_filtered_cache "$src")
     spec=$(python3 -m rdfc2im stock meta "$src" --restore) || die "rdfc2im stock meta $src failed"
     more=$(python3 -m rdfc2im stock meta "$src" --record) || die "rdfc2im stock meta $src failed"
     # shellcheck disable=SC2206  # --meta k=v words without whitespace
     local need=(--meta "genes_md5=$genes_md5" --meta "taxon=$TAXON" $spec)
+    case "$src" in   # these two are cut to panther's partner genes: a new PANTHER release changes the cut
+      mgi-identifiers) need+=(--meta "partners_md5=$(md5sum "$STOCK_DIR/idsets/mgi.txt" 2>/dev/null | cut -d' ' -f1 || true)") ;;
+      rgd-identifiers) need+=(--meta "partners_md5=$(md5sum "$STOCK_DIR/idsets/rgd.txt" 2>/dev/null | cut -d' ' -f1 || true)") ;;
+    esac
     # --use-cached-data restores the filtered group - unless none matches this panel (a new
     # genes_md5 after a panel change, or a first run) while the raw group is cached: filtering needs
     # no network, so the files are cut from the raw group and saved, as without the option [im-9n4.6]
@@ -1255,6 +1292,10 @@ phase_subset_stock_data() {
       # shellcheck disable=SC2086  # --meta k=v words without whitespace
       run python3 -m rdfc2im cache save "$group" "$STOCK_DIR/subset/$src" --cache-dir "$cdir" "${need[@]}" \
         $more $(_stock_releases "$src")
+    fi
+    if [ "$src" = panther ]; then
+      run python3 tools/subset_raw.py partner-ids --in "$STOCK_DIR/subset/panther/orthologs/RefGenomeOrthologs" \
+        --ids "$STOCK_DIR/idsets/uniprot.txt" --out "$STOCK_DIR/idsets"
     fi
   done
 }
@@ -1744,8 +1785,25 @@ merged_model_xml() {
   echo "$1/dbmodel/build/resources/main/genomic_model.xml"   # not built yet (--dry-run): the traditional place
 }
 
+# The mine checkout is copied once (phase_prepare_mine_checkout) and the reductions of phase_build_dbmodel only
+# ever remove: webconfig-model.xml loses the widgets and fields of classes the model lacks, and
+# objectstoresummary.config.properties its autocomplete lines. A build with more stock sources than the one
+# before it (go-annotation adds GOAnnotation) therefore never got them back: go_enrichment_for_gene stayed
+# dropped from the 9n4.9 build, ProteinDomain's autocomplete too [im-9n4.11]. So the two files are put back
+# as the upstream checkout has them (the Solr port edit made again) before the reductions run on them.
+_restore_unreduced() {
+  local mine=$1 clone="$UPSTREAM_CACHE/humanmine" rel
+  [ "$IM_LINE" = "6.0" ] && clone="$UPSTREAM_CACHE/humanmine-6.0"
+  [ -d "$clone" ] || [ "$DRY_RUN" -eq 1 ] || die "no pristine mine checkout at $clone to restore the web config from"
+  for rel in webapp/src/main/webapp/WEB-INF/webconfig-model.xml dbmodel/resources/objectstoresummary.config.properties; do
+    run bash -c "cat '$clone/$rel' > '$mine/$rel'"
+  done
+  run sed -i "s|localhost:[0-9]*/solr/|localhost:$SOLR_PORT/solr/|" "$mine/dbmodel/resources/objectstoresummary.config.properties"
+}
+
 phase_build_dbmodel() {
   local mine="$TRIAL_HOME/humanmine"
+  _restore_unreduced "$mine"
   # Regenerate the model from scratch. dbmodel/build holds the generated genomic_model.xml (and the
   # resources the later reduce_mine.py trims read), and Gradle considers producing it up to date
   # when only the CONTENT of the already-installed bio-source-humanmine-items jar changed - same
@@ -2017,7 +2075,7 @@ phase_apply_templates() {
 # an entry whose template the mine does not serve.
 apply_report_layout() {
   [ -f "$REPORT_LAYOUT" ] || die "--report-layout: no such file: $REPORT_LAYOUT"
-  local mine="http://localhost:$MINE_PORT/humanmine" bg="http://localhost:$BG_PORT"
+  local mine="http://localhost:$MINE_PORT/humanmine" bg=${TOOLS_URL:-"http://localhost:$BG_PORT"}
   run python3 tools/apply_humanmine_templates.py "$(dirname "$REPORT_LAYOUT")/humanmine_templates.xml" --mine "$mine" --wait 300
   run python3 tools/apply_report_layout.py "$REPORT_LAYOUT" --mine "$mine" --bluegenes "$bg" --wait 300
 }

@@ -14,6 +14,9 @@ written transparently by file suffix.
       Filter one raw file; prints one JSON line with the record counts. gff3 also takes
       --keep-types gene (rows of that type kept for every id, without descendants).
 
+  subset_raw.py partner-ids --in PANTHER_FILE --ids UNIPROT_IDS --out DIR
+      mgi.txt and rgd.txt: the MGI and RGD ids of every gene on a PANTHER row with a panel gene.
+
   subset_raw.py chromosome-lengths --in GFF --out ITEMS.xml [--taxon ID] [--data-set NAME]
       Chromosome lengths from the ##sequence-region lines, as Items XML (see chromosome_lengths).
 
@@ -366,8 +369,8 @@ _TOKEN_SPLIT_RE = re.compile(r"[|;,]")
 
 def _cell_hit(cell, ids):
     """The id matched by a tab cell, or None. The whole cell is tried first, then each '|' ';' ','
-    separated token, each also without a 'db:' prefix (PSI-MITAB 'uniprotkb:P10635') and, for an
-    isoform, on its base accession."""
+    separated token, each also without a 'db:' or 'db=' prefix (PSI-MITAB 'uniprotkb:P10635', PANTHER
+    'HUMAN|HGNC=8620|UniProtKB=P26367') and, for an isoform, on its base accession."""
     cell = cell.strip()
     if not cell:
         return None
@@ -375,7 +378,8 @@ def _cell_hit(cell, ids):
         return cell
     for tok in _TOKEN_SPLIT_RE.split(cell):
         tok = tok.strip()
-        for cand in (tok, tok.rsplit(":", 1)[-1]):
+        # 'db:id' (PSI-MITAB 'uniprotkb:P10635') and 'db=id' (PANTHER 'UniProtKB=P26367', 'MGI=MGI=97490')
+        for cand in (tok, tok.rsplit(":", 1)[-1], tok.rsplit("=", 1)[-1]):
             if cand in ids:
                 return cand
             base = _base_accession(cand)
@@ -427,6 +431,52 @@ def filter_tab(src, dst, ids, columns, keep_comments=False):
                 n_out += 1
                 fout.write(line)
     return _summary("tab", n_in, n_out, ids, matched)
+
+
+# ---------------------------------------------------------------- PANTHER partner ids
+
+def _panther_cell_ids(cell):
+    """('MGI', 'MGI:97490') or ('RGD', '3258') ... for a PANTHER gene cell 'MOUSE|MGI=MGI=97490|UniProtKB=P63015';
+    None when the cell has no gene id part. The id is the text after the last '=', with 'MGI:' put back as the
+    converter does (PantherConverter prependDBName=MGI,RGD,HGNC), but not for RGD: rgd-identifiers' file lists
+    the bare number."""
+    parts = cell.strip().split("|")
+    if len(parts) < 2 or "=" not in parts[1]:
+        return None
+    db, ident = parts[1].split("=", 1)[0], parts[1].rsplit("=", 1)[-1]
+    return db, (f"MGI:{ident}" if db == "MGI" else ident)
+
+
+def partner_ids(src, ids, dbs=("MGI", "RGD")):
+    """db -> sorted ids of the genes that share a PANTHER row with a panel gene (any gene cell of a row whose
+    columns 1 or 2 hit `ids`): the genes PantherConverter will create, which mgi-identifiers and
+    rgd-identifiers are then cut down to [im-9n4.11]."""
+    out = {d: set() for d in dbs}
+    with open_text(src) as fin:
+        for line in fin:
+            if line.startswith("#") or not line.strip():
+                continue
+            cells = line.rstrip("\r\n").split("\t")
+            if len(cells) < 2 or not any(_cell_hit(c, ids) for c in cells[:2]):
+                continue
+            for c in cells[:2]:
+                got = _panther_cell_ids(c)
+                if got and got[0] in out:
+                    out[got[0]].add(got[1])
+    return {d: sorted(v) for d, v in out.items()}
+
+
+def run_partner_ids(a):
+    if not os.path.isfile(a.infile):
+        raise SubsetError(f"input not found: {a.infile}")
+    if not os.path.isfile(a.ids):
+        raise SubsetError(f"--ids file not found: {a.ids}")
+    found = partner_ids(a.infile, read_id_file(a.ids))
+    os.makedirs(a.out, exist_ok=True)
+    for db, ids in found.items():
+        with open(os.path.join(a.out, db.lower() + ".txt"), "w", encoding="utf-8") as fh:
+            fh.write("".join(i + "\n" for i in ids))
+    print(json.dumps({db.lower(): len(v) for db, v in found.items()}))
 
 
 # ---------------------------------------------------------------- gene_info
@@ -739,6 +789,10 @@ def build_parser():
     f.add_argument("--taxon", help="gene_info: keep this tax_id")
     f.add_argument("--keep-comments", action="store_true", help="tab: also keep the first line (a header without '#')")
     f.add_argument("--keep-types", help="gff3: feature types kept for every id, without descendants (e.g. gene)")
+    q = sub.add_parser("partner-ids", help="mgi.txt / rgd.txt: the partner genes of the panel's PANTHER rows")
+    q.add_argument("--in", dest="infile", required=True, help="the filtered PANTHER file")
+    q.add_argument("--ids", required=True, help="the panel's UniProt id set")
+    q.add_argument("--out", required=True, help="directory the id sets go to (next to the panel's)")
     c = sub.add_parser("chromosome-lengths",
                        help="Items XML of Chromosome lengths from a GFF3 file's ##sequence-region lines")
     c.add_argument("--in", dest="infile", required=True)
@@ -775,6 +829,8 @@ def main(argv=None):
             run_idsets(a)
         elif a.cmd == "chromosome-lengths":
             run_chromosome_lengths(a)
+        elif a.cmd == "partner-ids":
+            run_partner_ids(a)
         else:
             run_filter(a)
     except SubsetError as e:
