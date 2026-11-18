@@ -601,7 +601,14 @@ predicates:
     im: Chromosome.primaryIdentifier
     status: guess
     basis: knowledge
-    note: value like 1 or X -> Chromosome.primaryIdentifier; HumanMine chromosomes are keyed by primaryIdentifier+organism so include the Organism column in this table
+    filter: "regex:^([0-9]{1,2}|X|Y)$"
+    note: >-
+      value like 1 or X -> Chromosome.primaryIdentifier; HumanMine chromosomes are keyed by
+      primaryIdentifier+organism so include the Organism column in this table.  The filter keeps
+      the 24 nuclear chromosomes the stock ncbi-gff loader names: the whole human set
+      (--gene-identifiers all) also has "MT" (37 genes; ncbi-gff maps no MT), "Un" (placed on no
+      chromosome) and "X|Y" (pseudoautosomal), which made three extra Chromosome objects with no
+      length [im-9n4.40].  The gene keeps its row; only the chromosome link is blanked.
   - source: ncbigene
     pred: ncbio:taxid
     class: Gene

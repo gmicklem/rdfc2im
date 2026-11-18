@@ -404,3 +404,35 @@ def test_stage_artifacts_is_per_stack(tmp_path):
     assert f"RDFC2IM_ARTIFACTS={tmp_path}/trial_home/artifacts " in named, named
     assert "RDFC2IM_ARTIFACTS" not in stage_cmd({}), "the default stack keeps the compose file's ./artifacts"
     assert "RDFC2IM_ARTIFACTS=/x/art " in stage_cmd({"RDFC2IM_ARTIFACTS": "/x/art"}, "--stack-name", "zz")
+
+
+def test_gene_identifiers_all_fetches_ncbigene_and_hgnc_unscoped_and_keeps_pubmed_on_the_panel(tmp_path):
+    """--gene-identifiers all [im-9n4.40]: ncbigene and hgnc get --taxon only (scope=full, no
+    genes_md5 in their cache meta), every other gene-shaped source keeps --genes, and the pubmed
+    PMID list is gathered from the panel genes' cut of the hgnc items, not from all 44,000 genes.
+    The default (panel) build is unchanged."""
+    srcs = "ncbigene hgnc ensembl pubmed"
+    full = _plan(tmp_path, "--only", "rdfc2im_pipeline", "--sources", srcs, "--gene-identifiers", "all")
+    panel = _plan(tmp_path, "--only", "rdfc2im_pipeline", "--sources", srcs)
+    if full is None or panel is None:
+        return
+    fc, pc = _cmds(full), _cmds(panel)
+    for src in ("ncbigene", "hgnc"):
+        t = next(c for c in fc if f"rdfc2im translate --source {src}" in c)
+        assert "--taxon 9606" in t and "--genes" not in t, t
+        save = next(c for c in fc if f"rdfc2im cache save {src} " in c)
+        assert "scope=full" in _meta(save) and not any(m.startswith("genes_md5=") for m in _meta(save)), save
+        assert "--genes @" in next(c for c in pc if f"rdfc2im translate --source {src}" in c)
+    assert "--genes @" in next(c for c in fc if "rdfc2im translate --source ensembl" in c)
+    cut = next(i for i, c in enumerate(fc) if "subset_raw.py panel-items" in c and "out/hgnc/items/hgnc.xml" in c)
+    grep = next(i for i, c in enumerate(fc) if "cited_pmids.txt" in c and "grep" in c)
+    assert cut < grep and "hgnc-panel-items.xml" in fc[grep] and "out/{hgnc," not in fc[grep], fc[grep]
+    assert not any("panel-items" in c for c in pc)
+    assert "out/{hgnc,uniprot,gwascatalog,reactome}" in next(c for c in pc if "cited_pmids.txt" in c and "grep" in c)
+
+
+def test_gene_identifiers_takes_panel_or_all_only(tmp_path):
+    env = dict(os.environ, TRIAL_HOME=str(tmp_path / "trial_home"), RUN_ID="test", LOG_DIR=str(tmp_path / "logs"))
+    r = subprocess.run(["bash", "tools/full-build.sh", "--dry-run", "--gene-identifiers", "some"], cwd=ROOT,
+                       env=env, capture_output=True, text=True)
+    assert r.returncode == 2 and "--gene-identifiers wants panel or all" in r.stdout + r.stderr

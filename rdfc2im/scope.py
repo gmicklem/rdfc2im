@@ -147,6 +147,29 @@ def apply_gene_scope(rows: List[dict], im_field: str, identifiers: List[str]) ->
     return rows, (f"has no query-level Gene.{im_field} row to restrict a gene list against")
 
 
+def apply_full_scope_filter(rows: List[dict], spec: dict) -> Tuple[List[dict], List[str]]:
+    """Restrict an UNSCOPED (no gene list) run of a source to the records sources.yaml's
+    `full_scope_filter` keeps: {"Class.field": [allowed values, ...]}.
+
+    For ncbigene: RDF Portal's NCBI Gene graph holds 194,018 human records, 128,261 of them
+    `biological-region` (enhancers, silencers, replication origins) and 2,043 `other`/`unknown`.
+    The stock ncbi-gene loader never loads those three types (NcbiGeneInfoParser.TYPES_TO_IGNORE),
+    which is why HumanMine has about 64,000 human genes and not 194,000.  The field is promoted to
+    required, so it joins every table's query (sparql.query_rows puts a source's required rows in
+    every table): the satellite tables (synonyms, cross references) of a dropped record are not
+    fetched either, instead of creating identifier-only Gene items for it [im-9n4.40].
+
+    A gene-scoped run never calls this: its queries stay exactly what they were.
+    Returns (rows, notes): a field this source does not map is reported, not ignored."""
+    notes: List[str] = []
+    for path, terms in (spec or {}).items():
+        cls, _, field = path.partition(".")
+        rows, ok = restrict_field(rows, cls, field, [str(t) for t in terms], promote_optional=True)
+        if not ok:
+            notes.append(f"full_scope_filter {path}: no query-level row maps it - not applied")
+    return rows, notes
+
+
 def extract_publication_pmids(paths: List[str]) -> List[str]:
     """Scan already-generated items.xml files for Publication.pubMedId attributes - the set of
     papers actually cited by the genes/variants/associations loaded from every other source in

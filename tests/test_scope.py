@@ -82,6 +82,27 @@ def test_gene_scope_promotes_an_optional_gene_link_without_touching_the_input():
     assert rows[0]["required"] == "no"  # input untouched
 
 
+def test_full_scope_filter_restricts_every_table_of_an_unscoped_fetch():
+    """im-9n4.40: an unscoped ncbigene fetch keeps the gene types the stock loader keeps.  The
+    typeOfGene row lives in `main` only and is optional; promoted to required it joins every
+    table's query (sparql.query_rows), so a biological-region record's synonyms are not fetched
+    either.  The input rows stay as curated."""
+    from rdfc2im.scope import apply_full_scope_filter
+    from rdfc2im.sparql import query_rows
+    rows = [_row("main", "Gene", "primaryIdentifier"),
+            dict(_row("main", "Gene", "typeOfGene", required="no"), column="type_of_gene", predicate="t"),
+            dict(_row("main_gene_synonym", "Synonym", "value", required="no"), column="syn", predicate="s")]
+    out, notes = apply_full_scope_filter(rows, {"Gene.typeOfGene": ["protein-coding", "ncRNA"]})
+    assert notes == []
+    t = next(r for r in out if r["im_field"] == "typeOfGene")
+    assert t["required"] == "yes" and t["value"] == '"protein-coding" "ncRNA"'
+    assert rows[1]["required"] == "no" and rows[1]["value"] == ""
+    sat = query_rows(out, "main_gene_synonym", include_guess=True)
+    assert [r["column"] for r in sat] == ["c", "type_of_gene", "syn"]
+    out2, notes2 = apply_full_scope_filter(rows, {"Gene.biotype": ["x"]})
+    assert out2 == rows and notes2 and "not applied" in notes2[0]
+
+
 def test_gene_scope_field_not_mapped_is_skipped():
     rows = [_row("main", "Gene", "primaryIdentifier", "")]
     out, skip = apply_gene_scope(rows, "secondaryIdentifier", ["ENSG1"])

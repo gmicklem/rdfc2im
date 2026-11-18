@@ -91,6 +91,14 @@
 #   --resolver-scope panel|taxon  What that entrez file holds: taxon (default) every gene of --taxon, so the
 #                       mine holds all human genes as identifiers and interaction/orthologue partners outside
 #                       the panel still resolve (plan 50 D-1); panel only the panel genes (strict subset).
+#   --gene-identifiers panel|all  Which human genes the RDF identifier sources hold. panel (default): ncbigene and
+#                       hgnc are fetched for the --genes panel like every other gene-shaped source. all: both are
+#                       SCOPE_MODE full (every human gene of the types the stock ncbi-gene loader keeps:
+#                       sources.yaml full_scope_filter), so interaction partners have symbols and a list resolves
+#                       by symbol, HGNC id or Ensembl id (plan 50 2.2 b, D-1). The deep annotation stays on the
+#                       panel, and so do the id sets subset_raw cuts the stock files to and the PMIDs pubmed is
+#                       fetched for. Their cache groups are recorded as scope=full: give them a cache of their own
+#                       (--cache-dir), not the panel's release cache [im-9n4.40].
 #   --stock-local DIR   Local copies of stock data: DIR/<source>/<raw file name>. Used instead of a
 #                       download when present; the only way in for a source that is not
 #                       redistributable (OMIM: D-7). Also RDFC2IM_STOCK_LOCAL.
@@ -223,6 +231,7 @@ REACTOME_LEVELS=${REACTOME_LEVELS:-default}
 STOCK_SOURCES=${STOCK_SOURCES:-}
 STOCK_LOCAL=${RDFC2IM_STOCK_LOCAL:-}
 RESOLVER_SCOPE=taxon
+GENE_IDENTIFIERS=panel
 WITH_GENOME_SEQUENCE=0
 JBROWSE2_SRC=${JBROWSE2_SRC:-}
 WITH_FRONT=0
@@ -329,6 +338,7 @@ while [ $# -gt 0 ]; do
     --stock-local) STOCK_LOCAL=$2; shift ;;
     --with-genome-sequence) WITH_GENOME_SEQUENCE=1 ;;
     --resolver-scope) RESOLVER_SCOPE=$2; shift ;;
+    --gene-identifiers) GENE_IDENTIFIERS=$2; shift ;;
     --jbrowse2-src) JBROWSE2_SRC=$2; shift ;;
     --with-front) WITH_FRONT=1 ;;
     -h|--help) usage; exit 0 ;;
@@ -354,6 +364,12 @@ fi
 case "$RESOLVER_SCOPE" in
   panel|taxon) ;;
   *) echo "--resolver-scope wants panel or taxon, not '$RESOLVER_SCOPE'" >&2; exit 2 ;;
+esac
+# --gene-identifiers all: the identifier sources hold every human gene; everything else keeps its mode
+case "$GENE_IDENTIFIERS" in
+  panel) ;;
+  all) SCOPE_MODE[ncbigene]=full; SCOPE_MODE[hgnc]=full ;;
+  *) echo "--gene-identifiers wants panel or all, not '$GENE_IDENTIFIERS'" >&2; exit 2 ;;
 esac
 
 case "$REACTOME_LEVELS" in
@@ -736,8 +752,18 @@ phase_rdfc2im_pipeline() {
       # with zero actual matches - confirmed live, silently produced an empty cited_pmids.txt, which
       # made cli.py's `if pmids and pmid_field` (falsy on []) fall through to an unrestricted,
       # LIMIT-0 fetch of all of PubMed instead of the intended PMID-scoped one.
-      run bash -c "grep -ahoE '\"[0-9]{4,9}\"' out/{hgnc,uniprot,gwascatalog,reactome}/items/*.xml 2>/dev/null \
-                    | tr -d '\"' | sort -u > '$pmid_file'"
+      if [ "${SCOPE_MODE[hgnc]}" = full ] && [[ " $SOURCES " == *" hgnc "* ]]; then
+        # --gene-identifiers all: hgnc holds every human gene (about 23,500 papers); the PMIDs stay the
+        # panel's, read from the panel genes' cut of its items (subset_raw.py panel_items) [im-9n4.40]
+        local hgnc_cut="$TRIAL_HOME/hgnc-panel-items.xml"
+        run python3 tools/subset_raw.py panel-items --genes "$GENE_PANEL" --in out/hgnc/items/hgnc.xml \
+          --out "$hgnc_cut" --lookup-dir "$LOOKUP_DIR" --taxon "$TAXON"
+        run bash -c "grep -ahoE '\"[0-9]{4,9}\"' '$hgnc_cut' out/{uniprot,gwascatalog,reactome}/items/*.xml 2>/dev/null \
+                      | tr -d '\"' | sort -u > '$pmid_file'"
+      else
+        run bash -c "grep -ahoE '\"[0-9]{4,9}\"' out/{hgnc,uniprot,gwascatalog,reactome}/items/*.xml 2>/dev/null \
+                      | tr -d '\"' | sort -u > '$pmid_file'"
+      fi
     fi
     local meta; meta=$(cache_meta_for "$src")
     if [ "$USE_CACHED_DATA" -eq 1 ]; then
@@ -1935,8 +1961,14 @@ phase_integrate_sources() {
   # --stock-sources load in this same project.xml order: HumanMine's own, with the table's `after`
   # constraints (plan 50 row 11) checked by `rdfc2im project`.
   [ -z "$STOCK_SOURCES" ] || log "stock sources load in project.xml order with the rest: $STOCK_SOURCES"
+  # One Gradle daemon loads every source, and its 4 GB heap is not given back between them. With
+  # --gene-identifiers all (some 600,000 more ncbigene/hgnc items) the old generation was full by the
+  # time panther converted: 1,976 full collections, 46 min of GC, no progress. A fresh JVM per
+  # source (--no-daemon) costs a few seconds each [im-9n4.40].
+  local per_source=()
+  [ "$GENE_IDENTIFIERS" = all ] && per_source=(--no-daemon)
   for src in $order; do
-    run_in "$mine" "${GRADLE_ENV[@]}" ./gradlew "${IM_GRADLE_ARGS[@]}" :dbmodel:integrate -Psource="$src"
+    run_in "$mine" "${GRADLE_ENV[@]}" ./gradlew "${IM_GRADLE_ARGS[@]}" "${per_source[@]}" :dbmodel:integrate -Psource="$src"
   done
 }
 
