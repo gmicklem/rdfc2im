@@ -31,6 +31,16 @@ from .model import InterMineModel
 from .items import table_root, _via_from, ORGANISM_FIELDS
 
 ABSTRACT = {"InterMineObject", "Annotatable", "BioEntity"}
+# Keys for classes no stock keys file declares, where the single identifying attribute the DRAFT
+# fallback would pick is not unique. A CrossReference identifier (an InterPro or PDB id, a RefSeq
+# accession) is shared by every protein that cites it: keyed on identifier alone, rdfc2im's items
+# merged them all into one object with one subject, and once stock uniprot (which stores one
+# CrossReference per protein) is loaded, an rdfc2im item matches several of its objects and the
+# load stops with "Duplicate objects from the same data source" [im-9n4.6]. The subject makes it
+# unique, as it does for Synonym (subject, value) in the stock keys.
+KEY_DEFAULTS: Dict[str, Dict[str, List[str]]] = {
+    "CrossReference": {"key_subject_identifier": ["subject", "identifier"]},
+}
 
 
 def source_dirs(out_root: str, only: Optional[List[str]] = None) -> List[str]:
@@ -213,6 +223,9 @@ def gen_project(out_root: str, project_out: str, model: InterMineModel, type_nam
     emitted = set()
     for cls in sorted(set(all_classes) | {"DataSet", "DataSource"}):
         owner, keys = model.keys_for(cls)
+        if not keys and cls in KEY_DEFAULTS:
+            owner, keys = cls, KEY_DEFAULTS[cls]
+            lines.append(f"# {cls}: no keys file declares a key; rdfc2im's default (project.KEY_DEFAULTS)")
         if not keys:
             ka = model.key_attribute(cls)
             if ka:
@@ -304,12 +317,42 @@ def _apply_stock(sources_el, names: List[str], table_path: Optional[str], out_ro
     if unknown:
         raise st.StockError(f"unknown stock source(s) {', '.join(unknown)} - not in stock_sources.yaml")
     problems = st.apply_to_project(sources_el, table, names)
+    _move_load_first(sources_el, [n for n in names if table[n].get("load_first")], log)
     order = [s.get("name") for s in sources_el if isinstance(s.tag, str) and s.tag == "source"]
     problems += st.order_problems(order, table, names, st.replaced_by(source_dirs(out_root, only), sources_cfg))
     if problems:
         raise st.StockError("; ".join(problems))
     log("project: stock sources kept and rewritten from stock_sources.yaml: "
         + ", ".join(n for n in order if n in names))
+
+
+def _move_load_first(sources_el, names: List[str], log=print) -> None:
+    """Put the stock sources the table marks `load_first` ahead of the first rdfc2im source
+    (type humanmine-items), in their own order [im-9n4.6].
+
+    Stock uniprot keys Protein on md5checksum+organism only (uniprot_keys.properties), so it cannot
+    match a Protein an rdfc2im source loaded earlier with a primaryAccession and nothing else
+    (humanmine-hgnc does). It made a second object per accession; humanmine-uniprot, keyed on
+    primaryAccession, then matched both and merged them, deleting one - and every isoform whose
+    canonicalProtein pointed at the deleted one was left with a dangling reference (77 of 140 in
+    the first stock build). Loaded first, stock uniprot's proteins are the ones the rdfc2im
+    sources' primaryAccession keys find."""
+    if not names:
+        return
+    kids = [s for s in sources_el if isinstance(s.tag, str) and s.tag == "source"]
+    first = next((s for s in kids if s.get("type") == "humanmine-items"), None)
+    if first is None:
+        return
+    moved = []
+    for n in names:
+        el = next((s for s in kids if s.get("name") == n), None)
+        if el is None or kids.index(el) < kids.index(first):
+            continue
+        sources_el.remove(el)
+        first.addprevious(el)
+        moved.append(n)
+    if moved:
+        log(f"project: stock source(s) {', '.join(moved)} moved ahead of the rdfc2im sources (load_first)")
 
 
 def _parse_priority(line: str):

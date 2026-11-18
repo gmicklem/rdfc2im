@@ -154,6 +154,37 @@ def test_sources_carry_the_bio_sources_project_version(tmp_path):
     assert src.get("type") == "humanmine-items"
 
 
+def test_a_cross_reference_is_keyed_on_its_subject_and_identifier(tmp_path):
+    """[im-9n4.6] No stock keys file declares a CrossReference key, and the DRAFT fallback keyed it
+    on identifier alone: one InterPro id cited by many proteins became one object, and with stock
+    uniprot loaded (one CrossReference per protein) the humanmine-uniprot load stopped with
+    "Duplicate objects from the same data source"."""
+    from rdfc2im.model import InterMineModel as IM
+    from rdfc2im.project import gen_project
+    xref = ('<class name="CrossReference" is-interface="true">'
+            '<attribute name="identifier" type="java.lang.String"/>'
+            '<reference name="subject" referenced-type="Protein" reverse-reference="crossReferences"/></class>')
+    model = LIVE_MODEL.replace("</model>", xref + "</model>").replace(
+        '<attribute name="primaryAccession" type="java.lang.String"/>',
+        '<attribute name="primaryAccession" type="java.lang.String"/>'
+        '<collection name="crossReferences" referenced-type="CrossReference" reverse-reference="subject"/>')
+    (tmp_path / "core.xml").write_text(model)
+    (tmp_path / "k_keys.properties").write_text("Protein.key_primaryaccession=primaryAccession\n")
+    m = IM(); m.load_xml(str(tmp_path / "core.xml")); m.load_keys(str(tmp_path / "k_keys.properties")); m.finalize()
+    m.live = IM(); m.live.load_xml(str(tmp_path / "core.xml")); m.live.finalize()
+    out_root = tmp_path / "out"; (out_root / "uniprot").mkdir(parents=True)
+    write_tsv(str(out_root / "uniprot" / "columns.tsv"), [
+        _col(0, "Protein", "primaryAccession", required="yes"),
+        _col(1, "CrossReference", "identifier", via="Protein.crossReferences"),
+    ], COL_COLUMNS)
+    mine = str(tmp_path / "_mine")
+    gen_project(str(out_root), mine, m, "humanmine-items", "/data", None, {}, None,
+                source_version="4.3.0", log=lambda *a: None)
+    keys = open(os.path.join(mine, "humanmine-items_keys.properties")).read().splitlines()
+    assert "CrossReference.key_subject_identifier=subject, identifier" in keys, keys
+    assert "CrossReference.key_identifier=identifier" not in keys
+
+
 def test_definitions_from_replaced_sources_are_carried(tmp_path):
     """Replacing a source removes its _additions.xml, and with it any class it declared.
 

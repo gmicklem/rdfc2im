@@ -10,7 +10,7 @@ reads it only through `rdfc2im stock ...` (cli.run_stock), so bash never parses 
   stock jars NAME...         one row per loader jar to build or check
   stock files NAME...        one row per upstream file: where it comes from, how it is filtered, where
                              it is staged
-  stock postprocess NAME...  the postprocesses the selection needs (a hook: plan 50 row 12)
+  stock postprocess NAME...  the postprocesses the selection needs, in HumanMine's order (plan 50 row 12)
   stock meta NAME            `--meta k=v` words for the source's filtered cache group
 
 Rows are tab-separated with '-' for an empty field (bash `read` collapses empty tab fields).
@@ -102,6 +102,8 @@ def validate_table(table: Dict[str, dict]) -> List[str]:
         for n in e.get("needs", []) or []:
             if n not in table:
                 out.append(f"{where}: needs '{n}', which is not in the table")
+        if not isinstance(e.get("load_first", False), bool):
+            out.append(f"{where}: `load_first` must be true or false")
         if not isinstance(e.get("properties", {}) or {}, dict):
             out.append(f"{where}: `properties` must be a mapping")
         files = e.get("files")
@@ -390,13 +392,25 @@ def file_rows(table: Dict[str, dict], names: List[str], stock_dir: str, raw_cach
     return rows
 
 
-def postprocess_rows(table: Dict[str, dict], names: List[str]) -> List[str]:
-    """postprocess, sources wanting it - in first-wanted order."""
+def postprocess_order(project_xml: str) -> List[str]:
+    """Post-process names in HumanMine's project.xml <post-processing> block, in order."""
+    root = etree.parse(project_xml).getroot()
+    return [p.get("name") for p in root.iter("post-process")]
+
+
+def postprocess_rows(table: Dict[str, dict], names: List[str],
+                     project_xml: Optional[str] = None) -> List[str]:
+    """postprocess, sources wanting it. In HumanMine's <post-processing> order when project_xml is
+    given (phase_postprocess runs them in the order printed) [im-9n4.6]; a postprocess HumanMine does
+    not list, and every one without project_xml, keeps first-wanted order after those it does."""
     want: Dict[str, List[str]] = {}
     for n in names:
         for p in table[n].get("postprocess") or []:
             want.setdefault(p, []).append(n)
-    return [_row(p, ",".join(srcs)) for p, srcs in want.items()]
+    order = postprocess_order(project_xml) if project_xml else []
+    first = list(want)
+    ranked = sorted(want, key=lambda p: (order.index(p) if p in order else len(order), first.index(p)))
+    return [_row(p, ",".join(want[p])) for p in ranked]
 
 
 def cache_meta(table: Dict[str, dict], name: str) -> List[str]:

@@ -395,11 +395,64 @@ What each phase does with the list:
 | `subset_stock_data` | `tools/subset_raw.py idsets` turns the panel into Entrez, Ensembl, UniProt and symbol id sets (from the rdfc2im items and the gene-id lookup); `subset_raw.py filter` cuts each filtered file to them. A source's filtered files are the cache group `stock-<name>`, keyed to `genes_md5`, `taxon` and the table's filter spec (`spec_md5`), and also recording each file's upstream `Last-Modified`, `redistributable` and `licence`. It goes to `cached_raw_data/` for redistributable data and to the stock cache otherwise. Files used whole are unpacked from the raw group on every build and are not cached twice |
 | `prepare_mine_checkout` | `reduce_mine.py sources ... humanmine-items reactome <stock names>` keeps their entries, in project.xml order. A name project.xml lacks stops the build |
 | `stage_src_data` | Links each file into HumanMine's own data directory under the data root by the name its converter expects (`go-annotation/current/human/gene_association.goa_human`, `uniprot/current/9606_uniprot_sprot.xml`, ...). Each directory is first cleared of links this build made earlier (several loaders read every file in their directory, and some throw on an unexpected one). A real file there is never replaced |
-| `integrate_sources` | Unchanged: the stock sources load in project.xml order with the rest |
-| `postprocess` | Lists the postprocesses the table asks for; they are not run yet (a marked hook) |
+| `integrate_sources` | The stock sources load in project.xml order with the rest, except that a source the table marks `load_first` (uniprot) is moved by `rdfc2im project` ahead of every rdfc2im source (see the first stock build below) |
+| `postprocess` | Runs the postprocesses the table asks for (`rdfc2im stock postprocess`), in HumanMine's `<post-processing>` order, between `create-references` and `create-attribute-indexes` (where HumanMine has all of them); `do-sources` is scoped with `-Psource` to the stock sources that want it [im-9n4.6]. The three UniProt sources want none |
 
-One hook is still marked in the script and left for the next tasks: the postprocesses the table asks for
-(`phase_postprocess`). The ID-resolver gate and the release refusal of T0.3 are described next.
+`subset_stock_data` under `--use-cached-data` restores each source's filtered group; when no group matches the
+panel (a new `genes_md5` after a panel change, or the first build after `fetch_stock_data`) and the raw group is
+cached, it cuts the files from the raw group and saves the group instead, since that needs no network [im-9n4.6].
+`RDFC2IM_STOCK_FILTERED_CACHE` keeps the filtered groups of redistributable sources out of the raw-data cache
+(default: the raw-data cache, as before). The ID-resolver gate and the release refusal of T0.3 are described next.
+
+#### The first stock build: uniprot, uniprot-keywords, uniprot-fasta [im-9n4.6]
+
+`--stock-sources "uniprot uniprot-fasta uniprot-keywords"` on the ut stack (6.0.0), 114-gene panel
+(`genes_md5` `17702eff...`), `RDFC2IM_STOCK_DIR` and `RDFC2IM_STOCK_FILTERED_CACHE` under `repos/.sandbox-disk/`.
+
+* Downloads (once; `fetch_stock_data` without `--use-cached-data`, 53 s from the EBI mirror): Swiss-Prot human XML
+  174,683,391 B, `keywlist.xml.gz` 155,546 B, varsplic FASTA 8,586,697 B, `Homo_sapiens.gene_info.gz` 5,204,903 B.
+* `subset_stock_data` (6 s, 2 s when cached): 20,429 Swiss-Prot entries in, 114 out (the 1,501 panel accessions
+  include TrEMBL; only the Swiss-Prot ones are in this file, D-6); varsplic 41,374 records in, 140 out; the resolver
+  `entrez` keeps 194,025 of 194,098 rows (all human genes).
+* Extra time against the same build without stock sources: `integrate_sources` 158 s (was 136 s; uniprot 13 s,
+  uniprot-keywords 6 s, uniprot-fasta 2 s), `postprocess` 82 s (79 s); nothing else measurable. Whole driver run from
+  `rdfc2im_project` about 5 min, plus `publish_intermine` 202 s when it runs.
+* Disk: `stock_ut/` 240 MB (raw cache 180 MB, filtered groups 13 MB, resolver `entrez` 35 MB); Postgres 2.0 GB.
+
+| | RDF only (114 genes) | with the three stock sources |
+|---|---|---|
+| Protein | 13,591 | 13,723 |
+| Swiss-Prot canonical (`isUniprotCanonical`) | - | 114 |
+| isoforms (`canonicalProtein` set) | - | 140 (0 dangling) |
+| with `sequence` | 0 | 254 (every canonical and isoform) |
+| with features / comments | - | 114 (8,105 UniProtFeature) / 254 |
+| with keywords | - | 1,654 |
+| Gene | 114 | 114 |
+| duplicate Protein.primaryAccession / Gene.primaryIdentifier / Gene.symbol (9606) | 0 / 0 / 0 | 0 / 0 / 0 |
+| DataSet | 9 | 12 (`Swiss-Prot data set`, `UniProt data set`, `uniprot-fasta`) |
+| all objects | 346,735 | 366,232 |
+
+Two merge bugs showed up on the first run, both fixed in `rdfc2im project`:
+
+1. **CrossReference key.** No stock keys file declares one, so the generated keys fell back to `identifier` alone.
+   An rdfc2im cross-reference (an InterPro id cited by several proteins) then matched one stock object per protein
+   and `humanmine-uniprot` stopped with "Duplicate objects from the same data source". It is now keyed on
+   `subject, identifier` (`project.KEY_DEFAULTS`).
+2. **Load order.** Stock uniprot keys Protein on `md5checksum, organism` only, so after `humanmine-hgnc` (Protein by
+   `primaryAccession`) it made a second Protein per accession; `humanmine-uniprot` matched both, merged them and
+   deleted one, leaving 77 of 140 isoforms with a `canonicalProtein` pointing at nothing. The table's
+   `load_first: true` puts stock uniprot before the rdfc2im sources.
+
+Canonical proteins have no `canonicalProtein`, as on HumanMine (P10635 there has none; P10635-2 points at it).
+The rdfc2im uniprot proteins (TrEMBL included, D-6) carry no sequence, so a gene's TrEMBL proteins have none:
+CYP2D6 has 59 proteins (2 Swiss-Prot, 57 TrEMBL), PAX6 47 (2 and 45). The MSA viewer queries every protein of
+the gene and stops at the first without a sequence ("No protein found for UniProtKB accession ...").
+
+The ID resolver: none of these three converters asks for the Entrez resolver (UniprotConverter only creates a
+FlyBase one, for taxon 7227, which logs "Creating id resolver from database and caching id resolver to file:
+idresolver.cache" and writes nothing without fly data), so the gate's "Creating id resolver for [9606] ... from data
+file" line does not appear yet; the first loaders that will show it are psi, biogrid and panther. No
+`idresolver.cache` was written anywhere.
 
 ### The ID-resolver gate [im-9n4.4]
 

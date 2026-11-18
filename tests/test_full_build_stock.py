@@ -30,8 +30,9 @@ def _fake_intermine_60(tmp_path):
 
 
 def _run(tmp_path, *args, stock_dir=True, env_extra=None):
-    env = dict(os.environ, TRIAL_HOME=str(tmp_path / "trial_home"), RUN_ID="test",
-               LOG_DIR=str(tmp_path / "logs"), **(env_extra or {}))
+    env = {k: v for k, v in os.environ.items() if k != "RDFC2IM_STOCK_FILTERED_CACHE"}
+    env.update(TRIAL_HOME=str(tmp_path / "trial_home"), RUN_ID="test", LOG_DIR=str(tmp_path / "logs"),
+               **(env_extra or {}))
     if stock_dir:
         env["RDFC2IM_STOCK_DIR"] = str(tmp_path / "stock")
     env.pop("RDFC2IM_STOCK_LOCAL", None)
@@ -154,6 +155,49 @@ def test_subset_filters_with_subset_raw_and_caches_by_gene_panel(tmp_path):
     assert not any("subset_raw.py filter" in c and "--format gene_info" not in c for c in cached), cached
     restore = next(c for c in cached if "cache restore stock-go-annotation " in c)
     assert "--meta genes_md5=" in restore and "--meta spec_md5=" in restore and "licence" not in restore
+
+
+def test_use_cached_data_cuts_a_missing_filtered_group_from_the_cached_raw_one(tmp_path):
+    """[im-9n4.6] A panel change gives a new genes_md5, so --use-cached-data found no filtered group
+    to restore and died, although the raw group was cached and filtering needs no network. Now the
+    files are cut from the raw group and saved; a source with no raw group still restores."""
+    raw = tmp_path / "stock" / "cache" / "stock-raw-uniprot"
+    raw.mkdir(parents=True)
+    (raw / "META.json").write_text("{}")
+    fcache = tmp_path / "filtered-cache"
+    plan = _plan(tmp_path, "--only", "subset_stock_data", "--use-cached-data", *_stock(tmp_path),
+                 env_extra={"RDFC2IM_STOCK_FILTERED_CACHE": str(fcache)})
+    if plan is None:
+        return
+    cmds = _cmds(plan, "subset_stock_data")
+    assert "uniprot: no filtered group for this panel" in plan
+    assert any("subset_raw.py filter --format uniprot-xml" in c for c in cmds), cmds
+    save = next(c for c in cmds if "cache save stock-uniprot " in c)
+    assert f"--cache-dir {fcache} " in save, save
+    assert not any("cache restore stock-uniprot " in c for c in cmds), cmds
+    # go-annotation has no raw group here: it is restored as before (and would fail if absent)
+    assert any("cache restore stock-go-annotation " in c and f"--cache-dir {fcache} " in c for c in cmds), cmds
+    assert not any("--format gaf" in c for c in cmds), cmds
+
+
+def test_postprocess_runs_the_stock_postprocesses_in_humanmines_order(tmp_path):
+    """[im-9n4.6] The hook ran nothing; now the table's postprocesses run between create-references
+    and create-attribute-indexes in HumanMine's order, do-sources scoped to the sources wanting it."""
+    plan = _plan(tmp_path, "--only", "postprocess", "--intermine-src", _fake_intermine_60(tmp_path),
+                 "--stock-sources", "uniprot go-annotation ncbi-gff ncbi-fasta", "--sources",
+                 "go ncbigene reactome hgnc ensembl uniprot clinvar gwascatalog pubmed")
+    if plan is None:
+        return
+    pp = [c.split("-Pprocess=", 1)[1].rstrip(")") for c in _cmds(plan, "postprocess") if "-Pprocess=" in c]
+    assert pp[:9] == ["create-references", "create-chromosome-locations-and-lengths", "transfer-sequences",
+                      "do-sources -Psource=go-annotation", "create-gene-flanking-features",
+                      "create-location-overlap-index", "create-overlap-view", "create-attribute-indexes",
+                      "do-sources -Psource=reactome"], pp
+    assert "HOOK" not in plan
+    # without stock sources: as before
+    plain = _plan(tmp_path, "--only", "postprocess")
+    pp = [c.split("-Pprocess=", 1)[1].rstrip(")") for c in _cmds(plain, "postprocess") if "-Pprocess=" in c]
+    assert pp[:3] == ["create-references", "create-attribute-indexes", "do-sources -Psource=reactome"], pp
 
 
 def test_stage_links_into_humanmines_own_paths_and_never_over_a_real_file(tmp_path):
