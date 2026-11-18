@@ -1283,7 +1283,7 @@ published port. Parts:
   mine answers CORS. The mine must be up; when it is not, the last generated config stays (none yet: the committed
   public-mines config is copied as a placeholder, with a warning). Run it again after a rebuild changes the tracks.
 * assembly and track names come from the mine's `/service/jbrowse/config/9606/trackList.json` `dataset_id`, i.e. the
-  mine's `project.title` plus the taxon: `rdfc2im: 113 gene food/drug-metabolism panel-9606`, tracks
+  mine's `project.title` plus the taxon: `rdfc2im: 114 gene food/drug-metabolism panel-9606`, tracks
   `<assembly>-<Class>` (98 of them). JBrowse 2 accepts that name, with its spaces and colon, as long as the tool
   URL-encodes it, which it does (`assembly=rdfc2im%3A%20113%20gene...`); nothing needs to change in the title. A short
   title would be tidier (HumanMine's is `humanmine-9606`).

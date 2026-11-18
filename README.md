@@ -45,7 +45,7 @@ for the two live-model files. See `tools/make-inputs.sh`.
 ## Build a whole mine in one command
 
 If what you want is the finished article - a running, fully-configured demonstration
-HumanMine (113-gene food/drug-metabolism panel, 9 rdfc2im sources plus the stock `reactome`
+HumanMine (114-gene food/drug-metabolism panel, 9 rdfc2im sources plus the stock `reactome`
 source alongside, webapp and BlueGenes serving) - you do not need the per-step workflow below:
 
 ```

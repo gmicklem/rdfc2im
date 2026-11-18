@@ -164,7 +164,7 @@ def test_autocomplete_index_is_populated():
 def test_autocomplete_covers_gene():
     """Gene is autocompleted.
 
-    Gene is the demo panel's organising class (113 food/drug-metabolism genes), so a user
+    Gene is the demo panel's organising class (114 food/drug-metabolism genes), so a user
     typing a gene symbol into a form is the single most likely autocomplete interaction.
     HumanMine's stock objectstoresummary.config.properties does NOT include Gene, so this is
     an addition this project makes deliberately, not an upstream default to fall back on.
@@ -320,7 +320,7 @@ def test_keyword_search_index_is_in_sync_with_the_database():
     reach the affected page - which is exactly how the two tests above can pass while search is
     rotten.
 
-    Checked exactly rather than by sampling, for Gene: the panel is small enough (~113) to
+    Checked exactly rather than by sampling, for Gene: the panel is small enough (~114) to
     compare the index against the database in full, and Gene is the class every quicksearch
     actually cares about. Comparing ids is what makes this a *sync* test - a doc count would
     look perfectly healthy on an index built against a previous database, because the count is
@@ -356,7 +356,7 @@ def test_gene_panel_is_panel_sized():
 
     Regression guard for the scope bug fixed on 2026-09-21: ncbigene was configured `full`
     rather than `panel`, so the first build loaded every human gene (~193,000) instead of the
-    113-gene demo panel. The upper bound is what matters here; the exact count is asserted
+    114-gene demo panel. The upper bound is what matters here; the exact count is asserted
     loosely because a source legitimately contributing a few extra Gene stubs is not a bug.
     """
     if not mine_up():

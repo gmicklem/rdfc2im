@@ -1,4 +1,4 @@
--- Six public templates for the 113-gene food/drug-metabolism demo panel, added on top of the
+-- Six public templates for the 114-gene food/drug-metabolism demo panel, added on top of the
 -- 3 stock HumanMine templates that survive "reducing a mine" (see LOAD-TRIAL.md) because they
 -- only reference classes/fields this build actually loads (Gene, Protein, Organism).
 --
