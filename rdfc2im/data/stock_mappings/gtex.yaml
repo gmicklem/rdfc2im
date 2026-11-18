@@ -1,0 +1,113 @@
+# GTEx v8: median TPM per gene in 54 tissues (gene median TPM GCT), loaded as RNASeqResult.
+# The converter can also read v7 eQTL files (name containing "signif"); none is staged.
+source: gtex
+loader:
+  repository: humanmine-bio-sources
+  path: gtex
+  classes: [org.intermine.bio.dataconversion.GtexConverter]
+  commit: d67fc5d
+basis: read from code at humanmine-bio-sources d67fc5d (GtexConverter.java, BioDirectoryConverter.java, BioStoreHook.java)
+data_source: GTEx portal                      # GtexConverter.java:43, stored at :60-67
+data_sets: [RNA-Seq Data, Single-Tissue cis-eQTL Data]   # GtexConverter.java:38-39, stored at :69-87 (no licence)
+home: https://www.gtexportal.org/home/
+writes: [RNASeqResult, Gene, Organism, DataSet, DataSource, Ontology, SOTerm]
+# Both DataSets are always stored; "Single-Tissue cis-eQTL Data" stays empty, and SNP items are made
+# only from a "signif" file (:102-103, :234-247), which is not staged. The DataSource/DataSet names are
+# not passed to BioDirectoryConverter (:55), so the store hook adds no data set: RNASeqResult.dataSets
+# and Gene.dataSets are set by hand (:209, :212). Ontology and SOTerm (gene) come from the store hook.
+files:
+  - id: median
+    format: tab
+    release: [{"from": "url", "pattern": "_(v\\d+)_", "label": "GTEx"}]
+    comment: "#"
+    skip_lines: 2
+    header_line: 3
+    record: one row (one gene, with its median TPM in each tissue)
+    record_key: null
+    unlisted: not loaded
+    unlisted_reason: >-
+      processExpression reads column 1 and every column from 3 to the end of the row
+      (GtexConverter.java:191, :198); all 56 header columns are listed.
+    fields:
+      - key: "col:1"
+        name: Name
+        description: versioned Ensembl gene id (e.g. ENSG00000169962.4)
+        maps_to: [Gene.primaryIdentifier, RNASeqResult.gene]
+        status: loaded
+        reason: "resolved through the ID resolver"
+        code: GtexConverter.java:191
+        note: >-
+          The version is cut off at the first dot (:252-253), then the id is resolved through the
+          human ID resolver (IdResolverService.getIdResolverByOrganism, taxon 9606, :94, :249-265);
+          the row is dropped unless it resolves to exactly one gene, whose resolved id (the NCBI Gene
+          id with HumanMine's entrez resolver) becomes Gene.primaryIdentifier (:217-232). Without a
+          human resolver the unversioned Ensembl id is used. Gene.organism is taxon 9606; genes are
+          stored in close() (:111-119). Line 1 (#1.2) is a comment to the parser; line 2 is skipped
+          because no header has been seen yet (:188-190). The header line itself is then also tried as
+          a data row with gene id "Name" (:184-195): the resolver drops it, but without a human
+          resolver it would make a Gene "Name".
+      - key: "col:2"
+        name: Description
+        description: gene symbol
+        maps_to: []
+        status: not loaded
+        reason: "dropped on purpose"
+        code: GtexConverter.java:197-198
+        note: "'skip first two columns, name and description'; Gene.symbol is not set by this source."
+      # Columns 3-56: one per tissue. Each makes one RNASeqResult for the row's gene: tissue = the
+      # header cell (as it is), expressionScore = the cell (only when not empty), expressionType = "TPM",
+      # dataSets = RNA-Seq Data (GtexConverter.java:198-213).
+      - {key: "col:3", name: "Adipose - Subcutaneous", description: "median TPM in this tissue", maps_to: [RNASeqResult.expressionScore, RNASeqResult.tissue], status: loaded, reason: "", code: "GtexConverter.java:198-213", note: ""}
+      - {key: "col:4", name: "Adipose - Visceral (Omentum)", description: "median TPM in this tissue", maps_to: [RNASeqResult.expressionScore, RNASeqResult.tissue], status: loaded, reason: "", code: "GtexConverter.java:198-213", note: ""}
+      - {key: "col:5", name: "Adrenal Gland", description: "median TPM in this tissue", maps_to: [RNASeqResult.expressionScore, RNASeqResult.tissue], status: loaded, reason: "", code: "GtexConverter.java:198-213", note: ""}
+      - {key: "col:6", name: "Artery - Aorta", description: "median TPM in this tissue", maps_to: [RNASeqResult.expressionScore, RNASeqResult.tissue], status: loaded, reason: "", code: "GtexConverter.java:198-213", note: ""}
+      - {key: "col:7", name: "Artery - Coronary", description: "median TPM in this tissue", maps_to: [RNASeqResult.expressionScore, RNASeqResult.tissue], status: loaded, reason: "", code: "GtexConverter.java:198-213", note: ""}
+      - {key: "col:8", name: "Artery - Tibial", description: "median TPM in this tissue", maps_to: [RNASeqResult.expressionScore, RNASeqResult.tissue], status: loaded, reason: "", code: "GtexConverter.java:198-213", note: ""}
+      - {key: "col:9", name: "Bladder", description: "median TPM in this tissue", maps_to: [RNASeqResult.expressionScore, RNASeqResult.tissue], status: loaded, reason: "", code: "GtexConverter.java:198-213", note: ""}
+      - {key: "col:10", name: "Brain - Amygdala", description: "median TPM in this tissue", maps_to: [RNASeqResult.expressionScore, RNASeqResult.tissue], status: loaded, reason: "", code: "GtexConverter.java:198-213", note: ""}
+      - {key: "col:11", name: "Brain - Anterior cingulate cortex (BA24)", description: "median TPM in this tissue", maps_to: [RNASeqResult.expressionScore, RNASeqResult.tissue], status: loaded, reason: "", code: "GtexConverter.java:198-213", note: ""}
+      - {key: "col:12", name: "Brain - Caudate (basal ganglia)", description: "median TPM in this tissue", maps_to: [RNASeqResult.expressionScore, RNASeqResult.tissue], status: loaded, reason: "", code: "GtexConverter.java:198-213", note: ""}
+      - {key: "col:13", name: "Brain - Cerebellar Hemisphere", description: "median TPM in this tissue", maps_to: [RNASeqResult.expressionScore, RNASeqResult.tissue], status: loaded, reason: "", code: "GtexConverter.java:198-213", note: ""}
+      - {key: "col:14", name: "Brain - Cerebellum", description: "median TPM in this tissue", maps_to: [RNASeqResult.expressionScore, RNASeqResult.tissue], status: loaded, reason: "", code: "GtexConverter.java:198-213", note: ""}
+      - {key: "col:15", name: "Brain - Cortex", description: "median TPM in this tissue", maps_to: [RNASeqResult.expressionScore, RNASeqResult.tissue], status: loaded, reason: "", code: "GtexConverter.java:198-213", note: ""}
+      - {key: "col:16", name: "Brain - Frontal Cortex (BA9)", description: "median TPM in this tissue", maps_to: [RNASeqResult.expressionScore, RNASeqResult.tissue], status: loaded, reason: "", code: "GtexConverter.java:198-213", note: ""}
+      - {key: "col:17", name: "Brain - Hippocampus", description: "median TPM in this tissue", maps_to: [RNASeqResult.expressionScore, RNASeqResult.tissue], status: loaded, reason: "", code: "GtexConverter.java:198-213", note: ""}
+      - {key: "col:18", name: "Brain - Hypothalamus", description: "median TPM in this tissue", maps_to: [RNASeqResult.expressionScore, RNASeqResult.tissue], status: loaded, reason: "", code: "GtexConverter.java:198-213", note: ""}
+      - {key: "col:19", name: "Brain - Nucleus accumbens (basal ganglia)", description: "median TPM in this tissue", maps_to: [RNASeqResult.expressionScore, RNASeqResult.tissue], status: loaded, reason: "", code: "GtexConverter.java:198-213", note: ""}
+      - {key: "col:20", name: "Brain - Putamen (basal ganglia)", description: "median TPM in this tissue", maps_to: [RNASeqResult.expressionScore, RNASeqResult.tissue], status: loaded, reason: "", code: "GtexConverter.java:198-213", note: ""}
+      - {key: "col:21", name: "Brain - Spinal cord (cervical c-1)", description: "median TPM in this tissue", maps_to: [RNASeqResult.expressionScore, RNASeqResult.tissue], status: loaded, reason: "", code: "GtexConverter.java:198-213", note: ""}
+      - {key: "col:22", name: "Brain - Substantia nigra", description: "median TPM in this tissue", maps_to: [RNASeqResult.expressionScore, RNASeqResult.tissue], status: loaded, reason: "", code: "GtexConverter.java:198-213", note: ""}
+      - {key: "col:23", name: "Breast - Mammary Tissue", description: "median TPM in this tissue", maps_to: [RNASeqResult.expressionScore, RNASeqResult.tissue], status: loaded, reason: "", code: "GtexConverter.java:198-213", note: ""}
+      - {key: "col:24", name: "Cells - Cultured fibroblasts", description: "median TPM in this cell type", maps_to: [RNASeqResult.expressionScore, RNASeqResult.tissue], status: loaded, reason: "", code: "GtexConverter.java:198-213", note: ""}
+      - {key: "col:25", name: "Cells - EBV-transformed lymphocytes", description: "median TPM in this cell type", maps_to: [RNASeqResult.expressionScore, RNASeqResult.tissue], status: loaded, reason: "", code: "GtexConverter.java:198-213", note: ""}
+      - {key: "col:26", name: "Cervix - Ectocervix", description: "median TPM in this tissue", maps_to: [RNASeqResult.expressionScore, RNASeqResult.tissue], status: loaded, reason: "", code: "GtexConverter.java:198-213", note: ""}
+      - {key: "col:27", name: "Cervix - Endocervix", description: "median TPM in this tissue", maps_to: [RNASeqResult.expressionScore, RNASeqResult.tissue], status: loaded, reason: "", code: "GtexConverter.java:198-213", note: ""}
+      - {key: "col:28", name: "Colon - Sigmoid", description: "median TPM in this tissue", maps_to: [RNASeqResult.expressionScore, RNASeqResult.tissue], status: loaded, reason: "", code: "GtexConverter.java:198-213", note: ""}
+      - {key: "col:29", name: "Colon - Transverse", description: "median TPM in this tissue", maps_to: [RNASeqResult.expressionScore, RNASeqResult.tissue], status: loaded, reason: "", code: "GtexConverter.java:198-213", note: ""}
+      - {key: "col:30", name: "Esophagus - Gastroesophageal Junction", description: "median TPM in this tissue", maps_to: [RNASeqResult.expressionScore, RNASeqResult.tissue], status: loaded, reason: "", code: "GtexConverter.java:198-213", note: ""}
+      - {key: "col:31", name: "Esophagus - Mucosa", description: "median TPM in this tissue", maps_to: [RNASeqResult.expressionScore, RNASeqResult.tissue], status: loaded, reason: "", code: "GtexConverter.java:198-213", note: ""}
+      - {key: "col:32", name: "Esophagus - Muscularis", description: "median TPM in this tissue", maps_to: [RNASeqResult.expressionScore, RNASeqResult.tissue], status: loaded, reason: "", code: "GtexConverter.java:198-213", note: ""}
+      - {key: "col:33", name: "Fallopian Tube", description: "median TPM in this tissue", maps_to: [RNASeqResult.expressionScore, RNASeqResult.tissue], status: loaded, reason: "", code: "GtexConverter.java:198-213", note: ""}
+      - {key: "col:34", name: "Heart - Atrial Appendage", description: "median TPM in this tissue", maps_to: [RNASeqResult.expressionScore, RNASeqResult.tissue], status: loaded, reason: "", code: "GtexConverter.java:198-213", note: ""}
+      - {key: "col:35", name: "Heart - Left Ventricle", description: "median TPM in this tissue", maps_to: [RNASeqResult.expressionScore, RNASeqResult.tissue], status: loaded, reason: "", code: "GtexConverter.java:198-213", note: ""}
+      - {key: "col:36", name: "Kidney - Cortex", description: "median TPM in this tissue", maps_to: [RNASeqResult.expressionScore, RNASeqResult.tissue], status: loaded, reason: "", code: "GtexConverter.java:198-213", note: ""}
+      - {key: "col:37", name: "Kidney - Medulla", description: "median TPM in this tissue", maps_to: [RNASeqResult.expressionScore, RNASeqResult.tissue], status: loaded, reason: "", code: "GtexConverter.java:198-213", note: ""}
+      - {key: "col:38", name: "Liver", description: "median TPM in this tissue", maps_to: [RNASeqResult.expressionScore, RNASeqResult.tissue], status: loaded, reason: "", code: "GtexConverter.java:198-213", note: ""}
+      - {key: "col:39", name: "Lung", description: "median TPM in this tissue", maps_to: [RNASeqResult.expressionScore, RNASeqResult.tissue], status: loaded, reason: "", code: "GtexConverter.java:198-213", note: ""}
+      - {key: "col:40", name: "Minor Salivary Gland", description: "median TPM in this tissue", maps_to: [RNASeqResult.expressionScore, RNASeqResult.tissue], status: loaded, reason: "", code: "GtexConverter.java:198-213", note: ""}
+      - {key: "col:41", name: "Muscle - Skeletal", description: "median TPM in this tissue", maps_to: [RNASeqResult.expressionScore, RNASeqResult.tissue], status: loaded, reason: "", code: "GtexConverter.java:198-213", note: ""}
+      - {key: "col:42", name: "Nerve - Tibial", description: "median TPM in this tissue", maps_to: [RNASeqResult.expressionScore, RNASeqResult.tissue], status: loaded, reason: "", code: "GtexConverter.java:198-213", note: ""}
+      - {key: "col:43", name: "Ovary", description: "median TPM in this tissue", maps_to: [RNASeqResult.expressionScore, RNASeqResult.tissue], status: loaded, reason: "", code: "GtexConverter.java:198-213", note: ""}
+      - {key: "col:44", name: "Pancreas", description: "median TPM in this tissue", maps_to: [RNASeqResult.expressionScore, RNASeqResult.tissue], status: loaded, reason: "", code: "GtexConverter.java:198-213", note: ""}
+      - {key: "col:45", name: "Pituitary", description: "median TPM in this tissue", maps_to: [RNASeqResult.expressionScore, RNASeqResult.tissue], status: loaded, reason: "", code: "GtexConverter.java:198-213", note: ""}
+      - {key: "col:46", name: "Prostate", description: "median TPM in this tissue", maps_to: [RNASeqResult.expressionScore, RNASeqResult.tissue], status: loaded, reason: "", code: "GtexConverter.java:198-213", note: ""}
+      - {key: "col:47", name: "Skin - Not Sun Exposed (Suprapubic)", description: "median TPM in this tissue", maps_to: [RNASeqResult.expressionScore, RNASeqResult.tissue], status: loaded, reason: "", code: "GtexConverter.java:198-213", note: ""}
+      - {key: "col:48", name: "Skin - Sun Exposed (Lower leg)", description: "median TPM in this tissue", maps_to: [RNASeqResult.expressionScore, RNASeqResult.tissue], status: loaded, reason: "", code: "GtexConverter.java:198-213", note: ""}
+      - {key: "col:49", name: "Small Intestine - Terminal Ileum", description: "median TPM in this tissue", maps_to: [RNASeqResult.expressionScore, RNASeqResult.tissue], status: loaded, reason: "", code: "GtexConverter.java:198-213", note: ""}
+      - {key: "col:50", name: "Spleen", description: "median TPM in this tissue", maps_to: [RNASeqResult.expressionScore, RNASeqResult.tissue], status: loaded, reason: "", code: "GtexConverter.java:198-213", note: ""}
+      - {key: "col:51", name: "Stomach", description: "median TPM in this tissue", maps_to: [RNASeqResult.expressionScore, RNASeqResult.tissue], status: loaded, reason: "", code: "GtexConverter.java:198-213", note: ""}
+      - {key: "col:52", name: "Testis", description: "median TPM in this tissue", maps_to: [RNASeqResult.expressionScore, RNASeqResult.tissue], status: loaded, reason: "", code: "GtexConverter.java:198-213", note: ""}
+      - {key: "col:53", name: "Thyroid", description: "median TPM in this tissue", maps_to: [RNASeqResult.expressionScore, RNASeqResult.tissue], status: loaded, reason: "", code: "GtexConverter.java:198-213", note: ""}
+      - {key: "col:54", name: "Uterus", description: "median TPM in this tissue", maps_to: [RNASeqResult.expressionScore, RNASeqResult.tissue], status: loaded, reason: "", code: "GtexConverter.java:198-213", note: ""}
+      - {key: "col:55", name: "Vagina", description: "median TPM in this tissue", maps_to: [RNASeqResult.expressionScore, RNASeqResult.tissue], status: loaded, reason: "", code: "GtexConverter.java:198-213", note: ""}
+      - {key: "col:56", name: "Whole Blood", description: "median TPM in this tissue", maps_to: [RNASeqResult.expressionScore, RNASeqResult.tissue], status: loaded, reason: "", code: "GtexConverter.java:198-213", note: ""}

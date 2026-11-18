@@ -1,0 +1,184 @@
+# GO annotations of human gene products (GOA human GAF 2.2), loaded by InterMine's go-annotation source.
+# Human rows annotate Protein objects (go-annotation_config.properties: 9606.typeAnnotated=protein).
+source: go-annotation
+loader:
+  repository: intermine
+  path: bio/sources/go-annotation
+  classes:
+    - org.intermine.bio.dataconversion.GoConverter
+    - org.intermine.bio.postprocess.GoPostprocess
+  commit: 5351d0c301
+basis: >-
+  read from code at intermine 5351d0c301 (GoConverter.java, go-annotation_config.properties,
+  go-evidence-codes; GoPostprocess.java for the copy to genes)
+data_source: GO Annotation
+data_sets: [GO Annotation data set]
+home: http://geneontology.org/
+writes: [DataSource, DataSet, GOEvidenceCode, Organism, Protein, GOTerm, Publication,
+         DatabaseReference, GOAnnotation, GOEvidence]
+# Gene is not listed: the converter makes Gene items only for taxa configured as typeAnnotated=gene
+# (or not configured), and for 'FB:' with-ids in fly rows; neither applies to the human file.
+# GoPostprocess later copies each Protein's GOAnnotations to its Gene(s) as new GOAnnotation objects
+# (Gene.goAnnotation); that is a postprocess, not the converter.
+files:
+  - id: gaf
+    format: tab
+    release: [{"from": "line", "pattern": "^!date-generated: (\\S+)", "label": "date-generated"}]
+    comment: "!"
+    skip_lines: 0
+    header_line: null
+    record: one GAF row (one annotation of one gene product to one GO term, with one evidence)
+    record_key: null
+    unlisted: not loaded
+    unlisted_reason: GoConverter splits each line on tabs and reads only array[1], [3], [4], [5], [6], [7], [12] and [15] (GoConverter.java:261-285)
+    fields:
+      - key: "col:1"
+        name: DB
+        description: database the gene product id comes from (UniProtKB)
+        maps_to: []
+        status: not loaded
+        reason: dropped on purpose
+        code: GoConverter.java:304
+        note: The line that read it is commented out.
+      - key: "col:2"
+        name: DB Object ID
+        description: identifier of the annotated gene product (a UniProt accession for human)
+        maps_to: [Protein.primaryAccession]
+        status: loaded
+        reason: ""
+        code: GoConverter.java:275-276, 526-529, 564
+        note: >-
+          readColumn is 1 (the default) for 9606, so column 2 is read. One Protein item per accession
+          (not run through the ID resolver: the resolver is used only for type gene). The Protein also
+          gets organism (from column 13) and dataSets (GO Annotation data set). It is the
+          GOAnnotation.subject.
+      - key: "col:3"
+        name: DB Object Symbol
+        description: symbol of the gene product
+        maps_to: []
+        status: not loaded
+        reason: "read only for taxa whose readColumn is symbol; not 9606"
+        code: GoConverter.java:874-879
+      - key: "col:4"
+        name: Qualifier
+        description: relation between the gene product and the GO term (enables, part_of, NOT|..., ...)
+        maps_to: [GOAnnotation.qualifier]
+        status: loaded
+        reason: ""
+        code: GoConverter.java:279, 410-412
+        note: Stored as it is, when not empty. Also part of the key that merges rows into one GOAnnotation.
+      - key: "col:5"
+        name: GO ID
+        description: the GO term identifier
+        maps_to: [GOTerm.identifier, GOAnnotation.ontologyTerm]
+        status: loaded
+        reason: ""
+        code: GoConverter.java:278, 319, 594-596
+        note: >-
+          A GOTerm item with identifier only (and dataSets); names and the rest come from the go
+          source (rdfc2im's go source in this build).
+      - key: "col:6"
+        name: DB:Reference(s)
+        description: pipe-separated references (PMID:n, GO_REF:n, Reactome:..., ...)
+        maps_to: [Publication.pubMedId, GOEvidence.publications, Publication.crossReferences, DatabaseReference.identifier, DatabaseReference.source]
+        status: loaded
+        reason: ""
+        code: GoConverter.java:312, 632-695
+        note: >-
+          A PMID:n with an all-digit n makes a Publication (pubMedId n), linked from
+          GOEvidence.publications. The other references in the same cell become DatabaseReference
+          items (identifier = the part after ':', source = a DataSource named after the prefix) in
+          that Publication's crossReferences, but only when the cell also holds a PMID and only the
+          first time the Publication is made. A cell with no PMID (GO_REF only, for example) stores
+          nothing.
+      - key: "col:7"
+        name: Evidence Code
+        description: GO evidence code (IDA, IPI, IEA, ...)
+        maps_to: [GOEvidence.code]
+        status: loaded
+        reason: ""
+        code: GoConverter.java:280, 286-296, 376
+        note: >-
+          GOEvidence.code references a GOEvidenceCode item; those are made from the bundled
+          go-evidence-codes file (code, name, url), not from the GAF (GoConverter.java:217-235).
+          A code not in that file stops the load with an exception.
+      - key: "col:8"
+        name: With (or) From
+        description: identifiers supporting the evidence (UniProtKB:P12345, ...)
+        maps_to: [GOEvidence.withText]
+        status: loaded
+        reason: ""
+        code: GoConverter.java:281, 383-389, 444-489
+        note: >-
+          Stored as text. The converter also tries to make GOEvidence.with objects, but only for the
+          prefixes 'UniProt' (Protein) and 'FB' (Gene, fly only); the human GAF writes 'UniProtKB:',
+          which is not one of them, so GOEvidence.with stays empty for human rows. Also part of the
+          key that merges rows into one GOAnnotation.
+      - key: "col:9"
+        name: Aspect
+        description: GO aspect (P, F or C)
+        maps_to: []
+        status: not loaded
+        reason: not read (the namespace comes with the GO term from the go source)
+        code: GoConverter.java:261-285
+      - key: "col:10"
+        name: DB Object Name
+        description: name of the gene product
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: GoConverter.java:261-285
+      - key: "col:11"
+        name: DB Object Synonym
+        description: pipe-separated synonyms of the gene product
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: GoConverter.java:261-285
+      - key: "col:12"
+        name: DB Object Type
+        description: type of the gene product (protein, ...)
+        maps_to: []
+        status: not loaded
+        reason: not read (the class comes from the per-taxon config)
+        code: GoConverter.java:298
+      - key: "col:13"
+        name: Taxon
+        description: taxon of the gene product (taxon:9606; a second taxon after '|' for interacting organisms)
+        maps_to: [Organism.taxonId, Protein.organism]
+        status: loaded
+        reason: ""
+        code: GoConverter.java:267, 305, 697-717
+        note: >-
+          Only the first taxon is kept (the part after '|' is dropped). It also picks the per-taxon
+          config (class Protein, field primaryAccession for 9606).
+      - key: "col:14"
+        name: Date
+        description: date of the annotation (YYYYMMDD)
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: GoConverter.java:261-285
+      - key: "col:15"
+        name: Assigned By
+        description: database that made the annotation (UniProt, IntAct, ...)
+        maps_to: []
+        status: not loaded
+        reason: dropped on purpose
+        code: GoConverter.java:303
+        note: The line that read it is commented out.
+      - key: "col:16"
+        name: Annotation Extension
+        description: extensions of the annotation (relation(id), comma or pipe separated)
+        maps_to: [GOAnnotation.annotationExtension]
+        status: loaded
+        reason: ""
+        code: GoConverter.java:282-285, 413-415
+        note: Stored as text when the row has 16 or more columns and the cell is not empty.
+      - key: "col:17"
+        name: Gene Product Form ID
+        description: identifier of the specific form (isoform) of the gene product
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: GoConverter.java:261-285

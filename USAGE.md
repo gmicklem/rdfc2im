@@ -241,6 +241,48 @@ Tests: `tests/test_apply_public_lists.py` (the web service and the export script
 `tests/test_full_build_public_lists.py` (dry-run), and three live checks in `tests/test_live_mine.py` that skip unless the
 mine has the Genomics England lists.
 
+## Data-source status pages [im-9n4.42]
+
+One Markdown page per source of a build, and an index: where the data came from (URL, release, Last-Modified, fetch
+time, size, sha256, licence), the scope and the filter, records read and kept, objects loaded, and a table of every field
+of the source with what it maps to and whether it is loaded, with the number of records that carry it. Three tools,
+run in this order (BUILD.md, "Data-source status pages", has the sources of every value and the timings):
+
+```
+python3 tools/source_manifest.py --out out/_mine/source_manifest.json --sources "go ncbigene ..." \
+    --stock-sources "uniprot go-annotation ..." --cache-dir cached_raw_data --stock-dir $RDFC2IM_STOCK_DIR \
+    [--filtered-cache DIR] [--logs LOG_DIR] [--count-cache DIR] [--max-seconds 300] [--mine URL] \
+    [--reference-datasets curation/humanmine_2022_datasets.json] [--endpoint-counts SRC ... --sleep 1]
+python3 tools/source_pages.py pages --manifest out/_mine/source_manifest.json --out DIR
+python3 tools/field_counts.py count --format tab|gff3|xml|obo|fasta --in FILE [...]   # one file, by hand
+```
+
+* `source_manifest.py` works from the caches, `out/` and the build logs; `--mine` adds the objects loaded per class and
+  data set (read-only count queries). Field counts stream the raw files (`field_counts.py`) and are cached in
+  `--count-cache` (default `$RDFC2IM_STOCK_DIR/field-counts`) under each file's sha256; a count that passes
+  `--max-seconds` stops, and its page says what share of the file it saw.
+* `--endpoint-counts SRC` (off by default) asks an RDF source's SPARQL endpoint one `COUNT` query per predicate of
+  the root subject, one at a time, `--sleep` seconds apart: counts over the whole endpoint, not the build's extract.
+* The field tables of the stock sources come from `rdfc2im/data/stock_mappings/<source>.yaml` (format in
+  `tools/field_counts.py` and below); those of the RDF sources from `out/<source>/mapping_predicates.sssom.tsv`.
+  Known gaps per source: `rdfc2im/data/source_gaps.yaml` (only what BUILD.md or the expert review log records).
+* `pages` output is deterministic: the same manifest and mapping files give byte-identical pages.
+
+A stock mapping file says, for each input file of a loader (`files[].id` as in `stock_sources.yaml`): its `format`, how
+to count it (`comment`, `skip_lines`, `header_line` N / `first` / `match:TEXT`, `record_key` for XML), where the file
+states its `release`, and one entry per field: `key` (tab `col:N`; gff3 `col:N`, `attr:NAME`, `attr:Dbxref:PREFIX`;
+xml the element path, `/@name` for an attribute; obo `Term/TAG`; fasta `header:OS` ..., `sequence`), the source's `name`
+and `description`, `maps_to` (strict `Class.field` of the model), `status` (`loaded`, `not loaded` or `unknown`), a
+short `reason`, and `code` (file:line in the loader). `unlisted` says what a key found in the file but not listed means.
+Every file records the loader commit it was read at.
+
+In `tools/full-build.sh`: `--source-pages DIR` adds the last phase `write_source_manifest` (after `verify`);
+`--data-set-links URL` makes `prepare_mine_checkout` add a last source, `data-set-links`, that sets `DataSet.url` (the
+page) and `DataSet.description` on every data set of the build. Both are off without the flag.
+
+Tests: `tests/test_source_pages.py` (counters, manifest, a golden page, the link items and project wiring),
+`tests/test_full_build_source_pages.py` (dry-run).
+
 ## Not yet exercised
 
 `linkml-validate` is not wired into `check`. (`fetch` against the real endpoints and a real

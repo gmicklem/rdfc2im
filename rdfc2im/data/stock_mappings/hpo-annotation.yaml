@@ -1,0 +1,209 @@
+# Human Phenotype Ontology annotations: genes to phenotypes and diseases (genes_to_phenotype.txt),
+# and disease to phenotype annotations with evidence (phenotype.hpoa).
+source: hpo-annotation
+loader:
+  repository: humanmine-bio-sources
+  path: hpo-annotation
+  classes: [org.intermine.bio.dataconversion.HpoConverter]
+  commit: d67fc5d
+basis: read from code at humanmine-bio-sources d67fc5d (HpoConverter.java, BioDirectoryConverter.java, BioStoreHook.java)
+data_source: Human Phenotype Ontology         # HpoConverter.java:45
+data_sets: [hpo-annotation]                   # HpoConverter.java:44 (licence https://hpo.jax.org/app/license, :80)
+home: https://hpo.jax.org/app/
+writes: [Disease, Gene, HPOTerm, HPOAnnotation, HPOEvidence, OntologyAnnotationEvidenceCode, Publication,
+         Ontology, Organism, DataSet, DataSource, SOTerm]
+# Ontology: "Human Phenotype Ontology" (:375-381) and the Sequence Ontology from BioDirectoryConverter;
+# SOTerm (gene) from the store hook. OMIM's mimTitles.txt (hpo.disease.file) is not set here, so every
+# OMIM: id is taken as a disease (:186-190). Other files in the directory are ignored (:85-123).
+files:
+  - id: genes-to-phenotype
+    format: tab
+    comment: "#"
+    skip_lines: 0
+    header_line: "match:ncbi_gene_id	"   # the header line, wherever it is: a filtered copy may lack it [im-9n4.42]
+    record: one row (one gene, one HPO term, one disease)
+    record_key: null
+    unlisted: not loaded
+    unlisted_reason: processGeneFile reads columns 1, 3 and the last column only (HpoConverter.java:167-169)
+    fields:
+      - key: "col:1"
+        name: ncbi_gene_id
+        description: NCBI Gene (Entrez) id
+        maps_to: [Gene.primaryIdentifier, Gene.diseases, Disease.genes]
+        status: loaded
+        reason: "no ID resolver"
+        code: HpoConverter.java:168
+        note: >-
+          No ID resolver: the raw NCBI gene id becomes Gene.primaryIdentifier (:218-227), with
+          Gene.organism taxon 9606. Gene.diseases and Disease.genes are both filled (:177-178). The
+          row (gene included) is dropped when the disease id is neither OMIM: nor ORPHA: (:171-175),
+          e.g. a DECIPHER: id. The header row is skipped by its first cell, ncbi_gene_id (:161).
+      - key: "col:2"
+        name: gene_symbol
+        description: gene symbol
+        maps_to: []
+        status: not loaded
+        reason: "not read by the converter"
+        code: HpoConverter.java:167-169
+        note: "Gene.symbol is not set by this source."
+      - key: "col:3"
+        name: hpo_id
+        description: HPO term id (HP:nnnnnnn)
+        maps_to: [HPOTerm.identifier, HPOTerm.diseases]
+        status: loaded
+        reason: ""
+        code: HpoConverter.java:169
+        note: >-
+          One HPOTerm per id (:207-216), referring to the Human Phenotype Ontology; the row's disease is
+          added to HPOTerm.diseases (:179-180). HPOTerm items are stored in close() (:368).
+      - key: "col:4"
+        name: hpo_name
+        description: HPO term name
+        maps_to: []
+        status: not loaded
+        reason: "not read by the converter"
+        code: HpoConverter.java:167-169
+        note: "HPOTerm.name is not set by this source (it comes from the HPO ontology load)."
+      - key: "col:5"
+        name: frequency
+        description: frequency of the phenotype in the disease
+        maps_to: []
+        status: not loaded
+        reason: "not read by the converter"
+        code: HpoConverter.java:167-169
+        note: "Frequencies are stored only from phenotype.hpoa (HPOEvidence.frequencyModifier)."
+      - key: "col:6"
+        name: disease_id
+        description: disease id (OMIM:n, ORPHA:n)
+        maps_to: [Disease.primaryIdentifier, Gene.diseases, Disease.genes, HPOTerm.diseases]
+        status: loaded
+        reason: ""
+        code: HpoConverter.java:167
+        note: >-
+          Read as the LAST cell of the row (line[line.length - 1]), not by position. OMIM: ids are kept
+          as they are; ORPHA:n becomes ORPHANET:n, the orphanet source's form (:191-194). Any other
+          prefix (DECIPHER:) drops the row (:195-197). Disease.name is not set.
+  - id: hpoa
+    format: tab
+    release: [{"from": "line", "pattern": "^#version: (\\S+)", "label": "version"}]
+    comment: "#"
+    skip_lines: 0
+    header_line: "match:database_id"   # the header follows the '#' lines upstream; the filtered copy has none
+    record: one row (one annotation of one disease with one HPO term, with its evidence)
+    record_key: null
+    unlisted: not loaded
+    unlisted_reason: processHpoaFile reads columns 1, 3, 4, 5, 6, 8 and 12 only (HpoConverter.java:296-303)
+    fields:
+      - key: "col:1"
+        name: database_id
+        description: disease id (OMIM:n, ORPHA:n, DECIPHER:n)
+        maps_to: [Disease.primaryIdentifier, Disease.hpoAnnotations, HPOEvidence.diseaseReference]
+        status: loaded
+        reason: ""
+        code: HpoConverter.java:302
+        note: >-
+          OMIM: kept as it is; ORPHA:n becomes ORPHANET:n (:184-205). DECIPHER: and any other prefix
+          make getDisease return null and the row is dropped (:312-316); the ignoreDbList "DECIPHER"
+          check (:47, :247) is used only for the retired phenotype_annotation.tab files. The evidence
+          code of a dropped row is still stored (getEvidenceCode runs first, :310). The header row is
+          skipped by its first cell, database_id (:287). Also part of the HPOAnnotation key
+          (hpo_id, database_id, qualifier, :349-352), and the HPOEvidence.source when reference is
+          empty (:319-321). Note: in the subset sample the header line is missing (the four # lines are
+          followed directly by data rows); in the upstream download it is line 5.
+      - key: "col:2"
+        name: disease_name
+        description: disease name
+        maps_to: []
+        status: not loaded
+        reason: "dropped on purpose"
+        code: HpoConverter.java:276
+        note: "Disease.name comes from the orphanet and omim sources."
+      - key: "col:3"
+        name: qualifier
+        description: NOT for a negated annotation, else empty
+        maps_to: [HPOAnnotation.qualifier]
+        status: loaded
+        reason: ""
+        code: HpoConverter.java:302
+        note: "Set only when not empty (:358-360); part of the HPOAnnotation key, so NOT annotations are separate objects."
+      - key: "col:4"
+        name: hpo_id
+        description: HPO term id
+        maps_to: [HPOAnnotation.hpoTerm, HPOTerm.identifier, HPOTerm.hpoAnnotations]
+        status: loaded
+        reason: ""
+        code: HpoConverter.java:302
+        note: >-
+          One HPOAnnotation per (hpo_id, database_id, qualifier), referring to the HPOTerm
+          (:349-364). The converter sets neither HPOAnnotation.subject nor HPOAnnotation.ontologyTerm
+          (the OntologyAnnotation fields): the disease reaches its annotations only through
+          Disease.hpoAnnotations (:346).
+      - key: "col:5"
+        name: reference
+        description: source of the annotation (PMID:n, OMIM:n, ORPHA:n, ...; ; separated)
+        maps_to: [HPOEvidence.source, HPOEvidence.publications, Publication.pubMedId]
+        status: loaded
+        reason: ""
+        code: HpoConverter.java:319-333
+        note: >-
+          The whole cell (or database_id when empty) goes to HPOEvidence.source. Each PMID part with
+          an all-digit number after "PMID:" makes a Publication (pubMedId) in HPOEvidence.publications
+          (:395-409).
+      - key: "col:6"
+        name: evidence
+        description: evidence code (IEA, PCS, TAS)
+        maps_to: [HPOEvidence.code, OntologyAnnotationEvidenceCode.code]
+        status: loaded
+        reason: ""
+        code: HpoConverter.java:310
+        note: "One OntologyAnnotationEvidenceCode per code (:383-393), referred to by HPOEvidence.code (:335)."
+      - key: "col:7"
+        name: onset
+        description: age of onset (HPO term)
+        maps_to: []
+        status: not loaded
+        reason: "dropped on purpose"
+        code: HpoConverter.java:276
+        note: ""
+      - key: "col:8"
+        name: frequency
+        description: frequency (HPO term, n/m or percentage)
+        maps_to: [HPOEvidence.frequencyModifier]
+        status: loaded
+        reason: ""
+        code: HpoConverter.java:336-338
+        note: "Set only when not empty."
+      - key: "col:9"
+        name: sex
+        description: sex the annotation applies to
+        maps_to: []
+        status: not loaded
+        reason: "dropped on purpose"
+        code: HpoConverter.java:276
+        note: ""
+      - key: "col:10"
+        name: modifier
+        description: modifier (HPO terms)
+        maps_to: []
+        status: not loaded
+        reason: "dropped on purpose"
+        code: HpoConverter.java:276
+        note: ""
+      - key: "col:11"
+        name: aspect
+        description: P (phenotype), I (inheritance), C (clinical course), M (modifier)
+        maps_to: []
+        status: not loaded
+        reason: "dropped on purpose"
+        code: HpoConverter.java:276
+        note: ""
+      - key: "col:12"
+        name: biocuration
+        description: curators with dates (HPO:probinson[2021-03-23]; ...)
+        maps_to: [HPOEvidence.assignedBy]
+        status: loaded
+        reason: ""
+        code: HpoConverter.java:295-303
+        note: >-
+          The [date] parts are removed and the distinct curator names joined with ';'
+          (:295-301); set only when not empty (:339-341). A row with fewer than 12 cells throws (:290-293).

@@ -1459,6 +1459,46 @@ Timing on the ut demo (4,308 genes, 438 lists, 35,670 members): 13 s to resolve 
 a run, the archive of 438 lists included. `GET /service/lists` with 438 public lists: 270 KB, 70 ms. The BlueGenes lists
 page shows the first rows 0.3 to 0.6 s after load (22 pages of 20).
 
+## Data-source status pages [im-9n4.42]
+
+`--source-pages DIR` adds a last phase, `write_source_manifest`, after `verify`: `tools/source_manifest.py` writes the build
+manifest `out/_mine/source_manifest.json` and `tools/source_pages.py pages` turns it into one Markdown page per source plus
+an index `README.md` in DIR. For the demo the pages are committed to the humanmine repository (gmicklem/humanmine,
+`docs/data-sources/`), where GitHub shows them as they are. Without the flag the phase list and every phase's dry run are
+as before. USAGE.md, "Data-source status pages", has the commands and the mapping file format.
+
+Where each value of the manifest comes from:
+
+| Value | Stock source | RDF source |
+|---|---|---|
+| URL | `stock_sources.yaml` `files[].url` (and the raw group's `url.<id>`) | the endpoint and `FROM` graphs of `out/<src>/queries/*.sparql` |
+| release / version | what the file states (`release:` probes in the mapping file: GAF `!date-generated`, GFF `#!annotation-source`, IntAct `releaseDate`, the BioGRID member name, the OBO `data-version`, Orphanet `JDBOR version`, HPO `#version`, the GTEx URL) | not in the SPARQL results |
+| Last-Modified | the raw group's `META.json` `last_modified.<id>` (what the server sent at the download) | none |
+| fetched at (UTC) | the raw group's `saved_at` (written right after the download) | the cache group's `saved_at` |
+| size, sha256 | the cached raw file (sha256 computed, cached by path, size and mtime) | each cached TSV |
+| licence, redistributable | `stock_sources.yaml` | not recorded |
+| scope | `idsets/idsets.json` (panel size), `--gene-identifiers` | the cache group's `scope` (none, panel, full, pmid) |
+| filter | `stock_sources.yaml` `filter`, in one sentence | none (the SPARQL query is the cut) |
+| records read, kept | `field_counts.py` over the raw file and over the filtered file the loader read, with `subset_raw.py`'s record definitions; the filter's own JSON line from the build log as `filter_log` where the log has one | rows per cached table |
+| objects loaded | the mine: one count query per class (with a `dataSets` collection) and data set | the same, plus objects per class in the items file |
+| field counts | `field_counts.py` over the whole raw file and the filtered file | the cached extract's columns; `--endpoint-counts` for the whole endpoint |
+
+What was missing, and how the build now captures it: the filter statistics (`subset_raw.py filter`'s JSON line) were only
+in the log of the build that cut the file, and a build that restores the filtered group from the cache prints none. Rather
+than change `subset_raw.py` or the cache metadata, the manifest counts the records of the raw file and of the filtered file
+itself, with the same record definitions, so every build has them (a GAF row: 906,445 read, 9,121 kept); the log's line, when
+present, is kept beside them. The release a file states was recorded nowhere; it is now read from the file. Objects loaded
+per class and data set were never recorded; `--mine` adds them.
+
+DataSet links: `--data-set-links URL` makes `prepare_mine_checkout` write `$RDFC2IM_DATA_ROOT/rdfc2im/_data-set-links/data_set_links.xml`
+(one DataSet item per data set the selected sources write: `name`, `url` = URL/`<kind>-<source>.md`, `description`) and
+add a last source `data-set-links` (type `humanmine-items`, which keys DataSet on `name`) after the trimmed project.xml's
+others, with `DataSet.url = data-set-links, *` and `DataSet.description = data-set-links, *` in the priorities. No Java
+change: HumanMine did the same with its `humanmine-static` source and a `datasets.xml` (that source in
+humanmine-bio-sources is only keys and `have.file.xml.tgt`; the datasets.xml repository is lost). In this build no loader
+sets DataSet.url or description (the demo mine's 30 data sets have neither), so nothing is overwritten. The data set names
+come from the stock mapping files (`data_sets`, read from each converter) and `sources.yaml` (`data_set_title`).
+
 ## Watching a build
 
 Every log line goes to the terminal and to `.build-logs/build-<run-id>.log` (in the repository,

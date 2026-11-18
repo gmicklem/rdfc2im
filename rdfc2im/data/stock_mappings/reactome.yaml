@@ -1,0 +1,80 @@
+# Reactome's lowest-level pathway mapping of UniProt accessions (UniProt2Reactome.txt), loaded by
+# InterMine's stock reactome source as Protein.pathways (ReactomePostProcess then copies them to Gene.pathways).
+source: reactome
+loader:
+  repository: intermine
+  path: bio/sources/reactome
+  classes:
+    - org.intermine.bio.dataconversion.ReactomeConverter
+    - org.intermine.bio.postprocess.ReactomePostProcess
+  commit: 5351d0c301
+basis: read from code at intermine 5351d0c301 (ReactomeConverter.java, ReactomePostProcess.java, reactome.properties)
+data_source: Reactome
+data_sets: [Reactome pathways data set]
+home: http://www.reactome.org/
+writes: [DataSource, DataSet, Organism, Protein, Pathway]
+# ReactomePostProcess (the source's postprocessor.class) later copies Protein.pathways to Gene.pathways
+# through Protein.genes; that is a postprocess, not the converter.
+files:
+  - id: map
+    format: tab
+    comment: "#"
+    skip_lines: 0
+    header_line: null
+    record: one row = one UniProt accession in one Reactome pathway (no header)
+    record_key: null
+    unlisted: not loaded
+    unlisted_reason: the file has 6 columns and a row with any other number of cells stops the load (ReactomeConverter.java:78-80)
+    fields:
+      - key: "col:1"
+        name: UniProt accession
+        description: UniProt accession of the protein (isoform accessions such as P12345-2 occur)
+        maps_to: [Protein.primaryAccession, Protein.organism, Protein.pathways, Pathway.proteins]
+        status: loaded
+        reason: ""
+        code: ReactomeConverter.java:82, 96-99, 145-155
+        note: >-
+          One Protein item per accession, with organism from column 6; it is added to the pathway's
+          proteins and the pathway to its pathways. The value is used as it is (no ID resolver).
+      - key: "col:2"
+        name: Reactome pathway stable id
+        description: stable identifier of the pathway (R-HSA-73843)
+        maps_to: [Pathway.identifier]
+        status: loaded
+        reason: ""
+        code: ReactomeConverter.java:83, 94, 134-143
+      - key: "col:3"
+        name: URL
+        description: Pathway Browser URL of the pathway
+        maps_to: []
+        status: not loaded
+        reason: "read but never used"
+        code: ReactomeConverter.java:84
+      - key: "col:4"
+        name: Event name
+        description: name of the pathway
+        maps_to: [Pathway.name]
+        status: loaded
+        reason: ""
+        code: ReactomeConverter.java:85, 134-143
+        note: Taken from the first row of each pathway id.
+      - key: "col:5"
+        name: Evidence code
+        description: TAS (traceable author statement) or IEA (inferred from electronic annotation)
+        maps_to: []
+        status: not loaded
+        reason: "read but never used"
+        code: ReactomeConverter.java:86
+      - key: "col:6"
+        name: Species
+        description: species name (Homo sapiens, Mus musculus, ...)
+        maps_to: [Organism.taxonId]
+        status: loaded
+        reason: "also a filter"
+        code: ReactomeConverter.java:87-93, 115-131
+        note: >-
+          Split on spaces; a name of other than two words (strains, viruses) is skipped. Genus and
+          species are turned into a taxon id through OrganismRepository, and the row is kept only when
+          that taxon is in the project.xml property reactome.organisms (9606 in the hybrid build's
+          project.xml; HumanMine's own has '9606 10090'). The converter throws when the property is
+          empty. Pathway.organism is not set.

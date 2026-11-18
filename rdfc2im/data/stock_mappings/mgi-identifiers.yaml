@@ -1,0 +1,125 @@
+# MGI's list of mouse markers (MRK_List2.rpt), loaded by InterMine's mgi-identifiers source: it gives
+# the mouse genes that panther creates (MGI id only) their symbol and name.
+source: mgi-identifiers
+loader:
+  repository: intermine
+  path: bio/sources/mgi-identifiers
+  classes: [org.intermine.bio.dataconversion.MgiIdentifiersConverter]
+  commit: 5351d0c301
+basis: read from code at intermine 5351d0c301 (MgiIdentifiersConverter.java)
+data_source: MGI
+data_sets: [Mouse gene identifiers]
+home: http://www.informatics.jax.org/
+writes: [DataSource, DataSet, Organism, Gene, CrossReference, SOTerm, Ontology]
+# DataSource also gets 'Vega' and 'Ensembl' items (the sources of the CrossReferences).
+# SOTerm and Ontology: BioFileConverter's store hook gives every Gene a sequenceOntologyTerm (BioStoreHook.java:115-157).
+files:
+  - id: markers
+    format: tab
+    comment: "#"
+    skip_lines: 0
+    header_line: "match:MGI Accession ID	"   # the header line, wherever it is: a filtered copy may lack it [im-9n4.42]
+    # skip_lines and header_line describe the download (line 1 is the header). The filtered sample in
+    # stock_ut/subset has NO header line (the filter has no keep_header), so its line 1 is a record;
+    # the converter does not need the header (it skips the line because its type cell is 'Marker Type').
+    record: one row = one MGI marker (genes, QTLs, BAC ends, ...); only markers of type Gene are loaded
+    record_key: null
+    unlisted: not loaded
+    unlisted_reason: MgiIdentifiersConverter reads only line[0], [6], [8], [9] and [11] (MgiIdentifiersConverter.java:63-71)
+    fields:
+      - key: "col:1"
+        name: MGI Accession ID
+        description: MGI marker accession (MGI:97570)
+        maps_to: [Gene.primaryIdentifier]
+        status: loaded
+        reason: ""
+        code: MgiIdentifiersConverter.java:68, 91-93
+        note: >-
+          Kept with its 'MGI:' prefix, the form panther writes (MGI:97490). An empty id or a repeated
+          id stops the load with an exception. Every Gene also gets Gene.organism = taxon 10090
+          (constant, MgiIdentifiersConverter.java:53-55, 90).
+      - key: "col:2"
+        name: Chr
+        description: chromosome of the marker
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: MgiIdentifiersConverter.java:63-71
+      - key: "col:3"
+        name: cM Position
+        description: genetic map position in centimorgans (or 'syntenic', 'N/A')
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: MgiIdentifiersConverter.java:63-71
+      - key: "col:4"
+        name: genome coordinate start
+        description: start of the marker on the mouse genome
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: MgiIdentifiersConverter.java:63-71
+      - key: "col:5"
+        name: genome coordinate end
+        description: end of the marker on the mouse genome
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: MgiIdentifiersConverter.java:63-71
+      - key: "col:6"
+        name: strand
+        description: strand of the marker (+ or -)
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: MgiIdentifiersConverter.java:63-71
+      - key: "col:7"
+        name: Marker Symbol
+        description: official symbol of the marker
+        maps_to: [Gene.symbol]
+        status: loaded
+        reason: ""
+        code: MgiIdentifiersConverter.java:69, 81-87, 94-96
+        note: Not set when the cell is the text 'null'. A symbol seen twice stops the load with an exception.
+      - key: "col:8"
+        name: Status
+        description: marker status (O = official; MRK_List2 has no withdrawn markers)
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: MgiIdentifiersConverter.java:63-71
+      - key: "col:9"
+        name: Marker Name
+        description: full name of the marker
+        maps_to: [Gene.name]
+        status: loaded
+        reason: ""
+        code: MgiIdentifiersConverter.java:70, 97-99
+        note: Not set when the cell is the text 'null'.
+      - key: "col:10"
+        name: Marker Type
+        description: type of the marker (Gene, QTL, BAC/YAC end, Pseudogene, ...)
+        maps_to: []
+        status: not loaded
+        reason: "read: only rows whose type is exactly 'Gene' are loaded"
+        code: MgiIdentifiersConverter.java:63-66
+        note: The header line (when present) is skipped by the same test, since its cell is 'Marker Type'.
+      - key: "col:11"
+        name: Feature Type
+        description: finer type (protein coding gene, lncRNA gene, ...)
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: MgiIdentifiersConverter.java:63-71
+      - key: "col:12"
+        name: Marker Synonyms (pipe-separated)
+        description: synonyms of the marker
+        maps_to: [CrossReference.identifier, Gene.crossReferences]
+        status: loaded
+        reason: "partly: only OTTMUSG and ENSMUSG ids"
+        code: MgiIdentifiersConverter.java:71, 101-114
+        note: >-
+          Only a synonym starting with OTTMUSG (source Vega) or ENSMUSG (source Ensembl) becomes a
+          CrossReference of the gene. Every other synonym is dropped: no Synonym objects are made.
+          The converter reads line[11] for every Gene row, so a Gene row with fewer than 12 cells
+          would fail; it does not check the length.

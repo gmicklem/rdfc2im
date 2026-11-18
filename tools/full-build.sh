@@ -120,6 +120,15 @@
 #                       (BUILD.md, "The patched BlueGenes tool set"). Without it stage_artifacts is as before.
 #   --with-front        After the stack is up, start the aligner and nginx front (trial/front/up.sh). Off by
 #                       default.
+#   --source-pages DIR  Add a last phase, write_source_manifest (after verify): tools/source_manifest.py writes
+#                       out/_mine/source_manifest.json (URLs, Last-Modified, fetch times, sizes, sha256, filters,
+#                       records read and kept, field counts, objects loaded per class from the mine) and
+#                       tools/source_pages.py writes the data-source status pages (Markdown) into DIR. Off by
+#                       default; BUILD.md, "Data-source status pages" [im-9n4.42].
+#   --data-set-links URL  In prepare_mine_checkout, add a last source, data-set-links (type humanmine-items), that sets
+#                       DataSet.url to the status page URL/<kind>-<source>.md and DataSet.description on every data
+#                       set the selected sources write, with first priority for both fields. URL is where the pages
+#                       are published (e.g. the humanmine repository's docs/data-sources/ on GitHub). Off by default.
 #   -h, --help          This text.
 #
 # Every side-effecting external command (gradle, docker, psql, curl) is emitted through `run`,
@@ -251,6 +260,8 @@ GENE_IDENTIFIERS=panel
 WITH_GENOME_SEQUENCE=0
 JBROWSE2_SRC=${JBROWSE2_SRC:-}
 WITH_FRONT=0
+SOURCE_PAGES=""
+DATA_SET_LINKS=""
 DRY_RUN=0
 LIST_PHASES=0
 FROM_PHASE=""
@@ -361,6 +372,8 @@ while [ $# -gt 0 ]; do
     --gene-identifiers) GENE_IDENTIFIERS=$2; shift ;;
     --jbrowse2-src) JBROWSE2_SRC=$2; shift ;;
     --with-front) WITH_FRONT=1 ;;
+    --source-pages) SOURCE_PAGES=$2; shift ;;
+    --data-set-links) DATA_SET_LINKS=$2; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "unknown option: $1" >&2; usage; exit 2 ;;
   esac
@@ -507,6 +520,8 @@ if [ -n "$INTERMINE_SRC" ]; then
   PHASES=("${PHASES[@]/#fetch_inputs/fetch_inputs publish_intermine}")
   read -r -a PHASES <<< "${PHASES[*]}"
 fi
+# --source-pages: one more phase at the very end; without it the phase list is as before [im-9n4.42]
+[ -z "$SOURCE_PAGES" ] || PHASES+=(write_source_manifest)
 if [ "$LIST_PHASES" -eq 1 ]; then printf '%s\n' "${PHASES[@]}"; exit 0; fi
 
 mkdir -p "$LOG_DIR"
@@ -1700,6 +1715,7 @@ phase_prepare_mine_checkout() {
   # merge; this just deploys it) - re-syncing after adding a source is required, not optional
   # (confirmed live, LOAD-TRIAL.md's hgnc section, finding 3).
   write_file "$mine/dbmodel/resources/genomic_priorities.properties" "$(cat out/_mine/genomic_priorities.properties)"
+  [ -z "$DATA_SET_LINKS" ] || _add_data_set_links "$mine"
   local prod_props
   local tree="$INTERMINE_TREE"
   if [ "$DRY_RUN" -eq 1 ] && [ -n "$INTERMINE_SRC" ] && [ ! -d "$tree" ]; then tree="$INTERMINE_SRC"; fi  # as in build_reactome_source
@@ -2194,6 +2210,31 @@ phase_apply_public_lists() {
   run python3 tools/apply_public_lists.py --mine "$mine" --panelapp-cache "$PUBLIC_LISTS" --legacy curation/public_lists \
       --archive-repo "$PUBLIC_LISTS_ARCHIVE" --select "$PUBLIC_LISTS_SELECT" "$names" \
       --report "$LOG_DIR/public-lists-$RUN_ID.json" --wait 300
+}
+
+# --data-set-links URL [im-9n4.42]: an items file of DataSet records (name, url = the source's status page,
+# description) for every data set the selected sources write, loaded by one more humanmine-items source after all
+# the others, first for DataSet.url and DataSet.description (no loader sets either in this build).
+_add_data_set_links() {
+  local mine=$1 items="$DATA_ROOT/rdfc2im/_data-set-links/data_set_links.xml"
+  run mkdir -p "$(dirname "$items")"
+  run python3 tools/source_pages.py data-set-links --base-url "$DATA_SET_LINKS" --sources "$SOURCES" \
+      --stock-sources "$STOCK_SOURCES" --out "$items"
+  run python3 tools/source_pages.py add-links-source --project "$mine/project.xml" \
+      --priorities "$mine/dbmodel/resources/genomic_priorities.properties" --items "$items" --name data-set-links
+}
+
+# --source-pages DIR [im-9n4.42]: the build manifest and the data-source status pages, from the caches, the logs and
+# the running mine (read-only queries). Field counts are cached under $RDFC2IM_STOCK_DIR/field-counts by sha256.
+phase_write_source_manifest() {
+  activate_venv   # source_manifest.py reads the YAML tables
+  local mine="http://localhost:$MINE_PORT/humanmine" man="out/_mine/source_manifest.json"
+  run python3 tools/source_manifest.py --out "$man" --sources "$SOURCES" --stock-sources "$STOCK_SOURCES" \
+      --cache-dir "$RAW_CACHE_DIR" --stock-dir "$STOCK_DIR" ${STOCK_FILTERED_CACHE:+--filtered-cache "$STOCK_FILTERED_CACHE"} \
+      --logs "$LOG_DIR" --mine "$mine" --gene-identifiers "$GENE_IDENTIFIERS" --build-name "${STACK_NAME:-default} $(basename "$LOG_DIR")" \
+      ${INTERMINE_SRC:+--intermine-src "$INTERMINE_SRC"} --trial-home "$TRIAL_HOME" \
+      --reference-datasets curation/humanmine_2022_datasets.json
+  run python3 tools/source_pages.py pages --manifest "$man" --out "$SOURCE_PAGES"
 }
 
 phase_verify() {

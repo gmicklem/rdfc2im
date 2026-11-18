@@ -1,0 +1,77 @@
+# UniProt's keyword list (keywlist.xml), loaded by InterMine's uniprot-keywords source: it adds the
+# description and synonyms of the keyword OntologyTerms that the uniprot source links proteins to.
+source: uniprot-keywords
+loader:
+  repository: intermine
+  path: bio/sources/uniprot-keywords
+  classes: [org.intermine.bio.dataconversion.UniprotKeywordConverter]
+  commit: 5351d0c301
+basis: read from code at intermine 5351d0c301 (UniprotKeywordConverter.java, uniprot-keywords_keys.properties)
+data_source: UniProt
+data_sets: [UniProt data set]
+home: https://www.uniprot.org/
+writes: [DataSource, DataSet, Ontology, OntologyTerm, OntologyTermSynonym]
+# Ontology: one item named 'UniProtKeyword' (UniprotKeywordConverter.java:79). OntologyTerm merges on
+# name + ontology (uniprot-keywords_keys.properties), which is how it meets the uniprot source's keywords.
+# The converter is built with storeOntology=false (UniprotKeywordConverter.java:44-45): no SO Ontology item.
+files:
+  - id: keywlist
+    format: xml
+    record: one keyword element = one UniProt keyword
+    record_key: keywordList/keyword
+    unlisted: not loaded
+    unlisted_reason: >-
+      the SAX handler acts only on the end of name, description and keyword elements and reads no
+      attribute (UniprotKeywordConverter.java:89-135)
+    fields:
+      - key: "keywordList/keyword"
+        name: keyword
+        description: one keyword
+        maps_to: []
+        status: not loaded
+        reason: "read: its end resets the name and the synonym list for the next keyword"
+        code: UniprotKeywordConverter.java:130-134
+      - key: "keywordList/keyword/@id"
+        name: id
+        description: keyword accession (KW-0001)
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: UniprotKeywordConverter.java:89-98
+        note: OntologyTerm.identifier is therefore not set by this source.
+      - key: "keywordList/keyword/name"
+        name: name
+        description: the keyword name (first name element), then its synonyms (the following name elements)
+        maps_to: [OntologyTerm.name, OntologyTermSynonym.name, OntologyTerm.synonyms]
+        status: loaded
+        reason: ""
+        code: UniprotKeywordConverter.java:106-114, 155-164
+        note: >-
+          The first name is the OntologyTerm.name; every later name becomes an OntologyTermSynonym
+          (name only, no type), one item per distinct text shared by all keywords that use it.
+          OntologyTerm.ontology is the 'UniProtKeyword' Ontology.
+      - key: "keywordList/keyword/description"
+        name: description
+        description: definition of the keyword
+        maps_to: [OntologyTerm.description]
+        status: loaded
+        reason: ""
+        code: UniprotKeywordConverter.java:115-129, 170-180
+        note: >-
+          Line breaks are turned into spaces. The OntologyTerm is stored only at the end of the
+          description element, so a keyword without a description would not be stored. A second
+          keyword with the same name is skipped (getKeyword returns null).
+      - key: "keywordList/keyword/go"
+        name: go
+        description: GO term mapped to the keyword
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: UniprotKeywordConverter.java:89-135
+      - key: "keywordList/keyword/go/@id"
+        name: id
+        description: GO id (GO:0051537)
+        maps_to: []
+        status: not loaded
+        reason: not read
+        code: UniprotKeywordConverter.java:89-135
