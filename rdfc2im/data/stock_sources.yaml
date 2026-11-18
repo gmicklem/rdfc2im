@@ -141,10 +141,26 @@ sources:
     after: [ncbi-gene]
     postprocess: [create-chromosome-locations-and-lengths, create-gene-flanking-features,
                   create-location-overlap-index, create-overlap-view]
+    priority_first: [Gene.chromosome]
+    chromosome_lengths: {from: gff, source: ncbi-gff-lengths, data_dir: human/gff/lengths}
     notes: >-
-      GFF3 converter default includes *.gff,*.gff3; seqids NC_0000xx are mapped to chromosome
-      names for GRCh38. The filter keeps every ##sequence-region line, the panel genes (Dbxref
-      GeneID) and their Parent closure. RefSeq annotation release of Aug 2024.
+      GFF3 converter default includes *.gff,*.gff3; seqids NC_000001.11 to NC_000024.10 are mapped
+      to the chromosome names 1-22, X, Y (NcbiGffGFF3SeqHandler); MT (NC_012920.1) is not mapped,
+      so its genes would get no location, and rows on alt and unplaced scaffolds (NT_, NW_) are
+      dropped by the record handler. The filter keeps every ##sequence-region line, the panel genes
+      (Dbxref GeneID) with their Parent closure (transcripts, exons, CDS). `keep_types: [gene]` in
+      the filter would also keep every other gene row (the neighbours a genome browser shows, D-1):
+      measured 18 Nov 2026 it adds 41,955 Genes and, through create-gene-flanking-features (20
+      regions per gene), 0.84 million GeneFlankingRegions: 2.18 million objects instead of
+      0.37 million, Postgres 4.3 GB instead of 2.0, integrate +45 s, postprocess +270 s (the
+      search index most), and 2 duplicate symbols (RefSeq names some tRNA genes alike); left off
+      until the thin genome comes from the RDF side (BUILD.md, "Locations and gene models"). Keys: Gene on
+      primaryIdentifier (the Entrez id, from Dbxref GeneID), Chromosome on primaryIdentifier and
+      organism, both what the rdfc2im sources write, so it merges loaded after them in project.xml
+      order (no load_first). No loader sets Chromosome.length from a GFF, so
+      `chromosome_lengths` adds the source ncbi-gff-lengths (type humanmine-items, after this one)
+      loading the lengths that `subset_raw.py chromosome-lengths` reads from the filtered file's
+      ##sequence-region lines [im-9n4.9]. RefSeq annotation release of Aug 2024.
     files:
       - id: gff
         url: https://ftp.ncbi.nlm.nih.gov/refseq/H_sapiens/annotation/GRCh38_latest/refseq_identifiers/GRCh38_latest_genomic.gff.gz
@@ -163,12 +179,18 @@ sources:
     properties:
       fasta.taxonId: "9606"
     after: [ncbi-gene]
+    needs: [ncbi-gff]
     postprocess: [create-chromosome-locations-and-lengths, transfer-sequences]
     notes: >-
-      Optional (whole chromosomes, no gene filter possible): 973 MB gzipped, about 3.1 GB
-      unpacked under the data root. NCBIFastaLoaderTask throws on a header without the word
-      "chromosome" (or "mitochondrion"); GRCh38_latest_genomic.fna also holds unplaced and alt
-      scaffolds whose headers have not been checked against it (unverified).
+      Optional: tools/full-build.sh --with-genome-sequence adds it (it needs ncbi-gff, whose
+      locations transfer-sequences cuts the gene, transcript and exon sequences by). 973 MB
+      gzipped. NCBIFastaLoaderTask names a record by the words after "chromosome" in its header
+      ("mitochondrion" -> MT), so the alt, patch and unlocalized scaffolds of
+      GRCh38_latest_genomic.fna ("chromosome 1 unlocalized genomic scaffold, ...") would become
+      hundreds of extra Chromosome objects ("1 unlocalized genomic scaffold"); the filter keeps
+      only the 24 records the ncbi-gff loader maps (ids: chromosomes, the NC_ accessions), about
+      3.1 GB uncompressed, which also sets Chromosome.length (equal to the GFF's
+      ##sequence-region values) [im-9n4.9; never run in the sandbox].
     files:
       - id: genome
         url: https://ftp.ncbi.nlm.nih.gov/refseq/H_sapiens/annotation/GRCh38_latest/refseq_identifiers/GRCh38_latest_genomic.fna.gz
@@ -176,7 +198,7 @@ sources:
         size: 972898531
         last_modified: "2024-08-27"
         stage_as: GRCh38_latest_genomic.fna
-        filter: none
+        filter: {format: fasta, ids: chromosomes}
 
   panther:
     type: panther

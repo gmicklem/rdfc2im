@@ -286,3 +286,47 @@ def test_the_mine_properties_name_the_resolver_root_and_stale_caches_go(tmp_path
     n_base = int(re.search(r"humanmine.properties \((\d+) lines\)", base).group(1))
     assert f"humanmine.properties ({n_base + 1} lines)" in plan
 
+
+
+def test_ncbi_gff_is_cut_with_its_neighbour_genes_and_its_chromosome_lengths(tmp_path):
+    """[im-9n4.9] subset_stock_data filters the GFF (panel closure only: the table leaves keep_types
+    off), then writes the lengths Items XML from the filtered file; stage_src_data links that into
+    its own directory."""
+    src = _fake_intermine_60(tmp_path)
+    plan = _plan(tmp_path, "--only", "subset_stock_data", "--intermine-src", src, "--stock-sources", "ncbi-gff")
+    if plan is None:
+        return
+    cmds = _cmds(plan, "subset_stock_data")
+    stock = str(tmp_path / "stock")
+    filt = next(c for c in cmds if "subset_raw.py filter --format gff3" in c)
+    assert filt.endswith(f"--ids {stock}/idsets/entrez.txt"), filt
+    lengths = [i for i, c in enumerate(cmds) if "subset_raw.py chromosome-lengths" in c]
+    assert lengths and lengths[0] > cmds.index(filt)
+    assert cmds[lengths[0]].endswith(
+        f"--in {stock}/subset/ncbi-gff/gff/GRCh38_latest_genomic.gff "
+        f"--out {stock}/subset/ncbi-gff/chromosome-lengths/chromosome_lengths.xml --taxon 9606"), cmds[lengths[0]]
+    plan = _plan(tmp_path, "--only", "stage_src_data", "--intermine-src", src, "--stock-sources", "ncbi-gff")
+    staged = " ".join(_cmds(plan, "stage_src_data"))
+    assert (f"ln -sfn '{stock}/subset/ncbi-gff/chromosome-lengths/chromosome_lengths.xml' "
+            f"'/micklem/data/human/gff/lengths/chromosome_lengths.xml'") in staged, staged
+    plan = _plan(tmp_path, "--only", "fetch_stock_data", "--intermine-src", src, "--stock-sources", "ncbi-gff")
+    assert "chromosome-lengths: local copy" not in plan and "ncbi-gff/chromosome-lengths" not in plan
+
+
+def test_with_genome_sequence_adds_ncbi_fasta_and_transfer_sequences(tmp_path):
+    src = _fake_intermine_60(tmp_path)
+    rc, out = _run(tmp_path, "--only", "fetch_stock_data", "--intermine-src", src, "--stock-sources", "uniprot",
+                   "--with-genome-sequence")
+    assert rc == 2 and "--with-genome-sequence needs ncbi-gff in --stock-sources" in out, out
+    plan = _plan(tmp_path, "--only", "subset_stock_data", "--intermine-src", src, "--stock-sources", "ncbi-gff",
+                 "--with-genome-sequence")
+    if plan is None:
+        return
+    stock = str(tmp_path / "stock")
+    assert "stock sources, in HumanMine's project.xml order: ncbi-fasta ncbi-gff" in plan \
+        or "stock sources: ncbi-gff ncbi-fasta" in plan, plan
+    fasta = next(c for c in _cmds(plan, "subset_stock_data") if "--format fasta" in c)
+    assert f"--ids {stock}/idsets/chromosomes.txt" in fasta, fasta
+    plan = _plan(tmp_path, "--only", "postprocess", "--intermine-src", src, "--stock-sources", "ncbi-gff",
+                 "--with-genome-sequence")
+    assert "-Pprocess=transfer-sequences" in plan and "-Pprocess=create-chromosome-locations-and-lengths" in plan

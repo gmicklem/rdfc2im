@@ -79,6 +79,12 @@
 #                       subset_stock_data writes it, filtered, as $RDFC2IM_STOCK_DIR/resolver/entrez, and
 #                       prepare_mine_checkout sets resolver.file.rootpath to that directory in
 #                       humanmine.properties and deletes any stale idresolver.cache.
+#   --with-genome-sequence  Also load the GRCh38 genome FASTA (stock source ncbi-fasta, filtered to the 24
+#                       chromosomes the ncbi-gff loader maps) and run transfer-sequences, which gives
+#                       Chromosome.sequence and the sequences of every located feature. Needs ncbi-gff in
+#                       --stock-sources. Off by default: a 973 MB download, about 3.1 GB unpacked twice
+#                       (filtered file and its cache group) and the same again in Postgres [im-9n4.9].
+#                       Without it Chromosome.length comes from the GFF's ##sequence-region lines.
 #   --resolver-scope panel|taxon  What that entrez file holds: taxon (default) every gene of --taxon, so the
 #                       mine holds all human genes as identifiers and interaction/orthologue partners outside
 #                       the panel still resolve (plan 50 D-1); panel only the panel genes (strict subset).
@@ -213,6 +219,7 @@ REACTOME_LEVELS=${REACTOME_LEVELS:-default}
 STOCK_SOURCES=${STOCK_SOURCES:-}
 STOCK_LOCAL=${RDFC2IM_STOCK_LOCAL:-}
 RESOLVER_SCOPE=taxon
+WITH_GENOME_SEQUENCE=0
 JBROWSE2_SRC=${JBROWSE2_SRC:-}
 WITH_FRONT=0
 DRY_RUN=0
@@ -315,6 +322,7 @@ while [ $# -gt 0 ]; do
     --intermine-src) INTERMINE_SRC=$2; shift ;;
     --stock-sources) STOCK_SOURCES=$2; shift ;;
     --stock-local) STOCK_LOCAL=$2; shift ;;
+    --with-genome-sequence) WITH_GENOME_SEQUENCE=1 ;;
     --resolver-scope) RESOLVER_SCOPE=$2; shift ;;
     --jbrowse2-src) JBROWSE2_SRC=$2; shift ;;
     --with-front) WITH_FRONT=1 ;;
@@ -329,6 +337,15 @@ done
 [ "$FROM_PHASE" = build_reactome_source ] && FROM_PHASE=build_stock_sources
 [ "$ONLY_PHASE" = build_reactome_source ] && ONLY_PHASE=build_stock_sources
 STOCK_SOURCES=$(echo ${STOCK_SOURCES//,/ })   # one space between names; commas allowed
+# --with-genome-sequence is ncbi-fasta added to the stock list (its table entry brings transfer-sequences
+# and needs ncbi-gff, which check_prereqs enforces through `rdfc2im stock check`)
+if [ "$WITH_GENOME_SEQUENCE" -eq 1 ]; then
+  case " $STOCK_SOURCES " in
+    *" ncbi-gff "*) ;;
+    *) echo "--with-genome-sequence needs ncbi-gff in --stock-sources (the sequences are cut by its locations)" >&2; exit 2 ;;
+  esac
+  case " $STOCK_SOURCES " in *" ncbi-fasta "*) ;; *) STOCK_SOURCES="$STOCK_SOURCES ncbi-fasta" ;; esac
+fi
 case "$RESOLVER_SCOPE" in
   panel|taxon) ;;
   *) echo "--resolver-scope wants panel or taxon, not '$RESOLVER_SCOPE'" >&2; exit 2 ;;
@@ -1033,13 +1050,14 @@ _last_modified() {
 phase_fetch_stock_data() {
   [ -n "$STOCK_SOURCES" ] || { log "no --stock-sources: nothing to fetch"; return 0; }
   activate_venv
-  local rows src fid origin url raw unpack member fmt ids col taxon keep work kind sdir sname
+  local rows src fid origin url raw unpack member fmt ids col taxon keep work kind sdir sname ktypes
   _fetch_resolver_data
   rows=$(_stock_files)
   for src in $STOCK_SOURCES; do
     local group="stock-raw-$src" urls=() fids=() raws=() whole=0
-    while IFS=$'\t' read -r -u 3 s fid origin url raw unpack member fmt ids col taxon keep work kind sdir sname; do
+    while IFS=$'\t' read -r -u 3 s fid origin url raw unpack member fmt ids col taxon keep work kind sdir sname ktypes; do
       [ "$s" = "$src" ] || continue
+      [ "$origin" = derived ] && continue     # made from another file of the source by subset_stock_data
       [ "$origin" = download ] || { log "$src/$fid: local copy $raw"; continue; }
       urls+=("$url"); fids+=("$fid"); raws+=("$(basename "$raw")")
       [ "$kind" = filtered ] || whole=1
@@ -1129,12 +1147,18 @@ _stock_filtered_cache() {
 }
 
 # Writes one file row's output (see `rdfc2im stock files`): a filtered file (tools/subset_raw.py filter),
-# or a whole file unpacked from its archive or .gz. Arguments are the row's fields.
+# or a whole file unpacked from its archive or .gz, or a derived file (the Chromosome lengths read from
+# a filtered GFF, tools/subset_raw.py chromosome-lengths). Arguments are the row's fields.
 _stock_produce() {
-  local src=$1 fid=$2 raw=$3 unpack=$4 member=$5 fmt=$6 ids=$7 col=$8 taxon=$9 keep=${10} work=${11} kind=${12} sname=${13}
+  local src=$1 fid=$2 raw=$3 unpack=$4 member=$5 fmt=$6 ids=$7 col=$8 taxon=$9 keep=${10} work=${11} kind=${12} sname=${13} ktypes=${14:-}
   local in=$raw tmp="$STOCK_DIR/unpacked/$src/$fid"
   run rm -rf "$work"
   run mkdir -p "$work"
+  if [ "$kind" = derived ]; then
+    [ "$fmt" = chromosome-lengths ] || die "$src/$fid: unknown derived format $fmt"
+    run python3 tools/subset_raw.py chromosome-lengths --in "$raw" --out "$work/$sname" --taxon "${taxon:-$TAXON}"
+    return
+  fi
   if [ "$kind" = whole ] && [ -n "$unpack" ] && [ -z "$sname" ]; then
     # several members (a glob), used whole: unpacked flat into the work directory
     case "$unpack" in
@@ -1161,6 +1185,7 @@ _stock_produce() {
     [ -z "$col" ] || args+=(--column "$col")
     [ -z "$taxon" ] || args+=(--taxon "$taxon")
     [ "$keep" = 1 ] && args+=(--keep-comments)
+    [ -z "$ktypes" ] || args+=(--keep-types "$ktypes")
     run python3 tools/subset_raw.py filter "${args[@]}"
     [ -z "$unpack" ] || run rm -rf "$tmp"
   fi
@@ -1176,7 +1201,7 @@ phase_subset_stock_data() {
   [ -n "$STOCK_SOURCES" ] || { log "no --stock-sources: nothing to subset"; return 0; }
   activate_venv
   [ "$DRY_RUN" -eq 1 ] || [ -f tools/subset_raw.py ] || die "tools/subset_raw.py (task T0.2) is missing"
-  local rows s fid origin url raw unpack member fmt ids col taxon keep work kind sdir sname
+  local rows s fid origin url raw unpack member fmt ids col taxon keep work kind sdir sname ktypes
   rows=$(_stock_files)
   run python3 tools/subset_raw.py idsets --genes "$GENE_PANEL" --out "$STOCK_DIR/idsets" --items-root out \
     --lookup-dir "$LOOKUP_DIR" --taxon "$TAXON"
@@ -1212,15 +1237,16 @@ phase_subset_stock_data() {
         restore=0
       fi
     fi
-    while IFS=$'\t' read -r -u 3 s fid origin url raw unpack member fmt ids col taxon keep work kind sdir sname; do
+    while IFS=$'\t' read -r -u 3 s fid origin url raw unpack member fmt ids col taxon keep work kind sdir sname ktypes; do
       [ "$s" = "$src" ] || continue
       case "$kind" in
         filtered) filtered=1
                   [ "$restore" -eq 1 ] && continue ;;
+        derived) [ "$restore" -eq 1 ] && continue ;;   # in the filtered group; made after the file it reads
         asis) continue ;;
       esac
       _stock_produce "$src" "$fid" "$raw" "$(_dash "$unpack")" "$(_dash "$member")" "$(_dash "$fmt")" "$(_dash "$ids")" \
-        "$(_dash "$col")" "$(_dash "$taxon")" "$keep" "$work" "$kind" "$(_dash "$sname")"
+        "$(_dash "$col")" "$(_dash "$taxon")" "$keep" "$work" "$kind" "$(_dash "$sname")" "$(_dash "$ktypes")"
     done 3<<< "$rows"
     [ "$filtered" -eq 1 ] || continue
     if [ "$restore" -eq 1 ]; then
@@ -1647,9 +1673,9 @@ phase_stage_src_data() {
 # file (a deployment's own HumanMine data under /micklem/data) is never replaced.
 _stage_stock_data() {
   activate_venv
-  local rows s fid origin url raw unpack member fmt ids col taxon keep work kind sdir sname dirs=""
+  local rows s fid origin url raw unpack member fmt ids col taxon keep work kind sdir sname ktypes dirs=""
   rows=$(_stock_files)
-  while IFS=$'\t' read -r -u 3 s fid origin url raw unpack member fmt ids col taxon keep work kind sdir sname; do
+  while IFS=$'\t' read -r -u 3 s fid origin url raw unpack member fmt ids col taxon keep work kind sdir sname ktypes; do
     [ -n "$s" ] || continue
     case " $dirs " in *" $sdir "*) ;; *) dirs="$dirs $sdir" ;; esac
   done 3<<< "$rows"
@@ -1658,7 +1684,7 @@ _stage_stock_data() {
     run mkdir -p "$DATA_ROOT/$d"
     run find "$DATA_ROOT/$d" -maxdepth 1 -type l \( -lname "$STOCK_DIR/*" ${STOCK_LOCAL:+-o -lname "${STOCK_LOCAL%/}/*"} \) -delete
   done
-  while IFS=$'\t' read -r -u 3 s fid origin url raw unpack member fmt ids col taxon keep work kind sdir sname; do
+  while IFS=$'\t' read -r -u 3 s fid origin url raw unpack member fmt ids col taxon keep work kind sdir sname ktypes; do
     [ -n "$s" ] || continue
     local dest="$DATA_ROOT/$sdir" from
     if [ "$kind" = asis ]; then from=$raw; else from="$work/$sname"; fi
@@ -1834,9 +1860,10 @@ phase_postprocess() {
   # Order from HumanMine's own project.xml <post-processing> block (LOAD-TRIAL.md). The
   # genomic-location-specific tasks (create-chromosome-locations-and-lengths,
   # transfer-sequences, create-gene-flanking-features, create-location-overlap-index,
-  # create-overlap-view, populate-child-features) are deliberately not run: this build loads no
-  # coordinate/sequence data, so they would no-op or fail on a missing prerequisite rather than
-  # produce anything real (confirmed live). update-data-sources needs a Micklem-lab-specific
+  # create-overlap-view, populate-child-features) run only for the --stock-sources that ask for them
+  # (ncbi-gff, ncbi-fasta: the stock table's `postprocess`, below); the RDF sources load no
+  # coordinates, so without those they would no-op or fail on a missing prerequisite (confirmed
+  # live). populate-child-features is not in HumanMine's list. update-data-sources needs a Micklem-lab-specific
   # file path this build does not have; also skipped.
   local mine="$TRIAL_HOME/humanmine"
   run_in "$mine" "${GRADLE_ENV[@]}" ./gradlew "${IM_GRADLE_ARGS[@]}" :dbmodel:postProcess -Pprocess=create-references

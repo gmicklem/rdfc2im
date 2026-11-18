@@ -454,6 +454,103 @@ idresolver.cache" and writes nothing without fly data), so the gate's "Creating 
 file" line does not appear yet; the first loaders that will show it are psi, biogrid and panther. No
 `idresolver.cache` was written anywhere.
 
+#### Locations and gene models: ncbi-gff [im-9n4.9]
+
+`--stock-sources "uniprot uniprot-fasta uniprot-keywords ncbi-gff"` on the ut stack, same panel and cache.
+It gives the panel genes their GRCh38 coordinates, RefSeq transcripts and exons, and the chromosomes their
+lengths, which is what the JBrowse endpoints need (planning repo plan 50, 1.4).
+
+* **Download** (once): `GRCh38_latest_genomic.gff.gz`, 77,807,126 B, 12 s from NCBI (RefSeq release of
+  27 Aug 2024; raw group `stock-raw-ncbi-gff`, 75 MB).
+* **Filter** (`subset_raw.py filter --format gff3`, 40 s, peak 0.44 GB; it was 1.2 GB before the parent
+  links were kept as strings): 4,903,918 feature rows in, 15,087 out; every `##sequence-region` line, and
+  each panel gene (Dbxref `GeneID`) with its descendants (mRNA and other transcripts, exons, CDS) and
+  ancestors. 113 of the 114 panel genes have a gene row on a primary chromosome; GSTT1 (2952) is
+  annotated only on the alternate locus NT_187633.1, because the primary GRCh38 chr22 carries the deletion
+  allele, so it gets no location (HumanMine has none for it either). The filtered group `stock-ncbi-gff`
+  is 4.7 MB.
+* **Chromosome lengths.** No InterMine loader sets `Chromosome.length` from a GFF: the GFF3 parser skips
+  directives, `gff_config.properties` excludes the 9606 `region` rows, and
+  `create-chromosome-locations-and-lengths` sets only feature `chromosomeLocation`/`chromosome` and the
+  feature's own `length` (`CreateChromosomeLocationsProcess`, despite its name); only the genome FASTA
+  (`FastaLoaderTask`) sets it. So `subset_raw.py chromosome-lengths` reads the filtered file's
+  `##sequence-region` lines into a small Items XML (Organism 9606, DataSource NCBI, DataSet `ncbi-gff`,
+  24 Chromosomes with `length`), cached in the same group, and `rdfc2im project` adds a source
+  `ncbi-gff-lengths` (type `humanmine-items`, right after `ncbi-gff`, the table's `chromosome_lengths`)
+  that loads it. All 24 lengths equal HumanMine's own `refSeqs.json` (`cached_raw_data/grch38-chromosome-lengths`,
+  used as a reference value only). That cache group is read by no code and is no longer needed for the
+  lengths: it can leave the release list.
+* **Merging (plan 50 risk 3).** `ncbi-gff_keys.properties` keys Gene on `primaryIdentifier` (the converter
+  sets it from Dbxref `GeneID`, the Entrez id, as the rdfc2im sources do) and Chromosome on
+  `primaryIdentifier, organism`; `NcbiGffGFF3SeqHandler` names NC_000001.11 to NC_000024.10 `1`..`22`,
+  `X`, `Y`, the names the rdfc2im items use. Loaded last (HumanMine's project.xml order, after
+  humanmine-ncbigene, which satisfies the table's `after: [ncbi-gene]`) it merges into the existing
+  objects, so it needs no `load_first`. MT (NC_012920.1) is not in the converter's map: an MT gene would
+  be stored without a location (the panel has none) and no MT Chromosome exists; rows on NT_/NW_
+  scaffolds are dropped by the record handler. Result: one Gene per Entrez id, no duplicate symbol, one
+  Chromosome per name (24: chromosomes 14 and Y are new, from the lengths), no dangling
+  `Location.feature`, `Gene.chromosome` or `Transcript.gene`.
+* **Priorities** (found by reading the comparator, fixed before the first run): entries `rdfc2im project`
+  generated for fields only rdfc2im sources wrote (`Chromosome.primaryIdentifier = humanmine-ensembl,
+  humanmine-ncbigene`, `Gene.chromosome`, ...) had no `*`, and `SourcePriorityComparator` refuses a source
+  missing from such an entry even when the values are equal. With stock sources every generated entry
+  now ends in `*`, and the table's `priority_first` ranks ncbi-gff first for `Gene.chromosome`
+  (`Gene.chromosome = ncbi-gff, humanmine-ensembl, humanmine-ncbigene, *`). Symbols stay ranked as
+  HumanMine has them (ncbi-gene's slot first, ncbi-gff under `*`).
+* **The ID resolver.** ncbi-gff does not use it (no `Creating id resolver for [9606]` line); the gate is
+  still unexercised, as with the UniProt sources.
+* **Neighbour genes (D-1, plan 50 2.2 b).** `keep_types: [gene]` in the filter keeps every other gene row
+  too (63,069 rows), so a genome browser shows the panel gene's neighbours as HumanMine's does. Measured on
+  this stack: Gene 42,069, Location 897,539, GeneFlankingRegion 841,300 (create-gene-flanking-features
+  makes 20 per gene, as on HumanMine), 2,183,886 objects, Postgres 4.3 GB, ncbi-gff integrate 32 s,
+  postprocess 353 s (flanking 55 s, the two search-index passes 81 s and 138 s), and two duplicate symbols
+  (RefSeq names five tRNA genes TRNAA-AGC). That doubles the build, so the table leaves it off; the
+  thin genome is better served by the RDF side first (`ncbigene=full`), which would also give those genes
+  their official symbols.
+
+| | three UniProt sources | with ncbi-gff |
+|---|---|---|
+| Gene / with `chromosomeLocation` | 114 / 0 | 114 / 113 (all but GSTT1) |
+| Chromosome / with `length` | 22 / 0 | 24 / 24 |
+| Location | 0 | 16,547 |
+| Transcript (all) / MRNA | 0 / 0 | 674 / 604 |
+| Exon / CDS | 0 / 0 | 7,466 / 604 |
+| GeneFlankingRegion | 0 | 2,260 |
+| PAX6 transcripts / exons | - | 53 / 638 (HumanMine: 53 / 637) |
+| CYP2D6 transcripts / exons | - | 2 / 17 (HumanMine: 2 / 17) |
+| duplicate Gene.primaryIdentifier / Gene.symbol (9606) / Chromosome name | 0 / 0 / - | 0 / 0 / 0 |
+| all objects | 366,232 | 395,183 |
+
+Timings of the driver run from `rdfc2im_pipeline` (10 min in all): `subset_stock_data` 41 s (was 6 s),
+`integrate_sources` 172 s (was 158 s: ncbi-gff 11 s, ncbi-gff-lengths 5 s), `postprocess` 93 s (was 82 s;
+the four location postprocesses 8 s). Disk: Postgres 2.1 GB, `stock_ut/` 615 MB.
+
+JBrowse: `/service/jbrowse/config/9606/seq/refSeqs.json` answers 200 with the 24 chromosomes and their
+lengths (it was 404 "No Chromosomes on 9606"); `/service/jbrowse/9606/refSeqs.json` (plan 50's path) is
+not an endpoint and stays 404. `/service/jbrowse/9606/features/11?start=31789026&end=31817961&type=Gene`
+returns PAX6. Every feature has `subfeatures: []`: the endpoint builds them from `childFeatures`, which
+only `populate-child-features` fills, and HumanMine's project.xml has that postprocess commented out
+(HumanMine answers the same). The BlueGenes JBrowse 2 panel now draws an iframe on
+`jbrowse2.intermine.org` with assembly `<project.title>-9606` at `11:31786132..31820855` (the server is T1.5).
+
+What the gene models lack: the converter has no CDS or UTR handling. It stores one CDS object per
+protein (604), each with the first segment as `chromosomeLocation` and the other segments as further
+Locations, but no `CDS.transcript` (its `refsAndCollections` names only Exon, Transcript and MRNA) and no
+protein; it makes no UTRs at all (the RefSeq GFF has no UTR rows; they are exon minus CDS), so
+`Transcript.UTRs` and `Transcript.CDSs` are empty and a JBrowse gene glyph cannot tell coding from
+untranslated exons. A converter change would map `CDS -> transcript` in `NcbiGffGFF3RecordHandler`, keep
+one CDS per transcript with its segments, derive `FivePrimeUTR`/`ThreePrimeUTR` per mRNA from the exon and
+CDS spans (strand-aware), and add `NC_012920.1 -> MT` to the chromosome map.
+
+`--with-genome-sequence` adds stock `ncbi-fasta` (it `needs` ncbi-gff) and its postprocess
+`transfer-sequences`. The FASTA is cut to the 24 mapped chromosomes (`ids: chromosomes`,
+`idsets/chromosomes.txt`): `NCBIFastaLoaderTask` names a record by the words after "chromosome" in its
+header, so the file's alt, patch and unlocalized scaffolds would become hundreds of Chromosome objects
+named like "1 unlocalized genomic scaffold". Dry-run tested only, never run here; its cost would be a
+973 MB download, about 3.1 GB for the filtered file and as much again for its cache group, about 3.1 GB
+of `Chromosome.sequence` in Postgres plus the transferred feature sequences, and a filter pass over 3 GB
+(minutes). Its lengths equal the GFF's, so the two loaders agree.
+
 ### The ID-resolver gate [im-9n4.4]
 
 The stock loaders for psi, biogrid, panther, omim and the HumanMine expression sources have no gene filter; the
@@ -1086,7 +1183,9 @@ Checked on the maint-2026 (6.0 line) testbed stack, 16 Nov 2026.
   `parents`, so the `go` table must carry the transitive closure or a postprocess must fill it);
   and the widget's paths rewritten from `goAnnotation` to `ontologyAnnotations` (the 6.0 model has
   `OntologyAnnotation`, not `GOAnnotation`) with the genes reached through their proteins.
-- **Location and Sequence objects.** Chromosomes exist, one per chromosome now (the sources name
+- **Location and Sequence objects** (without `--stock-sources ... ncbi-gff`, which loads locations,
+  transcripts, exons and chromosome lengths, and `--with-genome-sequence`, which adds sequence: see
+  "Locations and gene models" above). Chromosomes exist, one per chromosome now (the sources name
   them by number alone; `items.py` gives each the organism of its genes, which is what InterMine
   keys one on), but they have no length, and no `Location` (`location` has 0 rows) or `Sequence`
   exists. The 23 Cypress skips for region search and sequence export wait on this. Locations need

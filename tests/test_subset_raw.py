@@ -269,6 +269,8 @@ def test_idsets_from_items_fixture(tmp_path):
     assert meta["counts"] == {"entrez": 2, "ensembl": 2, "uniprot": 2, "symbol": 2}
     assert len(meta["inputs"]) == 4
     assert not (out / "uniprot_reviewed.txt").exists()
+    # not a panel set: the RefSeq accessions that cut the genome FASTA (ids: chromosomes) [im-9n4.9]
+    assert lines("chromosomes.txt") == list(subset_raw.REFSEQ_GRCH38_CHROMOSOMES)
 
 
 def test_idsets_merges_lookup_cache(tmp_path):
@@ -303,6 +305,99 @@ def test_real_goa_sample(tmp_path):
     out, res = filt(tmp_path, "gaf", os.path.join(REAL, "goa_human_sample.gaf"), os.path.join(REAL, "goa_ids.txt"))
     assert read(out) == read(os.path.join(REAL, "goa_expected.gaf"))
     assert res["records_out"] == 8
+
+
+SIBLINGS = """##gff-version 3
+##sequence-region NC_000011.10 1 135086622
+##sequence-region NC_012920.1 1 16569
+##sequence-region NT_187633.1 1 300000
+NC_000011.10\tR\tgene\t100\t900\t.\t+\t.\tID=gene-P;Dbxref=GeneID:5080;Name=PAX6
+NC_000011.10\tR\tmRNA\t100\t900\t.\t+\t.\tID=rna-1;Parent=gene-P;Dbxref=GeneID:5080
+NC_000011.10\tR\texon\t100\t200\t.\t+\t.\tID=exon-1-1;Parent=rna-1;Dbxref=GeneID:5080
+NC_000011.10\tR\tgene\t1000\t2000\t.\t-\t.\tID=gene-N;Dbxref=GeneID:999;Name=NEIGH
+NC_000011.10\tR\tmRNA\t1000\t2000\t.\t-\t.\tID=rna-N;Parent=gene-N;Dbxref=GeneID:999
+NC_000011.10\tR\texon\t1000\t1100\t.\t-\t.\tID=exon-N-1;Parent=rna-N;Dbxref=GeneID:999
+NC_000011.10\tR\tenhancer\t3000\t3100\t.\t.\t.\tID=id-E;Dbxref=GeneID:888
+NC_000011.10\tR\tmRNA\t5000\t6000\t.\t+\t.\tID=rna-S;Parent=gene-T
+NC_000011.10\tR\tgene\t5000\t6000\t.\t+\t.\tID=gene-T;Dbxref=GeneID:777;Name=TOP
+NC_000011.10\tR\texon\t5000\t5100\t.\t+\t.\tID=exon-S-1;Parent=rna-S
+"""
+
+
+def test_gff3_keep_types_keeps_neighbour_gene_rows_only(tmp_path):
+    """[im-9n4.9] --keep-types gene keeps the other genes' own rows (a genome browser's neighbours)
+    but none of their transcripts or exons, nor other feature types."""
+    src = tmp_path / "in.gff3"
+    src.write_text(SIBLINGS)
+    ids = tmp_path / "ids.txt"
+    ids.write_text("5080\n")
+    out, res = filt(tmp_path, "gff3", str(src), str(ids), "out.gff3", "--keep-types", "gene")
+    kept = [l.split("\t")[8].split(";")[0] for l in open(out) if not l.startswith("#")]
+    assert kept == ["ID=gene-P", "ID=rna-1", "ID=exon-1-1", "ID=gene-N", "ID=gene-T"]
+    assert res["records_out"] == 5 and res["ids_matched"] == 1
+    out2, res2 = filt(tmp_path, "gff3", str(src), str(ids), "out2.gff3")
+    assert res2["records_out"] == 3
+
+
+def test_gff3_sibling_of_a_seed_is_not_kept_without_its_children(tmp_path):
+    """A seed mRNA's gene is kept as its ancestor; the gene's other mRNA (an ID of its own, not in
+    the closure) used to be kept through the 'child without an ID' rule while its exons were not."""
+    src = tmp_path / "in.gff3"
+    src.write_text("##gff-version 3\n"
+                   "c\tR\tgene\t1\t900\t.\t+\t.\tID=g\n"
+                   "c\tR\tmRNA\t1\t900\t.\t+\t.\tID=r1;Parent=g;Dbxref=GeneID:1\n"
+                   "c\tR\texon\t1\t90\t.\t+\t.\tID=e1;Parent=r1\n"
+                   "c\tR\tmRNA\t1\t800\t.\t+\t.\tID=r2;Parent=g\n"
+                   "c\tR\texon\t1\t80\t.\t+\t.\tID=e2;Parent=r2\n"
+                   "c\tR\tCDS\t1\t80\t.\t+\t0\tParent=r1\n")
+    ids = tmp_path / "ids.txt"
+    ids.write_text("1\n")
+    out, _ = filt(tmp_path, "gff3", str(src), str(ids), "out.gff3")
+    kept = [l.split("\t")[2] + ":" + l.split("\t")[8].strip() for l in open(out) if not l.startswith("#")]
+    assert kept == ["gene:ID=g", "mRNA:ID=r1;Parent=g;Dbxref=GeneID:1", "exon:ID=e1;Parent=r1", "CDS:Parent=r1"]
+
+
+def test_keep_types_is_for_gff3_only(tmp_path):
+    p = run_cli("filter", "--format", "gaf", "--in", fx("gaf_in.gaf"), "--out", str(tmp_path / "o"),
+                "--ids", fx("gaf_ids.txt"), "--keep-types", "gene")
+    assert p.returncode == 2 and "--keep-types is for format gff3 only" in p.stderr
+
+
+def test_chromosome_lengths_from_sequence_region_lines(tmp_path):
+    """[im-9n4.9] Items XML for the humanmine-items loader: the mapped chromosomes only (MT and
+    scaffolds are not mapped by the ncbi-gff loader), length = end - start + 1."""
+    src = tmp_path / "in.gff3"
+    src.write_text(SIBLINGS)
+    out = tmp_path / "lengths.xml"
+    p = run_cli("chromosome-lengths", "--in", str(src), "--out", str(out))
+    assert p.returncode == 0, p.stderr
+    res = json.loads(p.stdout)
+    assert res["records_in"] == 3 and res["chromosomes"] == {"11": 135086622}
+    root = ET.parse(out).getroot()
+    items = {i.get("id"): i for i in root.iter("item")}
+    assert [i.get("class") for i in root.iter("item")] == ["Organism", "DataSource", "DataSet", "Chromosome"]
+    chrom = items["0_4"]
+    attrs = {a.get("name"): a.get("value") for a in chrom.iter("attribute")}
+    assert attrs == {"primaryIdentifier": "11", "length": "135086622"}
+    assert chrom.find("reference").get("ref_id") == "0_1"
+    assert {a.get("value") for a in items["0_1"].iter("attribute")} == {"9606"}
+    assert {a.get("value") for a in items["0_3"].iter("attribute")} == {"ncbi-gff"}
+    # every ref_id points at an item
+    assert all(r.get("ref_id") in items for r in root.iter("reference"))
+
+
+def test_chromosome_lengths_map_is_the_loaders_and_refuses_bad_input(tmp_path):
+    m = subset_raw.REFSEQ_GRCH38_CHROMOSOMES
+    assert len(m) == 24 and m["NC_000023.11"] == "X" and m["NC_000024.10"] == "Y"
+    assert "NC_012920.1" not in m
+    src = tmp_path / "in.gff3"
+    src.write_text("##sequence-region NC_000001.11 1 10\n##sequence-region NC_000001.11 1 20\n")
+    p = run_cli("chromosome-lengths", "--in", str(src), "--out", str(tmp_path / "o.xml"))
+    assert p.returncode == 2 and "two sequence-region lengths" in p.stderr
+    src.write_text("##sequence-region NW_1 1 10\n")
+    p = run_cli("chromosome-lengths", "--in", str(src), "--out", str(tmp_path / "o.xml"))
+    assert p.returncode == 2 and "no ##sequence-region line names a known chromosome" in p.stderr
+    assert not (tmp_path / "o.xml").exists()
 
 
 def test_real_refseq_gff3_sample(tmp_path):
