@@ -235,6 +235,33 @@ def _fix_refs(s: Subject, known: set):
                 o.is_literal = _looks_literal(o.example)
 
 
+def add_predicates(cfg: RdfConfig, additions: Optional[Dict[str, list]]) -> List[str]:
+    """Add predicates the upstream model.yaml leaves out (sources.yaml `model_additions`).
+
+    `additions` maps a subject name to predicate entries in model.yaml's own grammar, e.g.
+    {"SimpleSequence": [{"core:md5Checksum?": [{"seq_md5": "a1c4..."}]}]}.  rdf-config's UniProt
+    model lists only rdf:value, core:mass and core:name on a sequence node, while the data also
+    has core:md5Checksum and core:fragment [im-9n4.32]; the clone under in/.upstream is not ours to
+    edit.  A predicate the subject already has is left alone.  Returns one message per change."""
+    msgs: List[str] = []
+    known = {s.name for s in cfg.subjects}
+    for name, items in (additions or {}).items():
+        s = cfg.subject(name)
+        if s is None:
+            msgs.append(f"model_additions: subject {name} is not in model.yaml - ignored")
+            continue
+        extra = _parse_subject(name, "", items, s.blank)
+        have = {p.curie for p in s.predicates}
+        for p in extra.predicates:
+            if p.curie in have:
+                msgs.append(f"model_additions: {name} already has {p.curie} - kept the upstream one")
+                continue
+            s.predicates.append(p)
+            msgs.append(f"model_additions: {name} {p.curie}{p.cardinality} added (sources.yaml)")
+        _fix_refs(s, known)
+    return msgs
+
+
 def load_config(config_dir: str) -> RdfConfig:
     name = os.path.basename(os.path.normpath(config_dir))
     subjects = parse_model(os.path.join(config_dir, "model.yaml"))

@@ -223,6 +223,37 @@ class ItemStore:
             n += len(it.attrs) > before
         return n
 
+    def complete_sequences(self) -> Tuple[int, List[str]]:
+        """Give each Sequence item its length (the number of residues) and each item that
+        references one (Protein.sequence) the same length, as UniprotConverter and FastaLoaderTask
+        do.  UniProt's RDF states the residues and their md5 but no length [im-9n4.32].  A value the
+        source wrote itself stands.  Returns (items completed, notes): a note for each Sequence whose
+        stated md5checksum is not the md5 of its residues (at most 20)."""
+        import hashlib
+        n, notes = 0, []
+        if "length" not in self.model.all_fields("Sequence"):
+            return 0, notes
+        for k, it in self.items.items():
+            res = it.attrs.get("residues") if it.cls == "Sequence" else None
+            if not res:
+                continue
+            if "length" not in it.attrs:
+                it.attrs["length"] = str(len(res))
+                n += 1
+            md5 = it.attrs.get("md5checksum")
+            if md5 and md5 != hashlib.md5(res.encode("ascii", "replace")).hexdigest() and len(notes) < 20:
+                notes.append(f"Sequence {k[2][:60]}: md5checksum {md5} is not the md5 of its residues")
+        for it in self.items.values():
+            sk = it.refs.get("sequence")
+            seq = self.items.get(sk) if sk else None
+            if seq is None or seq.cls != "Sequence" or not seq.attrs.get("length"):
+                continue
+            fd = self.model.field(it.cls, "length")
+            if fd is not None and fd.kind == "attribute" and "length" not in it.attrs:
+                it.attrs["length"] = seq.attrs["length"]
+                n += 1
+        return n, notes
+
     def organisms_from_genes(self, classes) -> int:
         """Give each item of `classes` (sources.yaml `organism_from_genes`) that has no organism the
         organism of the genes in its `genes` collection, when they agree.  hgnc's Protein items are
@@ -468,6 +499,8 @@ def emit_items(model: InterMineModel, out_dir: str, src: str, source_cfg: dict, 
                                       f"value to another {dcfg.get('key', 'primaryIdentifier')} (defer_to)")
     stats["organisms_completed"] = store.complete_organisms()
     stats["chromosomes_linked"] = store.organise_chromosomes()
+    stats["sequences_completed"], seq_notes = store.complete_sequences()
+    stats["notes"] += seq_notes
     if source_cfg.get("organism_from_genes"):
         stats["organisms_from_genes"] = store.organisms_from_genes(set(source_cfg["organism_from_genes"]))
     # DataSet / DataSource

@@ -98,6 +98,9 @@ def apply_transform(value: str, spec: str) -> List[str]:
             elif name == "int":
                 m = re.search(r"-?\d+", v)
                 nv.append(m.group(0) if m else "")
+            elif name == "default":
+                # a predicate stated only when true (UniProt's core:fragment) -> the other value
+                nv.append(v if v else arg)
             else:
                 raise ValueError(f"unknown transform {name}")
         vals = nv

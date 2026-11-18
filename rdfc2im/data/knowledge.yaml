@@ -212,9 +212,9 @@ subjects:
   - source: uniprot
     subject: SimpleSequence
     im_class: Sequence
-    status: guess
-    basis: knowledge
-    note: rdf:value -> Sequence.residues; core:mass -> Protein.molecularWeight (term)
+    status: sure
+    basis: java:UniprotConverter
+    note: rdf:value -> Sequence.residues; core:mass -> Protein.molecularWeight (term); the entry's canonical sequence only (sources.yaml node_constraints)
   - source: uniprot
     subject: RecommendedNameNode
     im_class: Protein
@@ -1271,15 +1271,40 @@ predicates:
   - source: uniprot
     subject: SimpleSequence
     pred: rdf:value
-    im: ""
-    status: drop
+    im: Sequence.residues
+    status: sure
     basis: java:UniprotConverter
     note: >-
-      Sequence.residues is a genuine term match, but uniprot loads alongside stock uniprot, which
-      stores every residue string (UniprotConverter, "sequence" -> residues), and uniprot-fasta
-      does too.  Sequence has no integration key, so ours never merge: Protein.sequence resolves
-      to stock's by priority and ours are left as orphaned duplicates.  core:mass still loads -
-      Protein.molecularWeight is an attribute and merges by priority.
+      The entry's canonical sequence (sources.yaml node_constraints picks it), as UniprotConverter
+      stores it ("sequence" -> Sequence.residues, Protein.sequence) [im-9n4.32].  The testbed's stock
+      uniprot loads Swiss-Prot only (D-6), so TrEMBL sequences come from here.  This used to be
+      dropped because Sequence has no integration key, which would have left a second, orphaned
+      Sequence beside stock's for every Swiss-Prot entry; sources.yaml own_keys now keys this
+      source's Sequence on md5checksum, so it merges into stock's.  Sequence.length and
+      Protein.length are the number of residues (items.complete_sequences); Protein.md5checksum is
+      deliberately not written (stock's Protein key is md5checksum+organism, and a TrEMBL entry can
+      share a Swiss-Prot entry's sequence).
+  - source: uniprot
+    subject: SimpleSequence
+    pred: core:md5Checksum
+    im: Sequence.md5checksum
+    status: sure
+    basis: java:UniprotConverter
+    note: >-
+      sources.yaml model_additions (not in rdf-config's model).  The md5 of the residues, the
+      value stock uniprot stores in Sequence.md5checksum and Protein.md5checksum; here only on the
+      Sequence, whose key it is for this source.
+  - source: uniprot
+    subject: SimpleSequence
+    pred: core:fragment
+    im: Protein.isFragment
+    status: sure
+    basis: java:UniprotConverter
+    transform: "replace:single:true,replace:multiple:true,default:false"
+    note: >-
+      sources.yaml model_additions (not in rdf-config's model).  "single" or "multiple" on a
+      fragment, absent on a complete sequence; UniprotConverter sets isFragment true when the
+      XML's <sequence> has a fragment attribute, false otherwise.
   - source: uniprot
     subject: SimpleSequence
     pred: core:mass

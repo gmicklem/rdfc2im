@@ -56,7 +56,7 @@ def run_source(model, config_dir: str, out_dir: str, knowledge: Knowledge, sourc
     # can only narrow the caller's use_from, never force it back on for a `--no-from` run.
     effective_use_from = use_from and source_cfg.get("use_from", True) is not False
     qb = QueryBuilder(cfg, node_by_key, types=types, distinct=source_cfg.get("distinct", True) is not False,
-                      use_from=effective_use_from)
+                      use_from=effective_use_from, node_constraints=source_cfg.get("node_constraints"))
     qdir = os.path.join(out_dir, "queries")
     os.makedirs(qdir, exist_ok=True)
     for old in glob.glob(os.path.join(qdir, "*.sparql")):
