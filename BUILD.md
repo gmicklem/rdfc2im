@@ -388,7 +388,7 @@ What each phase does with the list:
 
 | Phase | With `--stock-sources` |
 |---|---|
-| `check_prereqs` | Validates the list against the table, as `--sources` is validated against `SCOPE_MODE`: unknown or repeated names, a source an rdfc2im source of this build replaces (stock `hgnc` with rdfc2im `hgnc`), a missing `needs` (hpo-annotation needs omim), a `redistributable: false` source with no local copy under `--stock-local`, the 6.0-line and human-only limits, and the free space where `RDFC2IM_STOCK_DIR` lives (twice the downloads plus 2 GB). Puts the list into HumanMine's project.xml order, which every later phase uses |
+| `check_prereqs` | Validates the list against the table, as `--sources` is validated against `SCOPE_MODE`: unknown or repeated names, a source an rdfc2im source of this build replaces (stock `hgnc` with rdfc2im `hgnc`), a missing `needs` (mgi-identifiers needs panther), a `redistributable: false` source with no local copy under `--stock-local`, the 6.0-line and human-only limits, and the free space where `RDFC2IM_STOCK_DIR` lives (twice the downloads plus 2 GB). Puts the list into HumanMine's project.xml order, which every later phase uses |
 | `rdfc2im_project` | `rdfc2im project --stock-source NAME...`: each named `<source>` must still be in project.xml (not replaced) with the table's type and the version attribute its jar origin needs; its data property and organism properties are rewritten from the table; its `after` constraints are checked against the final order. Fields an `alongside` rdfc2im source also writes list the stock source first in `genomic_priorities.properties` (risk 3) |
 | `build_stock_sources` | Reactome as before, then each jar: an `intermine` one is checked in the private m2 repo (`publish_intermine` already published every `bio/sources` jar; a missing one is built there), a `humanmine-bio-sources` one is built in the fork copy with `publishToMavenLocal`, like humanmine-items |
 | `fetch_stock_data` | Downloads each source's files into the cache group `stock-raw-<name>` in `$RDFC2IM_STOCK_DIR/cache` (default `$RDFC2IM_DATA_ROOT/_stock/cache`, never `cached_raw_data/`), keyed to each file's URL and `Last-Modified`; an unchanged upstream file is not fetched again. The loaders read the files where they lie in the cache, so each is on disk once. `--use-cached-data`/`--offline` only verify the cached group |
@@ -719,6 +719,70 @@ restores `Gene.interactions`, the Cytoscape tool and the templates `Gene_Interac
   (109 requests). `Gene_Interactions_forReportPage` returns 433 rows for PAX6 and 6 for CYP2D6.
   `Gene_Interact_disease` loads but returns no rows: it inner-joins `Gene.interactions.participant2.diseases`, and
   `Gene.diseases` is empty in this mine (hpo-annotation and omim, T1.10).
+
+#### Expression and disease: protein-atlas, protein-atlas-rna, gtex, atlas-express, hpo-annotation, orphanet [im-9n4.14, im-9n4.15]
+
+`--stock-sources "... biogrid protein-atlas protein-atlas-rna gtex atlas-express hpo-annotation orphanet"` on the ut
+stack. The converters are the fixed ones of humanmine-bio-sources d67fc5d: `in/.upstream/humanmine-bio-sources-6.0` was
+fetched to that commit (`git fetch <checkout> maint-2026`, `checkout FETCH_HEAD`) and `$TRIAL_HOME/humanmine-bio-sources`
+removed, so `build_humanmine_items` copied it again (its log line: `bio-sources checkout = maint-2026 ... at d67fc5d`) and
+`build_stock_sources` built the jars from it. A build restarts from `build_humanmine_items` for this; the copy is only
+made when the directory is missing.
+
+| Source | Upstream file | Filter | Rows in / out | Loads |
+|---|---|---|---|---|
+| protein-atlas | `normal_ihc_data.tsv` (zip, 5.6 MB) + `rdfc2im/data/hpa_tissue_to_organ.tsv` | Ensembl id, column 1, header kept | 1,179,586 / 8,390 (90 of 115 ids) | ProteinAtlasExpression 8,390, Tissue 48, TissueGroup 15 |
+| protein-atlas-rna | `rna_tissue_consensus.tsv` (zip) | same | 1,026,292 / 5,814 (114) | RNASeqResult 5,814 |
+| gtex | v8 `..._gene_median_tpm.gct.gz` | same, 3 header lines kept, Ensembl version stripped | 56,200 / 114 (114) | RNASeqResult 6,156 (114 x 54 tissues) |
+| atlas-express | `E-MTAB-513-fpkms.tsv` | same | 58,735 / 114 | AtlasExpression 1,824 (114 x 16 assay groups) |
+| hpo-annotation | `genes_to_phenotype.txt`, `phenotype.hpoa` | entrez id, column 1; then the diseases of that cut | 3,845 / 193 diseases; hpoa to 3,637 rows | see below |
+| orphanet | `en_product1.xml` (54 MB) | none | 11,645 disorders | Disease 11,645 |
+
+* `subset_raw.py`: `keep_header` may be a number of lines (GCT: `#1.2`, the dimensions line, the header); the tab filter
+  strips an Ensembl version before matching; `disease-ids` writes `idsets/hpo-diseases.txt` from the filtered
+  `genes_to_phenotype.txt` (as `partner-ids` does for PANTHER) and `phenotype.hpoa` is cut on column 1 to it. The
+  panel list holds one wrong id for UGT1A1 (ENSG00000242366) beside the right one: only the right one matches, UGT1A1 loads once.
+* One file per directory where the converter parses every file: atlas-express only the fpkms file (the tpms file would
+  double every row, a `tpm` name makes the type TPM), protein-atlas-rna only `rna_tissue_consensus.tsv`, gtex no `signif` file.
+* **Tissue groups.** `tissue_to_organ.tsv` has no download. Without it `Tissue.tissueGroup` is empty and the Protein Atlas
+  tool's query (`proteinAtlasExpression.tissue.tissueGroup.name`, an inner join through the web service) returns
+  nothing: the panel said "No data found!". `rdfc2im/data/hpa_tissue_to_organ.tsv` is a hand-written mapping of the
+  48 tissues to the organ systems of HPA's tissue pages, shipped in the repository (table key `repo_file`) and staged as it is.
+  Check it against HPA before a release.
+* **Levels** in the tool: HPA now says Not detected / Low / Medium / High (the tool's `STRENGTHS` knows exactly these) and the
+  heat map colours them; the file also holds a few `Ascending`, `Descending` and `Not representative` (19 rows).
+* **Merging.** No model clash between the four expression additions and `extensions_additions.xml`; Tissue is keyed on
+  name, Gene on primaryIdentifier (no duplicate of either); RNASeqResult comes from two data sets without a key
+  (HPA 5,814, GTEx 6,156). hpo-annotation's additions declare `Disease.dataSets` without the reverse reference, which our
+  `Disease extends BioEntity` already has: `mergeModels` stopped ("replacing the BioEntity.dataSets collection with
+  Disease.dataSets failed because the reverse references differ"). `build_humanmine_items` deletes that line in the build's
+  copy of the fork (a logged deployer edit); the fork should drop it. And `Disease.name = omim, hpo-annotation, ...`
+  starved the 72 ORPHANET diseases linked to panel genes of their name (hpo-annotation writes none), so
+  `curation/priorities_override.properties` ranks orphanet above it.
+* **Disease.** hpo-annotation keys Disease on primaryIdentifier (`OMIM:n`, `ORPHANET:n`); the ClinVar diseases (888 with a name only,
+  no primaryIdentifier) have none, so nothing merges with them and nothing is duplicated. Orphanet is loaded
+  whole: the 11,573 it holds that no panel gene links to are harmless stubs, and it needs no new filter. 121 OMIM diseases
+  have no name (the cost of having no OMIM copy; the hpoa file has a `disease_name` column the converter does not store);
+  all 11,645 ORPHANET have one. HPOTerm (1,523, all linked) has an identifier only: HPOTerm names need the RDF `hpo` source.
+* **HPO counts.** 74 panel genes have a disease: 72 with OMIM (121 diseases), 44 with ORPHA (72 diseases). Evidence rows 3,637
+  (OMIM 1,685, ORPHA 1,952, so 1,685 without the ORPHA rows), HPOAnnotation 3,631. The converter loads ORPHA annotations; undoing it is dropping
+  `ORPHA:` rows from the two files. PAX6 has 15 diseases (8 OMIM, 7 ORPHANET), CYP2D6 1 (OMIM:608902).
+* **Not done: the RDF `hpo` source.** Its fetch worked (cache group `hpo`, 18 MB, 37,960 terms: 17,547 of them `UMLS:` and
+  `SNOMEDCT_US:` cross-reference stand-ins) but `humanmine-hpo` stops integrate with "Given a ProxyReference, but id not in ID
+  Map" on `HPOTerm.crossReferences` (terms that already hold a cross reference). Not resolved; the mine is built without it.
+* **Report page.** `TOOL_QUERIES` now lists `atlasExpression.tStatistic`/`pValue` for the three ArrayExpress tools (they need
+  E-MTAB-62, `arrayexpress-atlas`, not loaded): they are dropped, as is `Gene_SigSNP` (`EMPTY_TEMPLATES`: no eQTL). Kept: both
+  Protein Atlas and Human Tissue tools, `Gene_Disease2`, `Gene_Disease_HPO`, `Gene_HPOphenotype_2`. On the PAX6 page in Chromium
+  no request answers 400 and no script error.
+* **Counts** (before: the interactions build). All objects 554,192 -> 597,076; PAX6 proteinAtlasExpression 137 (HumanMine
+  2022: 90), rnaSeqResults 105 (97), atlasExpression 16 (376, which had the frozen E-MTAB-62); CYP2D6 97 / 105 / 16.
+  Templates on PAX6: `Gene_Disease2` 15 rows, `Gene_Disease_HPO` 187, `Gene_HPOphenotype_2` 187, `Gene_Interact_disease` 7 (it had
+  none), `Gene_SigSNP` 0.
+* **Timings and disk.** `subset_stock_data` 11 s from the cache (the expression files 20 s cold), integrate 391 s with the four
+  expression sources (was 441 s with a warm machine; 717 s on the last run), postprocess 115 s, whole driver run from
+  `rdfc2im_project` 18 min. `stock_ut/` 2.9 GB, Postgres 1.2 GB, root disk 3.3 GB free before and after.
+* **Licence.** The HPA groups are `redistributable: true` with the CC BY-SA note (share-alike); nothing from OMIM is loaded
+  or cached. `cache check-release` passes on `cached_raw_data/` (16 groups) and on the stock filtered cache (13).
 
 ### The ID-resolver gate [im-9n4.4]
 

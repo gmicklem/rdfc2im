@@ -378,6 +378,10 @@ def _cell_hit(cell, ids):
         return None
     if cell in ids:
         return cell
+    # a versioned Ensembl id (GTEx v8: ENSG00000007372.22) is matched on the id without the version
+    v = _ENSEMBL_VERSION_RE.match(cell)
+    if v and v.group(1) in ids:
+        return v.group(1)
     for tok in _TOKEN_SPLIT_RE.split(cell):
         tok = tok.strip()
         # 'db:id' (PSI-MITAB 'uniprotkb:P10635') and 'db=id' (PANTHER 'UniProtKB=P26367', 'MGI=MGI=97490')
@@ -408,14 +412,16 @@ def parse_columns(spec):
 def filter_tab(src, dst, ids, columns, keep_comments=False):
     """Keep a row when ANY listed column holds an id from ids ('at least one panel gene').
     Lines starting with '#' are always kept; with keep_comments the first line is kept too (a
-    header row that has no '#'). Neither counts as a record."""
+    header row that has no '#'), and an integer keeps that many leading lines (GTEx's GCT: `#1.2`, a
+    dimensions line, then the header). None of them counts as a record."""
     n_in = n_out = 0
     matched = set()
-    first = True
+    keep_lines = int(keep_comments) if keep_comments else 0   # True is 1
+    lineno = 0
     with open_text(src) as fin, open_text(dst, "w") as fout:
         for line in fin:
-            was_first, first = first, False
-            if line.startswith("#") or (was_first and keep_comments):
+            lineno += 1
+            if line.startswith("#") or lineno <= keep_lines:
                 fout.write(line)
                 continue
             if not line.strip():
@@ -828,6 +834,37 @@ def run_partner_ids(a):
     print(json.dumps({db.lower(): len(v) for db, v in found.items()}))
 
 
+# ---------------------------------------------------------------- HPO diseases
+
+def disease_ids(src):
+    """Sorted disease ids (last column) of a filtered genes_to_phenotype.txt: the diseases hpo-annotation
+    will link to panel genes, which phenotype.hpoa (disease-keyed) is then cut down to [im-9n4.15]."""
+    out = set()
+    with open_text(src) as fin:
+        for line in fin:
+            if line.startswith("#") or not line.strip():
+                continue
+            cells = line.rstrip("\r\n").split("\t")
+            if len(cells) < 2 or cells[0] == "ncbi_gene_id":
+                continue
+            if cells[-1].strip():
+                out.add(cells[-1].strip())
+    return sorted(out)
+
+
+def run_disease_ids(a):
+    if not os.path.isfile(a.infile):
+        raise SubsetError(f"input not found: {a.infile}")
+    found = disease_ids(a.infile)
+    os.makedirs(a.out, exist_ok=True)
+    with open(os.path.join(a.out, "hpo-diseases.txt"), "w", encoding="utf-8", newline="\n") as fh:
+        fh.write("".join(i + "\n" for i in found))
+    by_db = {}
+    for d in found:
+        by_db[d.split(":", 1)[0]] = by_db.get(d.split(":", 1)[0], 0) + 1
+    print(json.dumps({"hpo-diseases": len(found), "by_db": by_db}))
+
+
 # ---------------------------------------------------------------- gene_info
 
 def filter_gene_info(src, dst, ids=None, taxon=None):
@@ -1112,7 +1149,7 @@ def run_filter(a):
         elif fmt == "fasta":
             res = filter_fasta(a.infile, tmp, ids)
         elif fmt == "tab":
-            res = filter_tab(a.infile, tmp, ids, parse_columns(a.column), a.keep_comments)
+            res = filter_tab(a.infile, tmp, ids, parse_columns(a.column), max(a.keep_lines, 1 if a.keep_comments else 0))
         elif fmt == "psi-xml":
             res = filter_psi_xml(a.infile, tmp, ids, parse_types(a.xref_db))
         else:
@@ -1163,6 +1200,7 @@ def build_parser():
     f.add_argument("--column", help="tab: 1-based column number(s), comma separated")
     f.add_argument("--taxon", help="gene_info: keep this tax_id")
     f.add_argument("--keep-comments", action="store_true", help="tab: also keep the first line (a header without '#')")
+    f.add_argument("--keep-lines", type=int, default=0, help="tab: keep the first N lines whatever they hold (a GCT file has 3)")
     f.add_argument("--keep-types", help="gff3: feature types kept for every id, without descendants (e.g. gene)")
     f.add_argument("--xref-db", help="psi-xml: xref db names (comma separated, any case) whose ids are matched")
     f.add_argument("--member", help="psi-xml from a zip: glob of the members to filter (default every file)")
@@ -1170,6 +1208,9 @@ def build_parser():
     q.add_argument("--in", dest="infile", required=True, help="the filtered PANTHER file")
     q.add_argument("--ids", required=True, help="the panel's UniProt id set")
     q.add_argument("--out", required=True, help="directory the id sets go to (next to the panel's)")
+    d = sub.add_parser("disease-ids", help="hpo-diseases.txt: the diseases of a filtered genes_to_phenotype.txt")
+    d.add_argument("--in", dest="infile", required=True, help="the filtered genes_to_phenotype.txt")
+    d.add_argument("--out", required=True, help="directory the id set goes to (next to the panel's)")
     c = sub.add_parser("chromosome-lengths",
                        help="Items XML of Chromosome lengths from a GFF3 file's ##sequence-region lines")
     c.add_argument("--in", dest="infile", required=True)
@@ -1208,6 +1249,8 @@ def main(argv=None):
             run_chromosome_lengths(a)
         elif a.cmd == "partner-ids":
             run_partner_ids(a)
+        elif a.cmd == "disease-ids":
+            run_disease_ids(a)
         else:
             run_filter(a)
     except SubsetError as e:

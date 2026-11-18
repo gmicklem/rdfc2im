@@ -656,3 +656,72 @@ def test_real_biogrid_sample(tmp_path):
                     os.path.join(REAL, "biogrid_ids.txt"), "o.xml", "--xref-db", "entrez gene/locuslink")
     assert read(out) == read(os.path.join(REAL, "biogrid_expected.psi25.xml"))
     assert (res["records_in"], res["records_out"], res["interactors_out"], res["experiments_out"]) == (6, 3, 2, 3)
+
+
+# ------------------------------------------------------------------ GTEx GCT, versioned Ensembl ids, HPO [im-9n4.14, im-9n4.15]
+
+GCT = ("#1.2\n56200\t54\n"
+       "Name\tDescription\tAdipose - Subcutaneous\tBrain - Cortex\n"
+       "ENSG00000007372.22\tPAX6\t1.5\t30.2\n"
+       "ENSG00000100197.20\tCYP2D6\t0.1\t2.0\n"
+       "ENSG00000999999.1\tOTHER\t5\t6\n")
+
+
+def test_tab_strips_the_version_of_an_ensembl_id_when_matching():
+    ids = {"ENSG00000007372"}
+    assert subset_raw._cell_hit("ENSG00000007372.22", ids) == "ENSG00000007372"
+    assert subset_raw._cell_hit("ENSG00000007372", ids) == "ENSG00000007372"
+    assert subset_raw._cell_hit("ENSG00000007373.1", ids) is None
+
+
+def test_gct_keeps_its_three_leading_lines_and_matches_versioned_ids(tmp_path):
+    src = tmp_path / "g.gct"
+    src.write_text(GCT)
+    ids = tmp_path / "ids.txt"
+    ids.write_text("ENSG00000007372\nENSG00000100197\n")
+    out, res = filt(tmp_path, "tab", str(src), str(ids), "o.gct", "--column", "1", "--keep-lines", "3")
+    lines = read(out).decode().splitlines()
+    assert lines[:3] == ["#1.2", "56200\t54", "Name\tDescription\tAdipose - Subcutaneous\tBrain - Cortex"]
+    assert [l.split("\t")[1] for l in lines[3:]] == ["PAX6", "CYP2D6"]
+    assert res["records_in"] == 3 and res["records_out"] == 2     # the dimensions line and the header are not records
+
+
+def test_gct_gzipped_input_is_read_by_suffix(tmp_path):
+    src = tmp_path / "g.gct.gz"
+    with gzip.open(src, "wt") as fh:
+        fh.write(GCT)
+    ids = tmp_path / "ids.txt"
+    ids.write_text("ENSG00000007372\n")
+    out, res = filt(tmp_path, "tab", str(src), str(ids), "o.gct", "--column", "1", "--keep-lines", "3")
+    assert b"PAX6" in read(out) and b"CYP2D6" not in read(out)
+
+
+G2P = ("ncbi_gene_id\tgene_symbol\thpo_id\thpo_name\tfrequency\tdisease_id\n"
+       "5080\tPAX6\tHP:0000007\tAutosomal recessive inheritance\t-\tOMIM:607108\n"
+       "5080\tPAX6\tHP:0001939\tAbnormality\t-\tORPHA:77\n"
+       "1565\tCYP2D6\tHP:0002460\tWeakness\t15/15\tOMIM:608902\n")
+HPOA = ('#description: "HPO annotations"\n#version: 2026-09-02\n'
+        "database_id\tdisease_name\tqualifier\thpo_id\treference\tevidence\tonset\tfrequency\tsex\tmodifier\taspect\tbiocuration\n"
+        "OMIM:607108\tAniridia\t\tHP:0000007\tPMID:1\tPCS\t\t\t\t\tP\tHPO:a[2021-01-01]\n"
+        "OMIM:100000\tOther\t\tHP:0000007\tPMID:2\tPCS\t\t\t\t\tP\tHPO:a[2021-01-01]\n"
+        "ORPHA:77\tAlexander disease\tNOT\tHP:0001939\tORPHA:77\tTAS\t\t\t\t\tP\tORPHA:orphadata[2021-01-01]\n")
+
+
+def test_disease_ids_then_hpoa_cut(tmp_path, capsys):
+    g2p = tmp_path / "g2p.txt"
+    g2p.write_text(G2P)
+    ids = tmp_path / "ids.txt"
+    ids.write_text("5080\n")
+    out, _ = filt(tmp_path, "tab", str(g2p), str(ids), "g2p_f.txt", "--column", "1", "--keep-comments")
+    sets = tmp_path / "sets"
+    p = run_cli("disease-ids", "--in", out, "--out", str(sets))
+    assert p.returncode == 0, p.stderr
+    assert json.loads(p.stdout) == {"hpo-diseases": 2, "by_db": {"OMIM": 1, "ORPHA": 1}}
+    assert (sets / "hpo-diseases.txt").read_text() == "OMIM:607108\nORPHA:77\n"
+    hpoa = tmp_path / "phenotype.hpoa"
+    hpoa.write_text(HPOA)
+    out2, res = filt(tmp_path, "tab", str(hpoa), str(sets / "hpo-diseases.txt"), "hpoa_f", "--column", "1")
+    text = read(out2).decode()
+    assert "OMIM:607108" in text and "ORPHA:77" in text and "OMIM:100000" not in text
+    assert text.startswith("#description")             # comment lines stay
+    assert res["records_in"] == 4 and res["records_out"] == 2   # the database_id header line counts as a row

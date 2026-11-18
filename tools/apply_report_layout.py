@@ -48,6 +48,17 @@ TOOL_QUERIES = {"bluegenesToolCytoscape": [
     "Gene.interactions.participant2.symbol", "Gene.interactions.participant2.primaryIdentifier",
     "Gene.interactions.details.name", "Gene.interactions.details.role1", "Gene.interactions.details.role2",
     "Gene.interactions.details.type", "Gene.interactions.details.dataSets.name"]}
+# The three ArrayExpress tools ask for AtlasExpression.tStatistic and .pValue (E-MTAB-62: differential
+# expression), which only the arrayexpress-atlas source declares. With atlas-express (E-MTAB-513 FPKM) alone
+# the model lacks them and the mine answers 400, so the tools are dropped until E-MTAB-62 is loaded [im-9n4.14].
+_ARRAYEXPRESS = ["Gene.atlasExpression.condition", "Gene.atlasExpression.type", "Gene.atlasExpression.tStatistic",
+                 "Gene.atlasExpression.pValue", "Gene.atlasExpression.expression"]
+for _tool in ("BlueGenesDiseaseExpressionArrayexpressVisualizer", "bluegenesTissueExpressionArrayexpressVisualizer",
+              "bluegenesExpressionBoxSwarmVisualizer"):
+    TOOL_QUERIES[_tool] = _ARRAYEXPRESS
+# Templates the model can run but the data cannot fill: Gene_SigSNP lists GTEx eQTL SNPs (the gtex source loads the
+# median-TPM file only; the 1.5 GB signif files are left out) and returns no row [im-9n4.15].
+EMPTY_TEMPLATES = {"Gene_SigSNP": "needs GTEx eQTL data, which this mine does not load"}
 MAX_QUERY = 6000   # a PUT carries its value in the query string; longer than this goes DELETE + POST
 
 
@@ -229,6 +240,8 @@ def _child_problem(cls, child, classes, tools, templates):
                 return "tool queries %s, not in the model" % path
         return None
     if kind == "template":
+        if value in EMPTY_TEMPLATES:
+            return EMPTY_TEMPLATES[value]
         return None if value in templates else "template not in the mine"
     return "unknown entry type %r" % (kind,)
 

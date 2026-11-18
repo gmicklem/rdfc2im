@@ -786,6 +786,18 @@ phase_build_humanmine_items() {
   if [ ! -d "$bio" ]; then
     if [ "$IM_LINE" = "6.0" ]; then _copy_bio_sources_60 "$bio"; else run cp -r "$UPSTREAM_CACHE/humanmine-bio-sources" "$bio"; fi
   fi
+  # hpo-annotation_additions.xml (humanmine-bio-sources d67fc5d) declares `Disease.dataSets` without the reverse
+  # reference BioEntity.dataSets has, and our Disease extends BioEntity (curation/extensions_additions.xml, merged
+  # first), so :dbmodel:mergeModels stops with "replacing the BioEntity.dataSets collection with Disease.dataSets
+  # failed because the reverse references differ" [im-9n4.15]. Disease inherits dataSets: the line is redundant.
+  # Removed in this build's copy only; the fork should drop it too.
+  if [ "$IM_LINE" = "6.0" ] && [ -n "$STOCK_SOURCES" ]; then
+    case " $STOCK_SOURCES " in *" hpo-annotation "*)
+      deployer_edit "$bio/hpo-annotation/src/main/resources/hpo-annotation_additions.xml" \
+        "delete Disease.dataSets (BioEntity already has it; the redefinition breaks mergeModels)" \
+        -e '/<collection name="dataSets" referenced-type="DataSet"\/>/d' ;;
+    esac
+  fi
   # The dead JCenter/Bintray plugin in bio-source-humanmine-static fails Gradle's config phase
   # for every sibling project (confirmed live, LOAD-TRIAL.md). Not needed for this source list.
   # (The 6.0 line's fork has no such plugin, and its settings.gradle lists the include on a comma
@@ -1209,7 +1221,7 @@ _stock_produce() {
     [ -z "$ids" ] || [ "$ids" = none ] || args+=(--ids "$STOCK_DIR/idsets/$ids.txt")
     [ -z "$col" ] || args+=(--column "$col")
     [ -z "$taxon" ] || args+=(--taxon "$taxon")
-    [ "$keep" = 1 ] && args+=(--keep-comments)
+    [ "${keep:-0}" = 0 ] || args+=(--keep-lines "$keep")   # keep_header: the number of leading lines kept [im-9n4.14]
     [ -z "$ktypes" ] || args+=(--keep-types "$ktypes")
     run python3 tools/subset_raw.py filter "${args[@]}"
     [ -z "$unpack" ] || run rm -rf "$tmp"
@@ -1293,6 +1305,11 @@ phase_subset_stock_data() {
       esac
       _stock_produce "$src" "$fid" "$raw" "$(_dash "$unpack")" "$(_dash "$member")" "$(_dash "$fmt")" "$(_dash "$ids")" \
         "$(_dash "$col")" "$(_dash "$taxon")" "$keep" "$work" "$kind" "$(_dash "$sname")" "$(_dash "$ktypes")" "$(_dash "$xdb")"
+      # phenotype.hpoa is disease-keyed: cut to the diseases of the genes_to_phenotype.txt just filtered (listed
+      # before it in the table), as mgi-identifiers is cut to panther's partners [im-9n4.15]
+      if [ "$src" = hpo-annotation ] && [ "$fid" = genes-to-phenotype ]; then
+        run python3 tools/subset_raw.py disease-ids --in "$work/$sname" --out "$STOCK_DIR/idsets"
+      fi
     done 3<<< "$rows"
     [ "$filtered" -eq 1 ] || continue
     if [ "$restore" -eq 1 ]; then

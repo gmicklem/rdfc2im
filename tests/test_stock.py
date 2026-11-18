@@ -150,8 +150,11 @@ def test_check_wants_needs_and_human():
     if not _have_hm():
         return
     t = stock.load_table()
+    _, probs = stock.select(t, ["mgi-identifiers"], HM_PROJECT)
+    assert any("mgi-identifiers needs panther" in p for p in probs), probs
+    # OMIM's mimTitles.txt is optional for the current HPO files: hpo-annotation loads without omim [im-9n4.15]
     _, probs = stock.select(t, ["hpo-annotation"], HM_PROJECT)
-    assert any("hpo-annotation needs omim" in p for p in probs), probs
+    assert probs == [], probs
     _, probs = stock.select(t, ["uniprot"], HM_PROJECT, taxa=["9606", "10090"])
     assert any("human (9606) only" in p for p in probs), probs
 
@@ -391,3 +394,56 @@ def test_mgi_and_rgd_are_cut_to_the_partner_id_sets():
     assert table["mgi-identifiers"]["files"][0]["filter"] == {"format": "tab", "ids": "mgi", "column": "1"}
     assert table["rgd-identifiers"]["files"][0]["filter"]["ids"] == "rgd"
     assert table["panther"]["files"][0]["filter"] == {"format": "tab", "ids": "uniprot", "column": "1,2"}
+
+
+# ------------------------------------------------------------------ expression and disease sources [im-9n4.14, im-9n4.15]
+
+def test_expression_sources_stage_only_the_files_their_converters_accept():
+    """Each converter throws on, or double-loads, an unexpected file in its directory (humanmine-bio-sources,
+    d67fc5d): the table stages exactly one file for three of them and none of the wrong kind for gtex."""
+    t = stock.load_table()
+    staged = {n: [f["stage_as"] for f in t[n]["files"]]
+              for n in ("protein-atlas", "protein-atlas-rna", "gtex", "atlas-express", "hpo-annotation", "orphanet")}
+    assert staged["protein-atlas"] == ["normal_ihc_data.tsv", "tissue_to_organ.tsv"]
+    assert staged["protein-atlas-rna"] == ["rna_tissue_consensus.tsv"]
+    assert staged["atlas-express"] == ["E-MTAB-513-fpkms.tsv"]
+    assert staged["orphanet"] == ["en_product1.xml"]
+    assert staged["gtex"] == ["GTEx_Analysis_2017-06-05_v8_RNASeQCv1.1.9_gene_median_tpm.gct"]
+    assert "gene_median" in staged["gtex"][0] and "signif" not in staged["gtex"][0]
+    assert staged["hpo-annotation"] == ["genes_to_phenotype.txt", "phenotype.hpoa"]
+
+
+def test_gtex_keeps_three_header_lines_and_the_hpo_file_is_cut_in_two_stages():
+    t = stock.load_table()
+    gt = t["gtex"]["files"][0]["filter"]
+    assert gt["keep_header"] == 3 and gt["ids"] == "ensembl"
+    rows = [r.split("\t") for r in stock.file_rows(t, ["gtex", "protein-atlas"], "/S", "/S/cache")]
+    assert rows[0][11] == "3" and rows[1][11] == "1"
+    g2p, hpoa = t["hpo-annotation"]["files"]
+    assert g2p["filter"]["ids"] == "entrez" and hpoa["filter"]["ids"] == "hpo-diseases"
+    assert stock.filter_spec(t["gtex"]["files"][0]).endswith("keep_header=3")
+    assert stock.filter_spec(g2p).endswith("keep_header")      # as before: existing cache specs do not change
+
+
+def test_hpo_annotation_has_no_omim_file_property_and_no_omim_dependency():
+    t = stock.load_table()
+    e = t["hpo-annotation"]
+    assert not e.get("needs")
+    assert e["properties"] == {"hpo.disease.file": ""}
+    assert stock.validate_table(t) == []
+
+
+def test_expression_and_disease_files_are_redistributable_and_hpa_says_share_alike():
+    t = stock.load_table()
+    for n in ("protein-atlas", "protein-atlas-rna", "gtex", "atlas-express", "hpo-annotation", "orphanet"):
+        assert t[n]["redistributable"] is True, n
+    assert "share-alike" in t["protein-atlas"]["licence"] and "share-alike" in t["protein-atlas-rna"]["licence"]
+    assert t["omim"]["redistributable"] is False
+
+
+def test_disease_name_priority_ranks_orphanet_above_hpo_annotation():
+    """hpo-annotation sets no Disease.name; ranked above orphanet it starved the names of the diseases both load."""
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "curation", "priorities_override.properties")
+    line = next(l for l in open(path, encoding="utf-8") if l.startswith("Disease.name"))
+    order = [w.strip() for w in line.split("=", 1)[1].split(",")]
+    assert order.index("orphanet") < order.index("hpo-annotation"), order
