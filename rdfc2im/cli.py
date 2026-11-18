@@ -144,6 +144,8 @@ def _add_cache_parser(sub):
                             "save recorded, or the restore is refused")
     c = cs.add_parser("verify", parents=[common], help="re-hash cached files against their MD5SUMS")
     c.add_argument("group", nargs="*", help="default: every entry")
+    c.add_argument("--meta", action="append", default=[], metavar="KEY=VALUE",
+                   help="also refuse an entry whose recorded KEY differs (as restore does)")
     cs.add_parser("list", parents=[common])
 
 
@@ -167,7 +169,7 @@ def run_cache(a) -> int:
             if not names:
                 raise rawcache.CacheError(f"nothing cached in {a.cache_dir}/")
             for g in names:
-                i = rawcache.verify(g, a.cache_dir)
+                i = rawcache.verify(g, a.cache_dir, meta)
                 print(f"ok  {g}: {i['files']} files, {i['bytes']} bytes, cached {i['saved_at']}")
         else:
             for g in rawcache.groups(a.cache_dir):

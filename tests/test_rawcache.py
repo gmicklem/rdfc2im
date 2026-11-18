@@ -241,3 +241,18 @@ def test_cli_save_restore_and_failure_exit_codes(tmp_path):
     assert _cli(["cache", "verify", "--cache-dir", cd], tmp_path) == 0
     (tmp_path / "c" / "go" / "data" / "main.tsv").write_bytes(b"corrupt")
     assert _cli(["cache", "verify", "--cache-dir", cd], tmp_path) != 0
+
+
+def test_verify_with_meta_refuses_data_fetched_for_something_else(tmp_path):
+    """full-build.sh reads the large stock-source downloads where they lie in the cache, so verify
+    (not only restore) must be able to check what they were fetched for."""
+    src, cache = tmp_path / "src", tmp_path / "cache"
+    _make(src, FILES)
+    rawcache.save("stock-raw-x", str(src), str(cache), {"url.a": "https://e/a", "last_modified.a": "t1"})
+    assert rawcache.verify("stock-raw-x", str(cache), {"url.a": "https://e/a"})["meta"]["last_modified.a"] == "t1"
+    msg = _raises(CacheError, rawcache.verify, "stock-raw-x", str(cache), {"last_modified.a": "t2"})
+    assert "last_modified.a" in msg and "t1" in msg and "t2" in msg
+    r = subprocess.run([sys.executable, "-m", "rdfc2im", "cache", "verify", "stock-raw-x", "--cache-dir",
+                        str(cache), "--meta", "url.a=https://e/other"], capture_output=True, text=True,
+                       cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    assert r.returncode == 1 and "url.a" in r.stderr
