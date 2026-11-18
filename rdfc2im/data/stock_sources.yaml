@@ -8,9 +8,21 @@
 #                      into its private m2 repo by phase publish_intermine;
 #                    humanmine-bio-sources: built in the maint-2026 branch of the humanmine-bio-sources
 #                      fork (version 4.3.0), like humanmine-items
-#   licence          the data licence, as far as it is known
+#   licence          the licence name as the source states it (SPDX identifier where one fits), or "not verified"
+#   licence_status   verified (stated on the source's own page or file) | partial (a related statement was read, the
+#                    full one was not) | not-verified (the source points to a page that could not be read) |
+#                    not-stated (nothing findable) | not-checked
+#   licence_url      the page or file where the licence is stated (or, for not-stated, what was looked at)
+#   licence_checked  the date (UTC) the statement was read
+#   licence_quote    one or two sentences copied from that page (absent when nothing is stated)
+#   licence_conditions  list: attribution wording, share-alike, no-commercial, registration, caveats and what was
+#                    looked at when nothing is stated
 #   redistributable  false: the data must never enter cached_raw_data/ or the CI release asset
-#                    (D-7; `cache save --for-release` refuses it, T0.3)
+#                    (D-7; `cache save --for-release` refuses it, T0.3). true means the stated terms allow a filtered
+#                    copy in a public release asset; with licence_status other than verified it means only that no
+#                    stated term forbids it (the flag stays true so the build does not break; see docs/LICENCES.md)
+#   redistributable_reason  why, in a sentence
+#   The record of every source (stock, RDF, tools) with the mine's DataSet values is docs/LICENCES.md.
 #   local_copy       required: the files come only from --stock-local DIR/<name>/<raw_name>
 #                    (default optional: a local copy, when present, is used instead of the download)
 #   data_dir         HumanMine's own data directory under /micklem/data (in/humanmine_project.xml);
@@ -51,8 +63,17 @@ sources:
   uniprot:
     type: uniprot
     jar: intermine
-    licence: CC BY 4.0 (UniProt)
+    licence: "CC-BY-4.0"
+    licence_status: verified
+    licence_url: "https://ftp.ebi.ac.uk/pub/databases/uniprot/current_release/knowledgebase/complete/README"
+    licence_checked: "2026-11-18"
+    licence_quote: "We have chosen to apply the Creative Commons Attribution 4.0 International (CC BY 4.0) License (https://creativecommons.org/licenses/by/4.0/) to all copyrightable parts of our databases."
+    licence_conditions:
+      - "Attribution: credit the UniProt Consortium and say that the data were changed (this build keeps human Swiss-Prot entries, cut to the gene panel)."
+      - "The README adds: some data may be covered by patents or other rights, and medical or genetic information is for research, educational and informational purposes only."
+      - "The XML file ends with <copyright>: \"Copyrighted by the UniProt Consortium, see https://www.uniprot.org/terms Distributed under the Creative Commons Attribution (CC BY 4.0) License\"."
     redistributable: true
+    redistributable_reason: "CC BY 4.0 allows redistribution of changed copies with attribution."
     data_dir: uniprot/current
     properties:
       uniprot.organisms: "9606"
@@ -78,8 +99,17 @@ sources:
   uniprot-keywords:
     type: uniprot-keywords
     jar: intermine
-    licence: CC BY 4.0 (UniProt)
+    licence: "CC-BY-4.0"
+    licence_status: verified
+    licence_url: "https://ftp.ebi.ac.uk/pub/databases/uniprot/current_release/knowledgebase/complete/README"
+    licence_checked: "2026-11-18"
+    licence_quote: "We have chosen to apply the Creative Commons Attribution 4.0 International (CC BY 4.0) License (https://creativecommons.org/licenses/by/4.0/) to all copyrightable parts of our databases."
+    licence_conditions:
+      - "Attribution: credit the UniProt Consortium and say that the data were changed (this build keeps human Swiss-Prot entries, cut to the gene panel)."
+      - "The README adds: some data may be covered by patents or other rights, and medical or genetic information is for research, educational and informational purposes only."
+      - "keywlist.xml has no <copyright> element of its own; the statement is the README of the same release tree."
     redistributable: true
+    redistributable_reason: "CC BY 4.0 allows redistribution with attribution (the file is used whole)."
     data_dir: uniprot/current
     notes: >-
       The EBI mirror has only keywlist.xml.gz (keywlist.xml is a 404 there); project.xml's
@@ -96,8 +126,17 @@ sources:
   uniprot-fasta:
     type: fasta
     jar: intermine
-    licence: CC BY 4.0 (UniProt)
+    licence: "CC-BY-4.0"
+    licence_status: verified
+    licence_url: "https://ftp.ebi.ac.uk/pub/databases/uniprot/current_release/knowledgebase/complete/README"
+    licence_checked: "2026-11-18"
+    licence_quote: "We have chosen to apply the Creative Commons Attribution 4.0 International (CC BY 4.0) License (https://creativecommons.org/licenses/by/4.0/) to all copyrightable parts of our databases."
+    licence_conditions:
+      - "Attribution: credit the UniProt Consortium and say that the data were changed (this build keeps human Swiss-Prot entries, cut to the gene panel)."
+      - "The README adds: some data may be covered by patents or other rights, and medical or genetic information is for research, educational and informational purposes only."
+      - "The FASTA file has no licence line of its own; the statement is the README of the same release tree."
     redistributable: true
+    redistributable_reason: "CC BY 4.0 allows redistribution of changed copies with attribution."
     data_dir: uniprot/current
     properties:
       fasta.taxonId: "9606"
@@ -118,8 +157,16 @@ sources:
   go-annotation:
     type: go-annotation
     jar: intermine
-    licence: CC BY 4.0 (GO Consortium, GOA)
+    licence: "GOA copyright notice (free redistribution with the notice)"
+    licence_status: partial
+    licence_url: "https://ftp.ebi.ac.uk/pub/databases/GO/goa/HUMAN/README"
+    licence_checked: "2026-11-18"
+    licence_quote: "This README and the accompanying databases may be copied and redistributed freely, without advance permission, provided that this copyright statement is reproduced with each copy."
+    licence_conditions:
+      - "Reproduce the notice with each copy: \"GOA - GO Annotation. Copyright 2018 (C) The European Bioinformatics Institute.\""
+      - "The GAF itself (current.geneontology.org/annotations/goa_human.gaf.gz) carries no licence line in its header. The GO Consortium states CC BY 4.0 for the ontology (go-basic.obo: \"terms:license http://creativecommons.org/licenses/by/4.0/\"), but its licence and citation page (geneontology.org) is blocked from the sandbox, so the licence of the annotation file is not confirmed there."
     redistributable: true
+    redistributable_reason: "The EBI GOA README allows free redistribution if its copyright statement travels with the copy; keep the notice file in any release asset. The GO Consortium page was not readable."
     data_dir: go-annotation/current/human
     after: [uniprot, go]
     postprocess: [do-sources]
@@ -140,8 +187,15 @@ sources:
   ncbi-gff:
     type: ncbi-gff
     jar: intermine
-    licence: public domain (NCBI RefSeq)
+    licence: "NCBI FTP notice: unrestricted public data (no licence named)"
+    licence_status: partial
+    licence_url: "https://ftp.ncbi.nlm.nih.gov/README.ftp"
+    licence_checked: "2026-11-18"
+    licence_quote: "NOTE: ALL DATA HERE IS PUBLIC, NON-SENSITIVE, UNRESTRICTED SCIENTIFIC DATA SHARING AMONG SCIENTIFIC COMMUNITIES."
+    licence_conditions:
+      - "The notice names no licence and asks for no attribution. NCBI's own data-use policy page (https://www.ncbi.nlm.nih.gov/home/about/policies/) is on a host the sandbox blocks, so its wording on attribution and on third-party rights in some records was not read."
     redistributable: true
+    redistributable_reason: "The server notice says the data are unrestricted; the policy page was not readable."
     data_dir: human/gff/current
     after: [ncbi-gene]
     postprocess: [create-chromosome-locations-and-lengths, create-gene-flanking-features,
@@ -178,8 +232,15 @@ sources:
   ncbi-fasta:
     type: fasta
     jar: intermine
-    licence: public domain (NCBI RefSeq)
+    licence: "NCBI FTP notice: unrestricted public data (no licence named)"
+    licence_status: partial
+    licence_url: "https://ftp.ncbi.nlm.nih.gov/README.ftp"
+    licence_checked: "2026-11-18"
+    licence_quote: "NOTE: ALL DATA HERE IS PUBLIC, NON-SENSITIVE, UNRESTRICTED SCIENTIFIC DATA SHARING AMONG SCIENTIFIC COMMUNITIES."
+    licence_conditions:
+      - "The notice names no licence and asks for no attribution. NCBI's own data-use policy page (https://www.ncbi.nlm.nih.gov/home/about/policies/) is on a host the sandbox blocks, so its wording on attribution and on third-party rights in some records was not read."
     redistributable: true
+    redistributable_reason: "The server notice says the data are unrestricted; the policy page was not readable."
     data_dir: human/fasta/current
     properties:
       fasta.taxonId: "9606"
@@ -208,8 +269,16 @@ sources:
   panther:
     type: panther
     jar: intermine
-    licence: PANTHER terms of use, free with citation (unverified)
+    licence: "not verified"
+    licence_status: not-stated
+    licence_url: "https://data.pantherdb.org/ftp/ortholog/current_release/README"
+    licence_checked: "2026-11-18"
+    licence_conditions:
+      - "Looked at: the README beside the download (it describes the files only), the /ftp/, /ftp/ortholog/ and /ftp/downloads/ directory listings and the file's own header: none states a licence or terms."
+      - "PANTHER's terms page (https://www.pantherdb.org/tou.jsp) answered HTTP 403, Approval required for www.pantherdb.org. The converter stamps the GPL URL on its data set, which nothing found supports."
+      - "The earlier record (\"free with citation\") was from general knowledge and is not confirmed."
     redistributable: true
+    redistributable_reason: "No stated term forbids it and none permits it: unverified. Flag kept so the build does not break; hold publication until pantherdb.org is read."
     data_dir: panther/current
     resolver_taxa: [10116, 7955]
     properties:
@@ -236,8 +305,16 @@ sources:
   mgi-identifiers:
     type: mgi-identifiers
     jar: intermine
-    licence: MGI data are free to use with citation (Mouse Genome Informatics)
+    licence: "CC-BY-4.0"
+    licence_status: verified
+    licence_url: "https://www.informatics.jax.org/mgihome/other/copyright.shtml"
+    licence_checked: "2026-11-18"
+    licence_quote: "MGI data and annotations are licensed under a Creative Commons Attribution 4.0 International License (CC-BY)."
+    licence_conditions:
+      - "Attribution to MGI (Mouse Genome Informatics)."
+      - "Images on the site are excluded (copyright of the authors); this build uses MRK_List2.rpt only, no images."
     redistributable: true
+    redistributable_reason: "CC BY 4.0 allows redistribution of changed copies with attribution."
     data_dir: mgi-identifiers/current
     needs: [panther]      # its cut is the genes on panther's rows
     notes: >-
@@ -257,8 +334,16 @@ sources:
   rgd-identifiers:
     type: rgd-identifiers
     jar: intermine
-    licence: RGD data are free to use with citation (Rat Genome Database; wording as HumanMine records it, the RGD site's own licence page was not readable from the build sandbox, so unverified)
+    licence: "not verified"
+    licence_status: not-stated
+    licence_url: "https://download.rgd.mcw.edu/data_release/README.txt"
+    licence_checked: "2026-11-18"
+    licence_conditions:
+      - "Looked at: GENES_RAT.txt's header block (format and change log only), the README.txt and directory listing of download.rgd.mcw.edu/data_release/: none states a licence or terms."
+      - "RGD's licence and citation page (https://rgd.mcw.edu/wg/citing-rgd/) answered HTTP 403, Approval required for rgd.mcw.edu."
+      - "The earlier record (\"free to use with citation\") was HumanMine's wording and is not confirmed."
     redistributable: true
+    redistributable_reason: "Unverified (no stated term either way). Flag kept so the build does not break; not in the stock_filtered asset; hold publication until rgd.mcw.edu is read."
     data_dir: rgd-identifiers/current
     needs: [panther]      # its cut is the genes on panther's rows
     notes: >-
@@ -282,8 +367,17 @@ sources:
   psi-intact:
     type: psi
     jar: intermine
-    licence: CC BY 4.0 (IntAct, EMBL-EBI)
+    licence: "not verified (EMBL-EBI terms of use apply)"
+    licence_status: not-stated
+    licence_url: "https://www.ebi.ac.uk/about/terms-of-use/"
+    licence_checked: "2026-11-18"
+    licence_quote: "Where EMBL-EBI presents scientific data generated by others, EMBL-EBI imposes no additional restriction on the use of the contributed data than those provided by the data owner, unless otherwise specified in these Terms of Use."
+    licence_conditions:
+      - "Looked at: the PSI-MI XML <source> element and header, the FTP directory listings, CHANGES and various/README of ftp.ebi.ac.uk/pub/databases/intact/current/: no licence text."
+      - "IntAct's licence statement is on its web pages (https://www.ebi.ac.uk/intact/about and /documentation), which are JavaScript pages: fetched, they hold no licence text. This is not a blocked host; the page needs a browser."
+      - "The loader stamps an Apache-2.0 URL on the IntAct data set (a software licence); nothing found supports it. The earlier record (CC BY 4.0) is not confirmed from IntAct."
     redistributable: true
+    redistributable_reason: "Unverified: the data owner's statement could not be read. Flag kept; hold publication of stock-psi-intact until it is read in a browser."
     data_dir: psi/intact/current
     properties:
       intact.organisms: "9606"
@@ -310,8 +404,17 @@ sources:
   biogrid:
     type: biogrid
     jar: intermine
-    licence: MIT (BioGRID; unverified)
+    licence: "MIT"
+    licence_status: verified
+    licence_url: "https://downloads.thebiogrid.org/BioGRID/Latest-Release/"
+    licence_checked: "2026-11-18"
+    licence_quote: "All data provided are 100% freely available to both academic and commercial users under the MIT License, and are provided WITHOUT ANY WARRANTY."
+    licence_conditions:
+      - "MIT licence: keep the copyright and permission notice with substantial portions."
+      - "Requested, not required: \"Publications are requested to please cite the original contributing authors (where applicable) and also: Stark C, Breitkreutz BJ, Reguly T, Boucher L, Breitkreutz A, Tyers M. BioGRID: a general repository for interaction datasets. Nucleic Acids Res. 2006; 34:D535-9.\""
+      - "The earlier record (MIT, unverified) is now confirmed. The page links the MIT text; the link was not followed."
     redistributable: true
+    redistributable_reason: "MIT allows redistribution of changed copies; keep the notice."
     data_dir: biogrid/current
     properties:
       biogrid.organisms: "9606"
@@ -338,8 +441,16 @@ sources:
   psi-mi-ontology:
     type: psi-mi-ontology
     jar: intermine
-    licence: CC BY 4.0 (HUPO-PSI; unverified)
+    licence: "CC-BY-4.0"
+    licence_status: verified
+    licence_url: "https://raw.githubusercontent.com/HUPO-PSI/psi-mi-CV/master/LICENSE"
+    licence_checked: "2026-11-18"
+    licence_quote: "Attribution 4.0 International (the Creative Commons legal text, first line of the repository's LICENSE file)"
+    licence_conditions:
+      - "The download (purl.obolibrary.org/obo/mi.obo) redirects to psi-mi.obo in this repository; the OBO file has no licence line of its own, so the repository's LICENSE is the statement."
+      - "Attribution to HUPO-PSI."
     redistributable: true
+    redistributable_reason: "CC BY 4.0 allows redistribution with attribution."
     data_dir: psi/ontology/current
     data_property: src.data.file
     data_file: psi-mi.obo
@@ -354,8 +465,18 @@ sources:
   protein-atlas:
     type: protein-atlas
     jar: humanmine-bio-sources
-    licence: CC BY-SA 4.0 (Human Protein Atlas; share-alike, the converter's data set still says 3.0)
+    licence: "CC-BY-4.0"
+    licence_status: verified
+    licence_url: "https://www.proteinatlas.org/about/licence"
+    licence_checked: "2026-11-18"
+    licence_quote: "The Human Protein Atlas is licensed under the Creative Commons Attribution 4.0 International License for all copyrightable parts of our database."
+    licence_conditions:
+      - "Attribution, in the page's own words: include a reference to a primary publication (or one of the other publications it lists) AND a reference to the website (\"Human Protein Atlas proteinatlas.org\")."
+      - "For data downloaded from the site, also cite the data used and its URL: \"image/gene/data available from v##.proteinatlas.org\" (## = the atlas version)."
+      - "\"Data subject to third-party constraints may also be included and it is the responsibility of users of the Human Protein Atlas to ensure that their utilization of the data does not infringe any of the rights of such third parties.\""
+      - "Not share-alike. The table said CC BY-SA 4.0 until 2026-11-18; the page states CC BY 4.0."
     redistributable: true
+    redistributable_reason: "CC BY 4.0 allows redistribution of changed copies with attribution; no share-alike duty (corrects the earlier record)."
     data_dir: metabolic/protein-atlas/current
     notes: >-
       HPA renamed normal_tissue.tsv.zip to normal_ihc_data.tsv.zip (the old name is a 404); the converter
@@ -386,8 +507,18 @@ sources:
   protein-atlas-rna:
     type: protein-atlas-rna
     jar: humanmine-bio-sources
-    licence: CC BY-SA 4.0 (Human Protein Atlas; share-alike, the converter's data set still says 3.0)
+    licence: "CC-BY-4.0"
+    licence_status: verified
+    licence_url: "https://www.proteinatlas.org/about/licence"
+    licence_checked: "2026-11-18"
+    licence_quote: "The Human Protein Atlas is licensed under the Creative Commons Attribution 4.0 International License for all copyrightable parts of our database."
+    licence_conditions:
+      - "Attribution, in the page's own words: include a reference to a primary publication (or one of the other publications it lists) AND a reference to the website (\"Human Protein Atlas proteinatlas.org\")."
+      - "For data downloaded from the site, also cite the data used and its URL: \"image/gene/data available from v##.proteinatlas.org\" (## = the atlas version)."
+      - "\"Data subject to third-party constraints may also be included and it is the responsibility of users of the Human Protein Atlas to ensure that their utilization of the data does not infringe any of the rights of such third parties.\""
+      - "Not share-alike. The table said CC BY-SA 4.0 until 2026-11-18; the page states CC BY 4.0."
     redistributable: true
+    redistributable_reason: "CC BY 4.0 allows redistribution of changed copies with attribution; no share-alike duty (corrects the earlier record)."
     data_dir: metabolic/protein-atlas/RNA-seq/current
     notes: >-
       Only rna_tissue_consensus.tsv (Gene, Gene name, Tissue, nTPM) or the old rna_tissue.tsv is
@@ -407,8 +538,16 @@ sources:
   gtex:
     type: gtex
     jar: humanmine-bio-sources
-    licence: GTEx open-access summary data
+    licence: "not verified"
+    licence_status: not-stated
+    licence_url: "https://storage.googleapis.com/adult-gtex/"
+    licence_checked: "2026-11-18"
+    licence_conditions:
+      - "Looked at: the file's GCT header (no licence), the bucket listing of adult-gtex (README files exist for other versions and for eQTL data, none for bulk-gex/v8/rna-seq)."
+      - "The GTEx portal's licence page (https://www.gtexportal.org/home/license) answered HTTP 403, Approval required for www.gtexportal.org."
+      - "The earlier record (\"open-access summary data\") is not confirmed."
     redistributable: true
+    redistributable_reason: "Unverified. Flag kept; hold publication of stock-gtex until gtexportal.org is read."
     data_dir: human/GTEx/current
     notes: >-
       GTEx v8 median TPM per tissue, as RNASeqResult. The converter reads a file whose name contains
@@ -428,8 +567,16 @@ sources:
   atlas-express:
     type: atlas-express
     jar: humanmine-bio-sources
-    licence: CC BY 4.0 (Expression Atlas, EMBL-EBI)
+    licence: "CC-BY-4.0"
+    licence_status: verified
+    licence_url: "https://www.ebi.ac.uk/gxa/licence.html"
+    licence_checked: "2026-11-18"
+    licence_quote: "We are applying the Creative Commons Attribution 4.0 International License for all copyrightable material on our website."
+    licence_conditions:
+      - "Credit by citing: \"Expression Atlas in 2026: enabling FAIR and open expression data through community collaboration and integration (Nucleic Acids Research, 10 December 2025)\"."
+      - "The page is about the Atlas's own material; E-MTAB-513 is a submitted experiment, and the EMBL-EBI terms say EMBL-EBI adds no restriction beyond the data owner's."
     redistributable: true
+    redistributable_reason: "CC BY 4.0 allows redistribution of changed copies with attribution."
     data_dir: atlas-express
     notes: >-
       E-MTAB-513 (Illumina Body Map), the FPKM table: five comma separated values per cell, the converter takes
@@ -450,8 +597,16 @@ sources:
   hpo-annotation:
     type: hpo-annotation
     jar: humanmine-bio-sources
-    licence: HPO licence (reuse with attribution, terms not to be altered; unverified for a filtered copy)
+    licence: "not verified (points to https://hpo.jax.org/app/license)"
+    licence_status: not-verified
+    licence_url: "https://raw.githubusercontent.com/obophenotype/human-phenotype-ontology/master/README.md"
+    licence_checked: "2026-11-18"
+    licence_quote: "See license information and instructions how to cite the HPO project (https://hpo.jax.org/app/license)"
+    licence_conditions:
+      - "The annotation files (phenotype.hpoa, genes_to_phenotype.txt) have no licence line; hp.obo's header says \"terms:license https://hpo.jax.org/app/license\"; the repository's LICENSE.md is the same one-line pointer."
+      - "That page (hpo.jax.org) answered HTTP 403, Approval required for hpo.jax.org, so the terms themselves were not read. The earlier record (\"reuse with attribution, terms not to be altered\") is not confirmed."
     redistributable: true
+    redistributable_reason: "Unverified: the terms are on a blocked page. Flag kept; hold publication of stock-hpo-annotation and the hpo RDF group until read."
     data_dir: hpo/current
     properties:
       hpo.disease.file: ""     # OMIM's mimTitles.txt is optional now (omim is licensed, not available): empty = unset
@@ -484,8 +639,17 @@ sources:
   orphanet:
     type: orphanet
     jar: humanmine-bio-sources
-    licence: CC BY 4.0 (Orphanet)
+    licence: "CC-BY-4.0"
+    licence_status: verified
+    licence_url: "https://www.orphadata.com/legal-notice/"
+    licence_checked: "2026-11-18"
+    licence_quote: "Users may download the data made available on www.orphadata.com in the Orphadata Science section and use them as they wish (including use in other information systems) according to the Commons Attribution 4.0 International (CC BY 4.0) licence."
+    licence_conditions:
+      - "The file itself says so: <Licence> ... <ShortIdentifier>CC-BY-4.0</ShortIdentifier> (en_product1.xml, JDBOR date 2026-06-23)."
+      - "Cite the provenance: \"Orphadata Science: Free access data from Orphanet. (c) INSERM 1999. Available on http://sciences.orphadata.com/. Data version [date].\" Indicate changes; do not suggest Orphanet endorses the use; do not use the logos without approval."
+      - "AI clause: use of CC BY data in LLM/AI-based tools offered to third parties needs a statement that results may not reflect the Orphanet data (not a mine, but any chat or LLM front end added later)."
     redistributable: true
+    redistributable_reason: "CC BY 4.0 allows redistribution with attribution (file used whole, unchanged)."
     data_dir: human/orphanet/current
     notes: >-
       en_product1.xml (11,645 disorders: code and name, no gene ids), used whole: the Disease objects it makes are
@@ -503,8 +667,14 @@ sources:
   omim:
     type: omim
     jar: intermine
-    licence: OMIM licensed download (personal or institutional use only)
+    licence: "OMIM licensed download (personal or institutional use only)"
+    licence_status: not-checked
+    licence_url: null
+    licence_checked: "2026-11-18"
+    licence_conditions:
+      - "Not read on 2026-11-18: OMIM is never downloaded or published here (D-7); the text is the earlier record."
     redistributable: false
+    redistributable_reason: "OMIM terms: local copy only; never in a cache group or release asset (D-7)."
     local_copy: required
     data_dir: metabolic/omim/current
     notes: >-
@@ -531,8 +701,16 @@ sources:
   interpro-go:
     type: interpro-go
     jar: intermine
-    licence: CC0 (InterPro)
+    licence: "not verified"
+    licence_status: not-stated
+    licence_url: "https://ftp.ebi.ac.uk/pub/databases/interpro/current_release/interpro2go"
+    licence_checked: "2026-11-18"
+    licence_conditions:
+      - "Looked at: the file's header (date, description, citation, contact; no licence), release_notes.txt and the FTP listings of ftp.ebi.ac.uk/pub/databases/interpro/: no licence text."
+      - "InterPro's licence page (https://www.ebi.ac.uk/interpro/about/) is a JavaScript page: fetched, it holds no text. This is not a blocked host; the page needs a browser. The earlier record (CC0) is not confirmed."
+      - "EMBL-EBI terms of use apply meanwhile (https://www.ebi.ac.uk/about/terms-of-use/)."
     redistributable: true
+    redistributable_reason: "Unverified (3 MB mapping file, used whole). Flag kept; read the page in a browser before publishing."
     data_dir: interpro/ontology/current
     files:
       - id: interpro2go

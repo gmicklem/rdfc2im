@@ -154,7 +154,7 @@ def test_subset_filters_with_subset_raw_and_caches_by_gene_panel(tmp_path):
     # the stock files come from the filtered cache; only the resolver's entrez is always (re)made
     assert not any("subset_raw.py filter" in c and "--format gene_info" not in c for c in cached), cached
     restore = next(c for c in cached if "cache restore stock-go-annotation " in c)
-    assert "--meta genes_md5=" in restore and "--meta spec_md5=" in restore and "licence" not in restore
+    assert "--meta genes_md5=" in restore and "--meta spec_md5=" in restore and "--meta licence=" not in restore
 
 
 def test_use_cached_data_cuts_a_missing_filtered_group_from_the_cached_raw_one(tmp_path):

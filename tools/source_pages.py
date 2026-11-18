@@ -227,6 +227,65 @@ def _loaded_table(src, out):
         out.append("")
 
 
+STATUS_WORDS = {"verified": "verified: stated on the source's own page or file",
+                "partial": "partly verified: a related statement was read, the full one was not (see the conditions)",
+                "not-verified": "not verified: the source points to a page that could not be read",
+                "not-stated": "not stated: nothing findable (see what was looked at, in the conditions)",
+                "not-checked": "not checked"}
+
+
+def licence_rows(info, legacy=None, redistributable=None, rdf=False):
+    """The licence rows of a page's header table, from a manifest's `licence_info` (rdfc2im/stock.py
+    licence_info). `legacy` is the plain `licence` string of a manifest made before the structured keys:
+    it gives the one old row. Deterministic: the only date is the one recorded with the statement."""
+    label = "Licence (upstream)" if rdf else "Licence"
+    if not info or not info.get("name"):
+        if rdf and not legacy:
+            return [f"| {label} | not recorded in rdfc2im (see the data source's own terms) |",
+                    "| Redistributable | the cached extract is published with rdfc2im's raw-data cache |"]
+        out = [f"| {label} | {cell(legacy) or 'not recorded'} |"]
+        if redistributable is not None:
+            out.append(f"| Redistributable | {'yes' if redistributable else 'no'} |")
+        return out
+    url = info.get("url")
+    name = cell(info["name"])
+    out = [f"| {label} | {name} |",
+           f"| Licence status | {cell(STATUS_WORDS.get(info.get('status'), info.get('status') or 'not recorded'))} |"]
+    if url:
+        shown = f"<{url}>" if re.match(r"^https?://\S+$", url) else cell(url)
+        out.append(f"| Licence stated at | {shown} |")
+    if info.get("checked"):
+        out.append(f"| Licence read on | {cell(info['checked'])} (UTC) |")
+    if info.get("quote"):
+        out.append(f"| Licence wording | \"{cell(info['quote'])}\" |")
+    if info.get("conditions"):
+        out.append("| Conditions | " + " <br> ".join("- " + cell(c) for c in info["conditions"]) + " |")
+    if rdf:
+        if info.get("rdfportal"):
+            rp = cell(info["rdfportal"])
+            if info.get("rdfportal_url"):
+                rp += f" (on <{info['rdfportal_url']}>)"
+            out.append(f"| Licence (RDF Portal) | {rp}" + (f". {cell(info['rdfportal_note'])}" if info.get("rdfportal_note") else "") + " |")
+        elif info.get("rdfportal_note"):
+            out.append(f"| Licence (RDF Portal) | {cell(info['rdfportal_note'])} |")
+    red = info.get("redistributable")
+    if red is None:
+        red = redistributable
+    if red is not None:
+        out.append(f"| Redistributable | {'yes' if red else 'no'}" + (f": {cell(info['reason'])}" if info.get("reason") else "") + " |")
+    return out
+
+
+def licence_cell(s):
+    """The index's Licence column: the name, with the status when it is not a verified one."""
+    info = s.get("licence_info") or {}
+    name = info.get("name") or s.get("licence")
+    if not name:
+        return "not recorded"
+    st_ = info.get("status")
+    return cell(name) + (f" [{st_}]" if st_ and st_ != "verified" else "")
+
+
 def stock_page(src, man):
     mp = load_mapping(src["name"]) or {}
     msum = src.get("mapping") or {}
@@ -240,8 +299,8 @@ def stock_page(src, man):
             f"| Data source | {cell(ds) or 'not recorded'}" + (f" ([home page]({home}))" if home else "") + " |",
             f"| Loader | {_loader_line(mp)}; source type `{src.get('type')}` |",
             f"| Data sets in the mine | {cell(', '.join(msum.get('data_sets') or [])) or 'not recorded'} |",
-            f"| Licence | {cell(src.get('licence'))} |",
-            f"| Redistributable | {'yes' if src.get('redistributable') else 'no'} |"]
+            ]
+    out += licence_rows(src.get("licence_info"), src.get("licence"), bool(src.get("redistributable")))
     for f in files:
         if f.get("url"):
             out.append(f"| Download ({cell(f['id'])}) | <{f['url']}> |")
@@ -381,8 +440,8 @@ def rdf_page(src, man):
             f"| Data set in the mine | {cell(src.get('data_set')) or 'not recorded'} |",
             f"| SPARQL endpoint | <{src.get('endpoint')}> |" if src.get("endpoint") else "| SPARQL endpoint | not recorded |",
             f"| Graphs | {cell(', '.join(src.get('graphs') or [])) or 'none named (the whole endpoint)'} |",
-            "| Licence | not recorded in rdfc2im (see the data source's own terms) |",
-            "| Redistributable | the cached extract is published with rdfc2im's raw-data cache |"]
+            ]
+    out += licence_rows(src.get("licence_info"), src.get("licence"), None, rdf=True)
     if src.get("replaces"):
         out.append(f"| Replaces stock source | {cell(', '.join(src['replaces']))} |")
     if src.get("alongside"):
@@ -513,10 +572,9 @@ def index_page(man):
         ver, fetched = version_of(s)
         if s["kind"] == "rdf":
             dsrc = (s.get("data_source") or {}).get("name")
-            lic = "not recorded"
         else:
             dsrc = (s.get("mapping") or {}).get("data_source")
-            lic = s.get("licence")
+        lic = licence_cell(s)
         label = f"{s['name']} ({'RDF' if s['kind'] == 'rdf' else 'stock'})"
         out.append(f"| [{cell(label)}]({page_name(s)}) | {cell(dsrc)} | {cell(ver)} | {cell(fetched)} | "
                    f"{cell(scope_words(s, b))} | {lo} / {nl} / {un} | {cell(lic)} |")

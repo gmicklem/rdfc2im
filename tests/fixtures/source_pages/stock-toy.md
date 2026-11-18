@@ -7,8 +7,13 @@
 | Data source | Toy DB ([home page](https://example.org/)) |
 | Loader | [intermine `bio/sources/toy`](https://github.com/intermine/intermine/tree/abc1234/bio/sources/toy) at abc1234 (ToyConverter); source type `toy` |
 | Data sets in the mine | Toy data set |
-| Licence | CC BY 4.0 (Toy) |
-| Redistributable | yes |
+| Licence | CC-BY-4.0 |
+| Licence status | verified: stated on the source's own page or file |
+| Licence stated at | <https://example.org/toy/licence> |
+| Licence read on | 2026-11-18 (UTC) |
+| Licence wording | "The Toy data are licensed under CC BY 4.0." |
+| Conditions | - Cite Toy DB (2026). <br> - Say if the rows were cut. |
+| Redistributable | yes: CC BY 4.0 allows redistribution of changed copies. |
 | Download (rows) | <https://example.org/toy.tsv.gz> |
 
 ## This build

@@ -267,6 +267,9 @@ python3 tools/field_counts.py count --format tab|gff3|xml|obo|fasta --in FILE [.
   `tools/field_counts.py` and below); those of the RDF sources from `out/<source>/mapping_predicates.sssom.tsv`.
   Known gaps per source: `rdfc2im/data/source_gaps.yaml` (only what BUILD.md or the expert review log records).
 * `pages` output is deterministic: the same manifest and mapping files give byte-identical pages.
+* The licence rows of a page (name, status, link, date read, wording, conditions, redistributable) come from the licence
+  keys of `stock_sources.yaml`, `sources.yaml` and `other_licences.yaml` (stock reactome); docs/LICENCES.md is the table of
+  all of them and says how a record is refreshed [im-9n4.45].
 
 A stock mapping file says, for each input file of a loader (`files[].id` as in `stock_sources.yaml`): its `format`, how
 to count it (`comment`, `skip_lines`, `header_line` N / `first` / `match:TEXT`, `record_key` for XML), where the file

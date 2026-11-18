@@ -64,6 +64,12 @@ DATA_PROPERTIES = ("src.data.dir", "src.data.file")
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 FILE_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 GLOB_CHARS = set("*?[")
+# The licence record of a source [im-9n4.45]: what the source states, where, when it was read. `licence` stays the
+# short name (it goes into the cache group's META as licence=...); the rest is for the data-source pages and
+# docs/LICENCES.md. Files: data/stock_sources.yaml, data/sources.yaml (RDF), data/other_licences.yaml.
+OTHER_LICENCES = os.path.join(HERE, "data", "other_licences.yaml")
+LICENCE_STATUSES = ("verified", "partial", "not-verified", "not-stated", "not-checked")
+DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
 class StockError(Exception):
@@ -81,6 +87,50 @@ def load_table(path: Optional[str] = None) -> Dict[str, dict]:
     if problems:
         raise StockError("stock_sources.yaml: " + "; ".join(problems))
     return table
+
+
+def licence_problems(where: str, e: dict) -> List[str]:
+    """Problems with the structured licence keys of one entry. All keys are optional here (a table
+    written before im-9n4.45 has only `licence`); what is present must be well formed, and a status of
+    verified or partial needs the page, the date and the quotation that make it so."""
+    out: List[str] = []
+    status = e.get("licence_status")
+    if status is None:
+        return out
+    if status not in LICENCE_STATUSES:
+        out.append(f"{where}: `licence_status` must be one of {', '.join(LICENCE_STATUSES)}")
+    if e.get("licence_checked") is not None and not DATE_RE.match(str(e["licence_checked"])):
+        out.append(f"{where}: `licence_checked` must be a date YYYY-MM-DD (quoted)")
+    conds = e.get("licence_conditions")
+    if conds is not None and not (isinstance(conds, list) and all(isinstance(c, str) for c in conds)):
+        out.append(f"{where}: `licence_conditions` must be a list of strings")
+    if status in ("verified", "partial"):
+        for k in ("licence_url", "licence_checked", "licence_quote"):
+            if not e.get(k):
+                out.append(f"{where}: `{k}` is required when licence_status is {status}")
+    return out
+
+
+def licence_info(e: dict) -> dict:
+    """The licence record of a stock_sources.yaml / sources.yaml / other_licences.yaml entry as one dict
+    (what the manifest stores and the pages show). Missing keys are None; `conditions` is always a list."""
+    return {"name": e.get("licence"), "status": e.get("licence_status"), "url": e.get("licence_url"),
+            "checked": e.get("licence_checked"), "quote": e.get("licence_quote"),
+            "conditions": list(e.get("licence_conditions") or []),
+            "redistributable": e.get("redistributable"), "reason": e.get("redistributable_reason"),
+            "rdfportal": e.get("rdfportal_licence"), "rdfportal_url": e.get("rdfportal_licence_url"),
+            "rdfportal_note": e.get("rdfportal_licence_note")}
+
+
+def other_licences(path: Optional[str] = None) -> Dict[str, dict]:
+    """data/other_licences.yaml: what is neither a stock source nor an RDF source (stock reactome, the ID
+    resolver's gene_info files, the BlueGenes tool packages, imjs)."""
+    with open(path or OTHER_LICENCES, encoding="utf-8") as fh:
+        doc = yaml.safe_load(fh) or {}
+    problems = [p for n, e in doc.items() for p in licence_problems(n, e)]
+    if problems:
+        raise StockError("other_licences.yaml: " + "; ".join(problems))
+    return doc
 
 
 def validate_table(table: Dict[str, dict]) -> List[str]:
@@ -102,6 +152,7 @@ def validate_table(table: Dict[str, dict]) -> List[str]:
             out.append(f"{where}: `redistributable` must be true or false")
         if not e.get("licence"):
             out.append(f"{where}: `licence` is required (say 'unknown' if it is)")
+        out += licence_problems(where, e)
         local = e.get("local_copy", "optional")
         if local not in ("optional", "required"):
             out.append(f"{where}: `local_copy` must be optional or required")

@@ -200,8 +200,16 @@ TOY_TABLE = """sources:
   toy:
     type: toy
     jar: intermine
-    licence: CC BY 4.0 (Toy)
+    licence: CC-BY-4.0
+    licence_status: verified
+    licence_url: https://example.org/toy/licence
+    licence_checked: "2026-11-18"
+    licence_quote: "The Toy data are licensed under CC BY 4.0."
+    licence_conditions:
+      - "Cite Toy DB (2026)."
+      - "Say if the rows were cut."
     redistributable: true
+    redistributable_reason: "CC BY 4.0 allows redistribution of changed copies."
     data_dir: toy/current
     files:
       - id: rows
@@ -287,7 +295,8 @@ def test_manifest_of_a_stock_source_from_its_caches(tmp_path):
     man = _toy_manifest(tmp_path)
     (src,) = man["sources"]
     (f,) = src["files"]
-    assert src["id"] == "stock:toy" and src["licence"] == "CC BY 4.0 (Toy)"
+    assert src["id"] == "stock:toy" and src["licence"] == "CC-BY-4.0"
+    assert src["licence_info"]["status"] == "verified" and src["licence_info"]["conditions"][0] == "Cite Toy DB (2026)."
     assert f["fetched_at"] == "2026-11-18T03:00:00Z" and f["last_modified"] == "2026-01-02T10:00:00Z"
     assert f["release"] == "release 7 (Jan 2026)" and len(f["sha256"]) == 64
     assert (f["records_raw"], f["records_kept"]) == (3, 1)
@@ -352,6 +361,42 @@ def test_rdf_rows_use_the_extract_counts_and_the_sssom_status():
     assert [(r["pred"], r["loaded"], r["n"]) for r in rows] == [("rdfs:label", True, "5 (4 subjects)"),
                                                                ("oboinowl:inSubset", False, "not fetched")]
     assert rows[1]["why"] == "not yet done"
+
+
+def test_licence_rows_of_a_stock_page_an_rdf_page_and_an_old_manifest():
+    info = {"name": "CC-BY-4.0", "status": "partial", "url": "https://example.org/l", "checked": "2026-11-18",
+            "quote": "Free | with credit.", "conditions": ["Credit X.", "No logos."], "redistributable": True,
+            "reason": "allowed", "rdfportal": "CC BY 4.0", "rdfportal_url": "https://rdfportal.org/dataset/x/",
+            "rdfportal_note": "Same as upstream."}
+    rows = sp.licence_rows(info, "CC BY 4.0 (old)", True)
+    assert rows[0] == "| Licence | CC-BY-4.0 |"
+    assert any("partly verified" in r for r in rows) and "| Licence stated at | <https://example.org/l> |" in rows
+    assert "| Licence read on | 2026-11-18 (UTC) |" in rows
+    assert '| Licence wording | "Free \\| with credit." |' in rows
+    assert "| Conditions | - Credit X. <br> - No logos. |" in rows
+    assert rows[-1] == "| Redistributable | yes: allowed |"
+    rdf = sp.licence_rows(info, None, None, rdf=True)
+    assert rdf[0] == "| Licence (upstream) | CC-BY-4.0 |"
+    assert any(r.startswith("| Licence (RDF Portal) | CC BY 4.0 (on <https://rdfportal.org/dataset/x/>). Same as upstream.") for r in rdf)
+    # a manifest made before the structured keys: the old rows, and the old RDF wording
+    assert sp.licence_rows(None, "CC0 (old)", False) == ["| Licence | CC0 (old) |", "| Redistributable | no |"]
+    assert sp.licence_rows(None, None, None, rdf=True)[0].startswith("| Licence (upstream) | not recorded")
+    assert sp.licence_cell({"licence_info": info, "licence": "x"}) == "CC-BY-4.0 [partial]"
+    assert sp.licence_cell({"licence": "MIT"}) == "MIT"
+
+
+def test_rdf_page_shows_the_licence_and_what_rdf_portal_states():
+    man = {"build": {"name": "b", "rdfc2im_commit": "0123456789abcdef", "finished_at": "2026-11-18T10:00:00Z"}, "sources": []}
+    src = {"id": "rdf:toy", "kind": "rdf", "name": "toy", "data_source": {"name": "Toy", "url": "https://example.org"},
+           "data_set": "Toy (RDF Portal)", "tables": {}, "mapping_rows": [], "columns": [], "cache_group": {},
+           "licence": "CC0-1.0", "licence_info": {"name": "CC0-1.0", "status": "verified", "url": "https://example.org/l",
+                                                   "checked": "2026-11-18", "quote": "CC0.", "conditions": [],
+                                                   "redistributable": True, "reason": "no conditions",
+                                                   "rdfportal": "CC0", "rdfportal_url": "https://rdfportal.org/dataset/toy/"}}
+    page = sp.rdf_page(src, man)
+    assert "| Licence (upstream) | CC0-1.0 |" in page and "not recorded in rdfc2im" not in page
+    assert "| Licence (RDF Portal) | CC0 (on <https://rdfportal.org/dataset/toy/>) |" in page
+    assert "| Redistributable | yes: no conditions |" in page
 
 
 # ---------------------------------------------------------------- DataSet links
