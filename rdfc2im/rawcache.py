@@ -40,6 +40,24 @@ CHUNK = 1 << 20
 COPY_ATTEMPTS = 3
 
 
+# Release gate (plan 50 2.4, decision D-7: OMIM, DisGeNET and KEGG data must never enter a release
+# asset). A group may go into the CI release tarball only when its META says redistributable=true.
+# Stock-source groups (stock-<name>, stock-raw-<name>) always carry the flag, from the stock table.
+# The groups below predate the flag: they are the rdfc2im panel sources that full-build.sh can fetch
+# (its SCOPE_MODE list; DisGeNET is deliberately NOT here: it is licence-restricted) and the
+# non-source groups the build keeps in cached_raw_data/. They are allowed without a flag because
+# someone checked each one by name, not because a missing flag means "yes": every other group
+# without redistributable=true is refused (fail closed).
+RELEASE_ALLOWED_UNFLAGGED = frozenset({
+    # rdfc2im sources (tools/full-build.sh SCOPE_MODE)
+    "go", "hpo", "mp", "uberon", "mesh", "homologene", "expressionatlas", "ncbigene", "reactome",
+    "hgnc", "ensembl", "uniprot", "clinvar", "gwascatalog", "pubmed",
+    # other groups full-build.sh and the tool-staging scripts save
+    "gene-id-lookup", "humanmine-model", "reactome-uniprot-map", "grch38-chromosome-lengths",
+    "bluegenes-tools", "bluegenes-tools-patched",
+})
+
+
 class CacheError(Exception):
     """Anything that means the cache cannot be trusted or does not apply. Never swallowed."""
 
@@ -175,9 +193,35 @@ def _read_meta(gdir: str) -> dict:
         return json.load(fh)
 
 
-def save(group: str, src_dir: str, cache_dir: str = DEFAULT_CACHE_DIR, meta: dict | None = None) -> dict:
-    """Cache every file under src_dir as `group`, replacing any earlier entry atomically."""
+def release_status(group: str, meta: dict | None) -> tuple:
+    """(allowed, redistributable, licence, reason) for a group with this META, for a release asset."""
+    meta = meta or {}
+    flag, licence = meta.get("redistributable"), meta.get("licence", "-")
+    if flag == "true":
+        return True, "true", licence, "flagged redistributable"
+    if flag == "false":
+        return False, "false", licence, "redistributable=false (licence: %s)" % licence
+    if flag is not None:
+        return False, flag, licence, f"redistributable={flag!r} is neither true nor false"
+    if group in RELEASE_ALLOWED_UNFLAGGED:
+        return True, "-", licence, "no flag; on the explicit list of known redistributable groups"
+    return False, "-", licence, "no redistributable flag and not a known group (refused: fail closed)"
+
+
+def check_release(group: str, meta: dict | None) -> None:
+    ok, _, _, reason = release_status(group, meta)
+    if not ok:
+        raise CacheError(f"{group}: not for a release asset - {reason}; nothing was written")
+
+
+def save(group: str, src_dir: str, cache_dir: str = DEFAULT_CACHE_DIR, meta: dict | None = None,
+         for_release: bool = False) -> dict:
+    """Cache every file under src_dir as `group`, replacing any earlier entry atomically.
+
+    for_release: refuse (before anything is written) a group that may not go into a release asset."""
     _check_group(group)
+    if for_release:
+        check_release(group, meta)
     if not os.path.isdir(src_dir):
         raise CacheError(f"nothing to cache for {group}: {src_dir} is not a directory")
     rels = _walk(src_dir)
@@ -273,3 +317,16 @@ def groups(cache_dir: str = DEFAULT_CACHE_DIR) -> list[str]:
         return []
     return sorted(g for g in os.listdir(cache_dir)
                   if not g.startswith(".") and os.path.isdir(os.path.join(cache_dir, g)))
+
+
+def release_report(cache_dir: str = DEFAULT_CACHE_DIR) -> list:
+    """[(group, allowed, redistributable, licence, reason)] for every group in cache_dir."""
+    out = []
+    for g in groups(cache_dir):
+        try:
+            meta = _read_meta(os.path.join(cache_dir, g)).get("meta", {})
+        except (CacheError, ValueError) as e:
+            out.append((g, False, "-", "-", f"unreadable META ({e})"))
+            continue
+        out.append((g, *release_status(g, meta)))
+    return out

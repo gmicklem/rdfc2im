@@ -558,6 +558,26 @@ Load order in phase 13 is read back out of `project.xml` rather than re-decided,
 `alongside` sources (`uniprot`, `reactome`) must integrate *after* the stock source they
 supplement or they duplicate instead of merging.
 
+### Keeping restricted data out of a release asset [im-9n4.4]
+
+The CI release tarball is made from `cached_raw_data/`, so nothing licence-restricted may be in it (plan 50
+decision D-7: OMIM, DisGeNET, KEGG). Two commands enforce that, using the `redistributable` and `licence`
+values every stock cache group carries in its META (from `rdfc2im/data/stock_sources.yaml`):
+
+```
+python3 -m rdfc2im cache save GROUP DIR --cache-dir cached_raw_data --for-release --meta ...   # refuses, writes nothing
+python3 -m rdfc2im cache check-release --cache-dir cached_raw_data                              # run before tarring
+```
+
+`--for-release` stops with exit 1 when the META says `redistributable=false`, and also when a group has no
+`redistributable=true` at all (fail closed). The only groups allowed without a flag are those named in
+`rawcache.RELEASE_ALLOWED_UNFLAGGED`, an explicit list in code (the RDF panel sources, `gene-id-lookup`,
+`humanmine-model`, `reactome-uniprot-map`, `grch38-chromosome-lengths`, `bluegenes-tools`,
+`bluegenes-tools-patched`); a new group, and the rdfc2im `disgenet` source, are refused until someone adds a flag
+or a name. A `redistributable=false` source's filtered group is already kept out of `cached_raw_data/` by
+`subset_stock_data`; `check-release` is the check that this stayed true. `full-build.sh` does not call it:
+run it in the release job.
+
 ## The patched BlueGenes tool set [im-9n4.7]
 
 A BlueGenes started with `BLUEGENES_TOOL_PATH=<dir>` serves its tools from `<dir>/@intermine/<name>/` (the

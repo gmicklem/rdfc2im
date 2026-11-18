@@ -256,3 +256,79 @@ def test_verify_with_meta_refuses_data_fetched_for_something_else(tmp_path):
                         str(cache), "--meta", "url.a=https://e/other"], capture_output=True, text=True,
                        cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     assert r.returncode == 1 and "url.a" in r.stderr
+
+
+# ---- the release gate (plan 50 2.4, D-7): cache save --for-release and cache check-release
+
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+
+def _rel(*args):
+    r = subprocess.run([sys.executable, "-m", "rdfc2im", "cache", *args], capture_output=True, text=True, cwd=_ROOT)
+    return r.returncode, r.stdout, r.stderr
+
+
+def _src(tmp_path, name="src"):
+    d = tmp_path / name
+    d.mkdir()
+    (d / "f.txt").write_text("data\n")
+    return str(d)
+
+
+def test_for_release_refuses_a_non_redistributable_group_and_writes_nothing(tmp_path):
+    cache = tmp_path / "cache"
+    rc, out, err = _rel("save", "stock-omim", _src(tmp_path), "--cache-dir", str(cache), "--for-release",
+                        "--meta", "redistributable=false", "--meta", "licence=OMIM-licence")
+    assert rc == 1 and "stock-omim" in err and "redistributable=false" in err and "OMIM-licence" in err, err
+    assert not cache.exists() or os.listdir(cache) == []
+    # without --for-release the same save works (the group goes to a private cache)
+    rc, _, err = _rel("save", "stock-omim", _src(tmp_path, "s2"), "--cache-dir", str(cache),
+                      "--meta", "redistributable=false")
+    assert rc == 0, err
+
+
+def test_for_release_fails_closed_on_a_stock_group_with_no_flag(tmp_path):
+    cache = tmp_path / "cache"
+    for name in ("stock-uniprot", "stock-raw-panther", "somethingnew"):
+        rc, _, err = _rel("save", name, _src(tmp_path, name), "--cache-dir", str(cache), "--for-release",
+                          "--meta", "genes_md5=x")
+        assert rc == 1 and "fail closed" in err, (name, err)
+    assert not cache.exists() or os.listdir(cache) == []
+    rc, _, err = _rel("save", "stock-uniprot", _src(tmp_path, "ok"), "--cache-dir", str(cache), "--for-release",
+                      "--meta", "redistributable=true", "--meta", "licence=CC-BY-4.0")
+    assert rc == 0 and os.path.isdir(cache / "stock-uniprot"), err
+    rc, _, err = _rel("save", "stock-x", _src(tmp_path, "odd"), "--cache-dir", str(cache), "--for-release",
+                      "--meta", "redistributable=maybe")
+    assert rc == 1 and "neither true nor false" in err
+
+
+def test_known_unflagged_groups_pass_for_release_but_an_explicit_false_still_wins(tmp_path):
+    cache = tmp_path / "cache"
+    for name in ("gene-id-lookup", "humanmine-model", "bluegenes-tools", "bluegenes-tools-patched", "ncbigene"):
+        rc, _, err = _rel("save", name, _src(tmp_path, name), "--cache-dir", str(cache), "--for-release")
+        assert rc == 0, (name, err)
+    rc, _, err = _rel("save", "gene-id-lookup", _src(tmp_path, "again"), "--cache-dir", str(cache),
+                      "--for-release", "--meta", "redistributable=false")
+    assert rc == 1
+    # DisGeNET is an rdfc2im source but licence-restricted (D-7): never on the list
+    assert "disgenet" not in rawcache.RELEASE_ALLOWED_UNFLAGGED
+    rc, _, err = _rel("save", "disgenet", _src(tmp_path, "dg"), "--cache-dir", str(cache), "--for-release")
+    assert rc == 1
+
+
+def test_check_release_lists_every_group_and_fails_on_any_refusal(tmp_path):
+    cache = tmp_path / "cache"
+    for name, meta in (("ncbigene", []), ("stock-uniprot", ["redistributable=true", "licence=CC-BY-4.0"]),
+                       ("stock-omim", ["redistributable=false", "licence=OMIM"])):
+        args = [x for kv in meta for x in ("--meta", kv)]
+        assert _rel("save", name, _src(tmp_path, name), "--cache-dir", str(cache), *args)[0] == 0
+    rc, out, err = _rel("check-release", "--cache-dir", str(cache))
+    assert rc == 1 and "stock-omim" in err and "1 group(s)" in err, err
+    lines = {l.split()[1]: l for l in out.splitlines()}
+    assert lines["ncbigene"].startswith("ok") and "redistributable=-" in lines["ncbigene"]
+    assert "licence=CC-BY-4.0" in lines["stock-uniprot"] and lines["stock-omim"].startswith("REFUSED")
+    shutil.rmtree(cache / "stock-omim")
+    rc, out, err = _rel("check-release", "--cache-dir", str(cache))
+    assert rc == 0 and "all 2 groups" in out, (out, err)
+    rc, _, err = _rel("check-release", "--cache-dir", str(tmp_path / "empty"))
+    assert rc == 1 and "nothing cached" in err
