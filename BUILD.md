@@ -899,3 +899,12 @@ scratch and not worth keeping. The Solr index is derived data - rebuild it with
 - `USAGE.md` - the `rdfc2im` command reference, and build-scope flags in detail.
 - `STATUS.md` - per-source state, mapping decisions, and what is still open.
 - `RESTART.md` - how to pick this project up cold.
+
+## Aligner and imjs front (im-9n4.8)
+
+`trial/front/` is a separate compose project, `rdfc2im-ut-front` (aligner on 127.0.0.1:13000, nginx
+on :15001 with host networking). It is not part of `trial/docker-compose.yml`, so rebuilding the
+`rdfc2im-ut` stack does not affect it. To start it from `start_mine_stack`, after the BlueGenes
+jar moves to :15011 (stop any bare jar on :15001 first), run `trial/front/up.sh` (idempotent;
+needs network for the first imjs fetch, and builds the aligner image on first use). `trial/front/down.sh` removes it.
+See `trial/front/README.md`.
