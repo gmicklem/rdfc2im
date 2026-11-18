@@ -1,0 +1,94 @@
+{
+ "count": 2,
+ "next": null,
+ "previous": null,
+ "results": [
+  {
+   "disease_group": "Ophthalmology",
+   "disease_sub_group": "",
+   "hash_id": "554a0ac9bb5a167e4ccd1ec1",
+   "id": 3,
+   "name": "Stickler syndrome",
+   "relevant_disorders": [
+    "R45",
+    "GT654",
+    "TP572"
+   ],
+   "signed_off": "2026-08-12",
+   "stats": {
+    "number_of_genes": 11,
+    "number_of_regions": 0,
+    "number_of_strs": 0
+   },
+   "status": "public",
+   "types": [
+    {
+     "description": "Rare Disease 100K",
+     "name": "Rare Disease 100K",
+     "slug": "rare-disease-100k"
+    },
+    {
+     "description": "This is a panel for the Genomic Medicine Service for an exome/genome/panel based test that requires a virtual gene panel for rare disease in the Test Directory.",
+     "name": "GMS Rare Disease Virtual",
+     "slug": "gms-rare-disease-virtual"
+    },
+    {
+     "description": "This panel type is used for GMS panels that are not virtual (i.e. could be a wet lab test)",
+     "name": "GMS Rare Disease",
+     "slug": "gms-rare-disease"
+    },
+    {
+     "description": "This panel has undergone review by a NHSE GMS disease specialist group and processes to be signed-off for use within the GMS.",
+     "name": "GMS signed-off",
+     "slug": "gms-signed-off"
+    }
+   ],
+   "version": "4.11",
+   "version_created": "2026-06-25T20:00:48.079823Z"
+  },
+  {
+   "disease_group": "Endocrinology",
+   "disease_sub_group": "",
+   "hash_id": "569380ac22c1fc251660faf8",
+   "id": 9,
+   "name": "Differences in sex development",
+   "relevant_disorders": [
+    "Disorders of sex development",
+    "R146",
+    "GT771",
+    "TP322"
+   ],
+   "signed_off": "2026-08-12",
+   "stats": {
+    "number_of_genes": 70,
+    "number_of_regions": 2,
+    "number_of_strs": 0
+   },
+   "status": "public",
+   "types": [
+    {
+     "description": "Rare Disease 100K",
+     "name": "Rare Disease 100K",
+     "slug": "rare-disease-100k"
+    },
+    {
+     "description": "This is a panel for the Genomic Medicine Service for an exome/genome/panel based test that requires a virtual gene panel for rare disease in the Test Directory.",
+     "name": "GMS Rare Disease Virtual",
+     "slug": "gms-rare-disease-virtual"
+    },
+    {
+     "description": "This panel type is used for GMS panels that are not virtual (i.e. could be a wet lab test)",
+     "name": "GMS Rare Disease",
+     "slug": "gms-rare-disease"
+    },
+    {
+     "description": "This panel has undergone review by a NHSE GMS disease specialist group and processes to be signed-off for use within the GMS.",
+     "name": "GMS signed-off",
+     "slug": "gms-signed-off"
+    }
+   ],
+   "version": "4.22",
+   "version_created": "2026-06-24T14:09:13.383868Z"
+  }
+ ]
+}

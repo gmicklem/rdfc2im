@@ -1,0 +1,363 @@
+{
+ "disease_group": "Neurology and neurodevelopmental disorders",
+ "disease_sub_group": "Motor Disorders of the CNS",
+ "genes": [
+  {
+   "confidence_level": "3",
+   "entity_name": "ABCD1",
+   "entity_type": "gene",
+   "evidence": [
+    "Expert Review Green",
+    "Literature"
+   ],
+   "gene_data": {
+    "alias": [
+     "AMN",
+     "ALDP",
+     "adrenoleukodystrophy"
+    ],
+    "alias_name": null,
+    "biotype": "protein_coding",
+    "ensembl_genes": {
+     "GRch37": {
+      "82": {
+       "ensembl_id": "ENSG00000101986",
+       "location": "X:152990323-153010216"
+      }
+     },
+     "GRch38": {
+      "90": {
+       "ensembl_id": "ENSG00000101986",
+       "location": "X:153724868-153744762"
+      }
+     }
+    },
+    "gene_name": "ATP binding cassette subfamily D member 1",
+    "gene_symbol": "ABCD1",
+    "hgnc_date_symbol_changed": "1986-01-01",
+    "hgnc_id": "HGNC:61",
+    "hgnc_release": "2017-11-03",
+    "hgnc_symbol": "ABCD1",
+    "omim_gene": [
+     "300371"
+    ]
+   },
+   "mode_of_inheritance": "X-LINKED: hemizygous mutation in males, monoallelic mutations in females may cause disease (may be less severe, later onset than males)",
+   "mode_of_pathogenicity": null,
+   "penetrance": "unknown",
+   "phenotypes": [
+    "Adrenoleukodystrophy, OMIM:300100",
+    "Adrenoleukodystrophy, adult, OMIM:300100",
+    "Adrenal failure",
+    "VLCFA accumulation",
+    "Spastic paraparesis"
+   ],
+   "publications": [
+    "11810273",
+    "27084228",
+    "11739809",
+    "26049658",
+    "23664929"
+   ],
+   "tags": [],
+   "transcript": null
+  },
+  {
+   "confidence_level": "3",
+   "entity_name": "ABHD16A",
+   "entity_type": "gene",
+   "evidence": [
+    "Expert Review Green",
+    "Literature"
+   ],
+   "gene_data": {
+    "alias": [
+     "NG26",
+     "D6S82E"
+    ],
+    "alias_name": null,
+    "biotype": "protein_coding",
+    "ensembl_genes": {
+     "GRch37": {
+      "82": {
+       "ensembl_id": "ENSG00000204427",
+       "location": "6:31654726-31671221"
+      }
+     },
+     "GRch38": {
+      "90": {
+       "ensembl_id": "ENSG00000204427",
+       "location": "6:31686949-31703444"
+      }
+     }
+    },
+    "gene_name": "abhydrolase domain containing 16A",
+    "gene_symbol": "ABHD16A",
+    "hgnc_date_symbol_changed": "2010-12-09",
+    "hgnc_id": "HGNC:13921",
+    "hgnc_release": "2017-11-03",
+    "hgnc_symbol": "ABHD16A",
+    "omim_gene": [
+     "142620"
+    ]
+   },
+   "mode_of_inheritance": "BIALLELIC, autosomal or pseudoautosomal",
+   "mode_of_pathogenicity": null,
+   "penetrance": null,
+   "phenotypes": [
+    "Spastic paraplegia",
+    "Intellectual disability"
+   ],
+   "publications": [
+    "34587489"
+   ],
+   "tags": [],
+   "transcript": []
+  },
+  {
+   "confidence_level": "3",
+   "entity_name": "ADAR",
+   "entity_type": "gene",
+   "evidence": [
+    "Expert Review Green",
+    "Expert Review"
+   ],
+   "gene_data": {
+    "alias": [
+     "ADAR1"
+    ],
+    "alias_name": null,
+    "biotype": "protein_coding",
+    "ensembl_genes": {
+     "GRch37": {
+      "82": {
+       "ensembl_id": "ENSG00000160710",
+       "location": "1:154554538-154600475"
+      }
+     },
+     "GRch38": {
+      "90": {
+       "ensembl_id": "ENSG00000160710",
+       "location": "1:154582062-154627999"
+      }
+     }
+    },
+    "gene_name": "adenosine deaminase, RNA specific",
+    "gene_symbol": "ADAR",
+    "hgnc_date_symbol_changed": "1995-12-12",
+    "hgnc_id": "HGNC:225",
+    "hgnc_release": "2017-11-03T00:00:00",
+    "hgnc_symbol": "ADAR",
+    "omim_gene": [
+     "146920"
+    ]
+   },
+   "mode_of_inheritance": "BIALLELIC, autosomal or pseudoautosomal",
+   "mode_of_pathogenicity": "",
+   "penetrance": "Complete",
+   "phenotypes": [
+    "Aicardi-Goutieres syndrome 6, OMIM:615010"
+   ],
+   "publications": [
+    "25243380"
+   ],
+   "tags": [],
+   "transcript": null
+  },
+  {
+   "confidence_level": "2",
+   "entity_name": "CDK16",
+   "entity_type": "gene",
+   "evidence": [
+    "Expert Review Amber",
+    "Literature"
+   ],
+   "gene_data": {
+    "alias": [
+     "PCTAIRE",
+     "PCTAIRE1",
+     "PCTGAIRE",
+     "FLJ16665"
+    ],
+    "alias_name": [
+     "serine/threonine-protein kinase"
+    ],
+    "biotype": "protein_coding",
+    "ensembl_genes": {
+     "GRch37": {
+      "82": {
+       "ensembl_id": "ENSG00000102225",
+       "location": "X:47077259-47089396"
+      }
+     },
+     "GRch38": {
+      "90": {
+       "ensembl_id": "ENSG00000102225",
+       "location": "X:47217860-47229997"
+      }
+     }
+    },
+    "gene_name": "cyclin dependent kinase 16",
+    "gene_symbol": "CDK16",
+    "hgnc_date_symbol_changed": "2009-12-16",
+    "hgnc_id": "HGNC:8749",
+    "hgnc_release": "2017-11-03",
+    "hgnc_symbol": "CDK16",
+    "omim_gene": [
+     "311550"
+    ]
+   },
+   "mode_of_inheritance": "X-LINKED: hemizygous mutation in males, biallelic mutations in females",
+   "mode_of_pathogenicity": null,
+   "penetrance": null,
+   "phenotypes": [
+    "Intellectual disability and spastic paraplegia"
+   ],
+   "publications": [
+    "26350204",
+    "25644381"
+   ],
+   "tags": [],
+   "transcript": null
+  },
+  {
+   "confidence_level": "2",
+   "entity_name": "DARS",
+   "entity_type": "gene",
+   "evidence": [
+    "Expert Review Amber",
+    "Literature"
+   ],
+   "gene_data": {
+    "alias": [],
+    "alias_name": [
+     "aspartate tRNA ligase 1, cytoplasmic"
+    ],
+    "biotype": "protein_coding",
+    "ensembl_genes": {
+     "GRch37": {
+      "82": {
+       "ensembl_id": "ENSG00000115866",
+       "location": "2:136664247-136743670"
+      }
+     },
+     "GRch38": {
+      "90": {
+       "ensembl_id": "ENSG00000115866",
+       "location": "2:135906677-135986100"
+      }
+     }
+    },
+    "gene_name": "aspartyl-tRNA synthetase",
+    "gene_symbol": "DARS",
+    "hgnc_date_symbol_changed": "1998-04-22",
+    "hgnc_id": "HGNC:2678",
+    "hgnc_release": "2017-11-03",
+    "hgnc_symbol": "DARS",
+    "omim_gene": [
+     "603084"
+    ]
+   },
+   "mode_of_inheritance": "BIALLELIC, autosomal or pseudoautosomal",
+   "mode_of_pathogenicity": null,
+   "penetrance": "unknown",
+   "phenotypes": [
+    "Brain stem and spinal cord Hypomyelination",
+    "leg spasticity",
+    "Hypomyelination with brainstem and spinal cord involvement and leg spasticity, 615281"
+   ],
+   "publications": [
+    "23643384",
+    "25527264"
+   ],
+   "tags": [
+    "new-gene-name"
+   ],
+   "transcript": null
+  }
+ ],
+ "hash_id": "55ad019f22c1fc7042059038",
+ "id": 165,
+ "name": "Hereditary spastic paraplegia",
+ "regions": [],
+ "relevant_disorders": [],
+ "stats": {
+  "number_of_genes": 5,
+  "number_of_regions": 0,
+  "number_of_strs": 1
+ },
+ "status": "public",
+ "strs": [
+  {
+   "chromosome": "22",
+   "confidence_level": "3",
+   "entity_name": "ATXN10_ATTCT",
+   "entity_type": "str",
+   "evidence": [
+    "Expert Review Green",
+    "NHS GMS",
+    "Expert Review"
+   ],
+   "gene_data": {
+    "alias": [
+     "E46L",
+     "FLJ37990"
+    ],
+    "alias_name": null,
+    "biotype": "protein_coding",
+    "ensembl_genes": {
+     "GRch37": {
+      "82": {
+       "ensembl_id": "ENSG00000130638",
+       "location": "22:46067678-46241187"
+      }
+     },
+     "GRch38": {
+      "90": {
+       "ensembl_id": "ENSG00000130638",
+       "location": "22:45671798-45845307"
+      }
+     }
+    },
+    "gene_name": "ataxin 10",
+    "gene_symbol": "ATXN10",
+    "hgnc_date_symbol_changed": "2004-08-12",
+    "hgnc_id": "HGNC:10549",
+    "hgnc_release": "2017-11-03",
+    "hgnc_symbol": "ATXN10",
+    "omim_gene": [
+     "611150"
+    ]
+   },
+   "grch37_coordinates": [
+    46191235,
+    46191304
+   ],
+   "grch38_coordinates": [
+    45795355,
+    45795424
+   ],
+   "mode_of_inheritance": "MONOALLELIC, autosomal or pseudoautosomal, NOT imprinted",
+   "normal_repeats": 33,
+   "pathogenic_repeats": 800,
+   "penetrance": null,
+   "phenotypes": [
+    "Spinocerebellar ataxia 10, OMIM:603516"
+   ],
+   "publications": [],
+   "repeated_sequence": "ATTCT",
+   "tags": [
+    "STR"
+   ]
+  }
+ ],
+ "types": [
+  {
+   "description": "Rare Disease 100K",
+   "name": "Rare Disease 100K",
+   "slug": "rare-disease-100k"
+  }
+ ],
+ "version": "1.316",
+ "version_created": "2025-11-23T17:21:10.041104Z"
+}

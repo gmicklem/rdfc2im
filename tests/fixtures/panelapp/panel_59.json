@@ -1,0 +1,192 @@
+{
+ "disease_group": "Cancer susceptibility",
+ "disease_sub_group": "",
+ "genes": [
+  {
+   "confidence_level": "3",
+   "entity_name": "ACD",
+   "entity_type": "gene",
+   "evidence": [
+    "Expert Review Green",
+    "Curated sources"
+   ],
+   "gene_data": {
+    "alias": [
+     "Ptop",
+     "Pip1",
+     "Tpp1",
+     "Tint1"
+    ],
+    "alias_name": [
+     "TIN2 interacting protein 1",
+     "POT1 and TIN2 organizing protein"
+    ],
+    "biotype": "protein_coding",
+    "ensembl_genes": {
+     "GRch37": {
+      "82": {
+       "ensembl_id": "ENSG00000102977",
+       "location": "16:67691415-67694713"
+      }
+     },
+     "GRch38": {
+      "90": {
+       "ensembl_id": "ENSG00000102977",
+       "location": "16:67657512-67660815"
+      }
+     }
+    },
+    "gene_name": "ACD, shelterin complex subunit and telomerase recruitment factor",
+    "gene_symbol": "ACD",
+    "hgnc_date_symbol_changed": "2005-01-04",
+    "hgnc_id": "HGNC:25070",
+    "hgnc_release": "2017-11-03T00:00:00",
+    "hgnc_symbol": "ACD",
+    "omim_gene": [
+     "609377"
+    ]
+   },
+   "mode_of_inheritance": "BOTH monoallelic and biallelic (but BIALLELIC mutations cause a more SEVERE disease form), autosomal or pseudoautosomal",
+   "mode_of_pathogenicity": "",
+   "penetrance": "Complete",
+   "phenotypes": [
+    "Dyskeratosis congenita, autosomal dominant 6, OMIM:616553",
+    "Dyskeratosis congenita, autosomal recessive 7, OMIM:616553",
+    "MDS, AML",
+    "Oral and GI squamous cell carcinoma"
+   ],
+   "publications": [
+    "28297620"
+   ],
+   "tags": [],
+   "transcript": null
+  },
+  {
+   "confidence_level": "3",
+   "entity_name": "ANKRD26",
+   "entity_type": "gene",
+   "evidence": [
+    "Expert Review Green",
+    "Curated sources"
+   ],
+   "gene_data": {
+    "alias": [
+     "KIAA1074"
+    ],
+    "alias_name": null,
+    "biotype": "protein_coding",
+    "ensembl_genes": {
+     "GRch37": {
+      "82": {
+       "ensembl_id": "ENSG00000107890",
+       "location": "10:27280843-27389421"
+      }
+     },
+     "GRch38": {
+      "90": {
+       "ensembl_id": "ENSG00000107890",
+       "location": "10:26991914-27100498"
+      }
+     }
+    },
+    "gene_name": "ankyrin repeat domain 26",
+    "gene_symbol": "ANKRD26",
+    "hgnc_date_symbol_changed": "2004-02-04",
+    "hgnc_id": "HGNC:29186",
+    "hgnc_release": "2017-11-03T00:00:00",
+    "hgnc_symbol": "ANKRD26",
+    "omim_gene": [
+     "610855"
+    ]
+   },
+   "mode_of_inheritance": "MONOALLELIC, autosomal or pseudoautosomal, imprinted status unknown",
+   "mode_of_pathogenicity": "",
+   "penetrance": "Complete",
+   "phenotypes": [
+    "Class: familial predisp to leukaemia (typ AD)",
+    "Thrombocytopenia 2",
+    "Quantitative and qualitative platelet disorders with propensity to myeloid malignancy",
+    "MDS, AML, CMML"
+   ],
+   "publications": [
+    "28297620",
+    "27881370"
+   ],
+   "tags": [],
+   "transcript": null
+  },
+  {
+   "confidence_level": "0",
+   "entity_name": "HPLH1",
+   "entity_type": "gene",
+   "evidence": [
+    "Expert Review Removed",
+    "Other"
+   ],
+   "gene_data": {
+    "alias": [
+     "FHL1"
+    ],
+    "alias_name": null,
+    "biotype": null,
+    "ensembl_genes": {},
+    "gene_name": "hemophagocytic lymphohistiocytosis 1",
+    "gene_symbol": "HPLH1",
+    "hgnc_date_symbol_changed": "2003-12-11",
+    "hgnc_id": "HGNC:23824",
+    "hgnc_release": "2017-11-03",
+    "hgnc_symbol": "HPLH1",
+    "omim_gene": [
+     "267700"
+    ]
+   },
+   "mode_of_inheritance": "BIALLELIC, autosomal or pseudoautosomal",
+   "mode_of_pathogenicity": null,
+   "penetrance": null,
+   "phenotypes": [
+    "Hemophagocytic lymphohistiocytosis, familial, 1"
+   ],
+   "publications": [],
+   "tags": [
+    "locus-type-phenotype-only",
+    "ensembl_ids_known_missing",
+    "curated_removed"
+   ],
+   "transcript": null
+  }
+ ],
+ "hash_id": "594a71908f620375d17ea6b2",
+ "id": 59,
+ "name": "Haematological malignancies cancer susceptibility",
+ "regions": [],
+ "relevant_disorders": [
+  "Haemonc",
+  "Haematological malignancies pertinent cancer susceptibility"
+ ],
+ "stats": {
+  "number_of_genes": 3,
+  "number_of_regions": 0,
+  "number_of_strs": 0
+ },
+ "status": "public",
+ "strs": [],
+ "types": [
+  {
+   "description": "Cancer Germline 100K",
+   "name": "Cancer Germline 100K",
+   "slug": "cancer-germline-100k"
+  },
+  {
+   "description": "This is a panel used for WGS germline analysis for the GMS.",
+   "name": "GMS Cancer Germline Virtual",
+   "slug": "gms-cancer-germline-virtual"
+  },
+  {
+   "description": "This panel has undergone review by a NHSE GMS disease specialist group and processes to be signed-off for use within the GMS.",
+   "name": "GMS signed-off",
+   "slug": "gms-signed-off"
+  }
+ ],
+ "version": "5.1",
+ "version_created": "2026-05-06T16:02:21.284533Z"
+}
