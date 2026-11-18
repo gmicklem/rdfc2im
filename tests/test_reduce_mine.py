@@ -219,3 +219,29 @@ def test_sources_refuses_a_name_project_xml_does_not_have(tmp_path):
     else:
         raise AssertionError("a stock source missing from project.xml must stop the build")
     assert p.read_text() == SOURCES_XML, "nothing changed"
+
+
+# ------------------------------------------------------------------ priorities [im-9n4.11]
+
+def test_priorities_drop_absent_classes_and_fields_the_class_lacks(tmp_path, capsys):
+    """interpro-go declares ProteinDomain but not ProteinDomain.shortName (that is interpro's);
+    HumanMine's `ProteinDomain.shortName = interpro, uniprot, *` then made PriorityConfig throw "does not
+    have a field shortName" for every source. An inherited field (Gene.primaryIdentifier) stays."""
+    model = tmp_path / "genomic_model.xml"
+    model.write_text(MODEL.replace('<class name="Pathway"', '<class name="ProteinDomain" is-interface="true">\n'
+                                   '    <attribute name="primaryIdentifier" type="java.lang.String"/>\n  </class>\n'
+                                   '  <class name="Pathway"'))
+    prio = tmp_path / "genomic_priorities.properties"
+    prio.write_text("# comment\n"
+                    "ProteinDomain.shortName = interpro, uniprot, *\n"
+                    "ProteinDomain.primaryIdentifier = interpro, *\n"
+                    "Gene.primaryIdentifier = ncbi-gene, *\n"
+                    "Gene.symbol = ncbi-gene, *\n"
+                    "Disease.name = omim, *\n")
+    reduce_mine.cmd_priorities([str(prio), str(model)])
+    text = prio.read_text()
+    assert "# comment" in text and "ProteinDomain.primaryIdentifier" in text
+    assert "Gene.primaryIdentifier" in text and "Gene.symbol" in text
+    assert "ProteinDomain.shortName" not in text and "Disease.name" not in text
+    out = capsys.readouterr().out
+    assert "Disease" in out and "ProteinDomain.shortName" in out

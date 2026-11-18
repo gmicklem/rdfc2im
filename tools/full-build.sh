@@ -1749,8 +1749,25 @@ merged_model_xml() {
   echo "$1/dbmodel/build/resources/main/genomic_model.xml"   # not built yet (--dry-run): the traditional place
 }
 
+# The mine checkout is copied once (phase_prepare_mine_checkout) and the reductions of phase_build_dbmodel only
+# ever remove: webconfig-model.xml loses the widgets and fields of classes the model lacks, and
+# objectstoresummary.config.properties its autocomplete lines. A build with more stock sources than the one
+# before it (go-annotation adds GOAnnotation) therefore never got them back: go_enrichment_for_gene stayed
+# dropped from the 9n4.9 build, ProteinDomain's autocomplete too [im-9n4.11]. So the two files are put back
+# as the upstream checkout has them (the Solr port edit made again) before the reductions run on them.
+_restore_unreduced() {
+  local mine=$1 clone="$UPSTREAM_CACHE/humanmine" rel
+  [ "$IM_LINE" = "6.0" ] && clone="$UPSTREAM_CACHE/humanmine-6.0"
+  [ -d "$clone" ] || [ "$DRY_RUN" -eq 1 ] || die "no pristine mine checkout at $clone to restore the web config from"
+  for rel in webapp/src/main/webapp/WEB-INF/webconfig-model.xml dbmodel/resources/objectstoresummary.config.properties; do
+    run bash -c "cat '$clone/$rel' > '$mine/$rel'"
+  done
+  run sed -i "s|localhost:[0-9]*/solr/|localhost:$SOLR_PORT/solr/|" "$mine/dbmodel/resources/objectstoresummary.config.properties"
+}
+
 phase_build_dbmodel() {
   local mine="$TRIAL_HOME/humanmine"
+  _restore_unreduced "$mine"
   # Regenerate the model from scratch. dbmodel/build holds the generated genomic_model.xml (and the
   # resources the later reduce_mine.py trims read), and Gradle considers producing it up to date
   # when only the CONTENT of the already-installed bio-source-humanmine-items jar changed - same

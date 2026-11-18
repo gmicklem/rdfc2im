@@ -127,24 +127,31 @@ def cmd_sources(args):
 
 def cmd_priorities(args):
     path, model_xml = args
-    classes, _ = load_model_classes(model_xml)
+    classes, extends = load_model_classes(model_xml)
     with open(path, encoding="utf-8") as fh:
         lines = fh.readlines()
-    kept, dropped = [], []
+    kept, dropped, no_field = [], [], []
     for line in lines:
         s = line.strip()
         if not s or s.startswith("#") or "=" not in s:
             kept.append(line)
             continue
-        cls = s.split(".", 1)[0]
-        if cls in classes:
-            kept.append(line)
-        else:
+        key = s.split("=", 1)[0].strip()
+        cls, _, fld = key.partition(".")
+        if cls not in classes:
             dropped.append(s)
+        elif fld and not resolve_path(classes, extends, cls, fld):
+            # a class that is in the model without this field: PriorityConfig throws "<Class> does not have
+            # a field <f>". ProteinDomain.shortName once interpro-go (which declares ProteinDomain but not
+            # shortName) is loaded without interpro [im-9n4.11].
+            no_field.append(key)
+        else:
+            kept.append(line)
     with open(path, "w", encoding="utf-8") as fh:
         fh.writelines(kept)
     print(f"reduce_mine priorities: dropped {len(dropped)} line(s) for absent classes"
-          + (": " + ", ".join(sorted(set(d.split('.', 1)[0] for d in dropped))) if dropped else ""))
+          + (": " + ", ".join(sorted(set(d.split('.', 1)[0] for d in dropped))) if dropped else "")
+          + (f"; {len(no_field)} for fields the model lacks: " + ", ".join(sorted(no_field)) if no_field else ""))
 
 
 def cmd_objectstoresummary(args):

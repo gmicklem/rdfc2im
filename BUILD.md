@@ -551,6 +551,49 @@ named like "1 unlocalized genomic scaffold". Dry-run tested only, never run here
 of `Chromosome.sequence` in Postgres plus the transferred feature sequences, and a filter pass over 3 GB
 (minutes). Its lengths equal the GFF's, so the two loaders agree.
 
+#### GO annotation: go-annotation and interpro-go [im-9n4.11]
+
+`--stock-sources "uniprot uniprot-fasta uniprot-keywords ncbi-gff go-annotation interpro-go"` on the ut stack, same
+panel. `go_enrichment_for_gene` and the `GOAnnotation` model are what it restores.
+
+* **Downloads** (once): `goa_human.gaf.gz` 15,041,996 B, `interpro2go` 3,057,468 B.
+* **Filter.** `subset_raw.py filter --format gaf` on the panel's UniProt ids (1,547 ids, TrEMBL included):
+  906,445 rows in, **9,121 out**, **114 accessions matched**. GOA human holds no row for any panel TrEMBL
+  accession, so "annotate TrEMBL too" has nothing to add: the 114 Swiss-Prot canonicals carry every annotation, and
+  HumanMine's go-annotation annotates `Protein.primaryAccession` too (`9606.typeAnnotated=protein`). interpro2go is
+  loaded whole (`filter: none`, 3 MB): 5,556 GO terms for 14,776 ProteinDomain stubs (`primaryIdentifier` only;
+  they merge with any later `interpro` data).
+* **Result.** GOAnnotation 40,516 (7,019 on Protein, 29,922 on ProteinDomain, 3,575 on Gene via GoPostprocess), GOEvidence
+  7,139, all 114 panel genes annotated; objects 458,469 (was 395,183). Integrate about 2 min, postprocess 105 s.
+  CYP2D6 33 and PAX6 57 distinct GO terms on the Gene: that is what the GAF holds (33 and 57 distinct `GO:` columns for
+  P10635 and P26367); HumanMine's 79 for PAX6 comes from an older GOA release.
+* **Merging.** GOTerm (keyed on `identifier`) 78,100, every one also in the RDF `go` source's data set: no duplicates
+  and no new terms from the GAF or interpro2go. Protein stays 13,723: the loader creates a stub Protein for each
+  UniProt `with` value, but every one matches an existing accession, so no Protein lacks an organism and none is
+  duplicated. 29,760 of the RDF terms are not GO terms at all (identifiers `Reactome:...`, `RHEA:...`, `EC:...`)
+  and have no name; that is the RDF side's, not this source's.
+* **Widget.** `go_enrichment_for_gene` was missing although `GOAnnotation` was now in the model: the mine checkout is copied
+  once and `reduce_mine.py webconfig` only removes, so the widget dropped in the earlier GOA-less builds never came back
+  (the same for the ProteinDomain autocomplete lines of `objectstoresummary.config.properties`). `build_dbmodel` now puts
+  both files back from the upstream checkout (the Solr port edit made again) before reducing them
+  (`_restore_unreduced`). An enrichment request on six panel genes (`/service/list/enrichment`,
+  `widget=go_enrichment_for_gene`, `filter=biological_process`) returns terpenoid metabolic process (p 2.9e-4) and
+  demethylation.
+* **Priorities.** interpro-go declares `ProteinDomain` but not `ProteinDomain.shortName` (interpro's), and HumanMine's
+  `ProteinDomain.shortName = interpro, uniprot, *` made `IntegrationWriter` fail for every source ("ProteinDomain does not
+  have a field shortName"). `reduce_mine.py priorities` now drops lines whose field the model lacks as well as those of absent
+  classes.
+* **The ID resolver.** go-annotation is the first loader to use it (`IdResolverService.getIdResolverForMOD`, taxa
+  7227 7955 10090 10116 4932 6239 9606), though it needs it only for gene-annotated organisms and human is
+  protein-annotated. The integrate log has `EntrezGeneIdResolverFactory - Creating id resolver for [10090, 9606, 7955,
+  4932, 10116] and gene from data file and writing to: .../stock_ut/resolver/entrez` (6239 is in the factory's
+  `taxon.ignored`), then `No records in gene_info file for species: [10090, 559292, 7955, 10116]` (the file holds human
+  only; yeast is looked up as strain 559292) and `Writing id resolver to file: idresolver.cache`. The cache lands in the
+  **mine's root directory** (`$TRIAL_HOME/humanmine/idresolver.cache`, the Gradle JVM's working directory); the integrate
+  task itself prints `deleting idresolver cache` at its start, so a stale one cannot survive a run, and
+  `prepare_mine_checkout`'s delete finds it too. The same run warns `Resolver file does not exist: .../resolver/wormid`
+  (WormBase resolver, not used for human).
+
 ### The ID-resolver gate [im-9n4.4]
 
 The stock loaders for psi, biogrid, panther, omim and the HumanMine expression sources have no gene filter; the
@@ -861,6 +904,11 @@ Both read HumanMine's own responses, kept as reference input (fetched 2026-11-18
 `curation/humanmine_templates.xml` is `/service/templates?format=xml` (its production templates live in its userprofile
 database; the humanmine repository's `default-template-queries.xml` holds three). The property and the templates are in
 the mine's userprofile database, so a rebuild removes them until `--report-layout` is passed again.
+
+`--tools-url URL` (or `REPORT_LAYOUT_TOOLS_URL`) names the BlueGenes whose `/api/tools/all` the layout is checked against
+[im-9n4.34]. The default is the stack's own BlueGenes (`http://localhost:$BG_PORT`), which has no patched tools, so every
+tool was dropped from the layout of the ut demo; give it the front, `--tools-url http://localhost:15001`. After a rebuild
+that is meant to show JBrowse 2, `trial/front/gen-jbrowse-config.sh` regenerates the JBrowse 2 config from the mine.
 
 ## Watching a build
 

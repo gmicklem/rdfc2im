@@ -330,3 +330,18 @@ def test_with_genome_sequence_adds_ncbi_fasta_and_transfer_sequences(tmp_path):
     plan = _plan(tmp_path, "--only", "postprocess", "--intermine-src", src, "--stock-sources", "ncbi-gff",
                  "--with-genome-sequence")
     assert "-Pprocess=transfer-sequences" in plan and "-Pprocess=create-chromosome-locations-and-lengths" in plan
+
+
+# ---- the reduced web config comes back from the pristine checkout [im-9n4.11]
+
+def test_build_dbmodel_restores_the_two_reduced_files_before_it_reduces_them_again(tmp_path):
+    plan = _plan(tmp_path, "--only", "build_dbmodel", *_stock(tmp_path))
+    if plan is None:
+        return
+    cmds = _cmds(plan, "build_dbmodel")
+    web = next(i for i, c in enumerate(cmds) if c.startswith("bash -c cat ") and "webconfig-model.xml" in c)
+    osc = next(i for i, c in enumerate(cmds) if c.startswith("bash -c cat ") and "objectstoresummary.config.properties" in c)
+    builddb = next(i for i, c in enumerate(cmds) if ":dbmodel:builddb" in c)
+    reduce_web = next(i for i, c in enumerate(cmds) if "reduce_mine.py webconfig" in c)
+    assert max(web, osc) < builddb < reduce_web, cmds
+    assert any(c.startswith("sed -i s|localhost:[0-9]*/solr/|localhost:") and "objectstoresummary" in c for c in cmds[osc:builddb]), cmds
