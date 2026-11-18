@@ -836,6 +836,25 @@ def test_mouse_partner_genes_have_their_mgi_symbols_and_every_gene_has_an_organi
     assert nameless == [], nameless[:5]
 
 
+RGD_DATA_SET = "Rat gene identifiers"   # RgdIdentifiersConverter's data set title
+
+
+def test_rat_partner_genes_have_their_rgd_symbols():
+    """rgd-identifiers (cut to the partner genes) names the rat genes panther made from an RGD id alone [im-9n4.35]."""
+    if (s := _panther_skip()) is not None:
+        return s
+    if not query_rows("DataSet.name", "DataSet.name", "=", RGD_DATA_SET):
+        return _skip("mine built without --stock-sources rgd-identifiers")
+    rows = query_rows("Gene.homologues.homologue.symbol Gene.homologues.homologue.primaryIdentifier",
+                      "Gene.primaryIdentifier", "=", "5080")
+    assert ("Pax6", "RGD:3258") in {tuple(r) for r in rows}, rows
+    cyp = [r for r in query_rows("Gene.homologues.homologue.symbol Gene.homologues.homologue.organism.taxonId",
+                                 "Gene.primaryIdentifier", "=", "1565") if r[1] == "10116"]
+    assert cyp and all(r[0] for r in cyp), cyp
+    rat = query_rows("Gene.primaryIdentifier Gene.symbol", "Gene.organism.taxonId", "=", "10116")
+    assert rat and sum(1 for r in rat if r[1]) >= 0.9 * len(rat), (len(rat), sum(1 for r in rat if r[1]))
+
+
 def test_no_gene_is_duplicated_across_the_homologue_organisms():
     """One Gene per primaryIdentifier (the panther and mgi-identifiers keys) and one per symbol within a taxon."""
     if (s := _panther_skip()) is not None:

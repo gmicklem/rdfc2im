@@ -4,7 +4,7 @@
 # What it builds: HumanMine's own sources (stock, loaded by HumanMine's loaders from filtered upstream files) plus
 # the rdfc2im sources (RDF Portal data projected to InterMine items), for every human gene, in an InterMine built
 # from the 6.0 checkout:
-#   stock  uniprot uniprot-fasta uniprot-keywords ncbi-gff go-annotation interpro-go panther mgi-identifiers
+#   stock  uniprot uniprot-fasta uniprot-keywords ncbi-gff go-annotation interpro-go panther mgi-identifiers rgd-identifiers
 #          psi-mi-ontology psi-intact biogrid protein-atlas protein-atlas-rna gtex atlas-express hpo-annotation orphanet
 #   rdf    go ncbigene reactome hgnc ensembl uniprot clinvar gwascatalog pubmed hpo   (--gene-identifiers all)
 # then the HumanMine templates and Gene report layout (--report-layout, --tools-url) on the demo front's BlueGenes.
@@ -34,7 +34,7 @@ OUT=$LOG_DIR/run; mkdir -p "$OUT"
 export RDFC2IM_PGDATA=$D/volumes_ut/postgres RDFC2IM_SOLRDATA=$D/volumes_ut/solr
 # staged webapp + BlueGenes jars, per stack (compose RDFC2IM_ARTIFACTS, im-ore.21): never trial/artifacts, which the default stack mounts
 export RDFC2IM_ARTIFACTS=$TRIAL_HOME/artifacts
-DRIVE_STOCK=${DRIVE_STOCK-"uniprot uniprot-fasta uniprot-keywords ncbi-gff go-annotation interpro-go panther mgi-identifiers psi-mi-ontology psi-intact biogrid protein-atlas protein-atlas-rna gtex atlas-express hpo-annotation orphanet"}
+DRIVE_STOCK=${DRIVE_STOCK-"uniprot uniprot-fasta uniprot-keywords ncbi-gff go-annotation interpro-go panther mgi-identifiers rgd-identifiers psi-mi-ontology psi-intact biogrid protein-atlas protein-atlas-rna gtex atlas-express hpo-annotation orphanet"}
 DRIVE_SOURCES=${DRIVE_SOURCES-"go ncbigene reactome hgnc ensembl uniprot clinvar gwascatalog pubmed hpo"}
 DRIVE_EXTRA=${DRIVE_EXTRA---gene-identifiers all}
 ARGS=(--intermine-src "$INTERMINE_SRC" --stack-name "$STACK_NAME" --stock-sources "$DRIVE_STOCK"
