@@ -19,7 +19,12 @@ from rdfc2im import bgtools  # noqa: E402
 from rdfc2im.bgtools import PatchError  # noqa: E402
 
 MSA_BUNDLE = ('x=1;a("https://sequencealignment.apps.intermine.org");if(!t instanceof Array||"at"in t){}'
-              't.mousewheel="_onmousewheel",t.DOMMouseScroll="_onmousewheel",y=2;')
+              't.mousewheel="_onmousewheel",t.DOMMouseScroll="_onmousewheel",y=2;'
+              'e.length?r(e[0]):i("No protein found for UniProtKB accession "+t);'
+              'Promise.all(a).then(e=>{e.forEach((t,n)=>{});')
+SEQ_QUERY_SRC = ("a.then(data => {\n\t\t\t\t\tif (data.length) resolve(data[0]);\n\t\t\t\t\telse\n\t\t\t\t\t\treject(\n"
+                 "\t\t\t\t\t\t'No protein found for UniProtKB accession ' + primaryAccession\n\t\t\t\t\t);\n")
+INDEX_SRC = "\t\t\t\t.then(results => {\n\t\t\t\t\t// concat all sequences together\n\t\t\t\t\tresults.forEach(f);\n"
 PV_BUNDLE = 'fetch("https://search.rcsb.org/rcsbsearch/v1/query")'
 
 
@@ -42,7 +47,8 @@ def pkgjson(name, version):
 
 def msa_files(**over):
     f = {"package.json": pkgjson("bluegenes-msa-viewer", "2.1.1"), "dist/bundle.js": MSA_BUNDLE,
-         "src/sequence-align-service.js": "module.exports = 'https://sequencealignment.apps.intermine.org';"}
+         "src/sequence-align-service.js": "module.exports = 'https://sequencealignment.apps.intermine.org';",
+         "src/queries/proteinToSequence.js": SEQ_QUERY_SRC, "src/index.js": INDEX_SRC}
     f.update(over)
     return f
 
@@ -62,10 +68,34 @@ def members(tgz):
 def test_msa_patches_apply():
     out, applied = bgtools.patch_tarball(make_tgz(msa_files()), "bluegenes-msa-viewer", "2.1.1")
     m = members(out)
-    assert m["dist/bundle.js"] == 'x=1;a("");if(!(t instanceof Array)){}y=2;'
+    assert m["dist/bundle.js"].startswith('x=1;a("");if(!(t instanceof Array)){}y=2;')
     assert m["src/sequence-align-service.js"] == "module.exports = '';"
-    assert json.loads(m["package.json"])["version"] == "2.1.1-patched.1"
-    assert {a["id"] for a in applied} == {"msa-same-origin", "msa-array-at-crash", "msa-legacy-wheel", "version-bump"}
+    assert json.loads(m["package.json"])["version"] == "2.1.1-patched.2"
+    assert {a["id"] for a in applied} == {"msa-same-origin", "msa-array-at-crash", "msa-legacy-wheel",
+                                          "msa-skip-no-sequence", "version-bump"}
+
+
+def test_msa_skips_proteins_without_a_sequence():
+    m = members(bgtools.patch_tarball(make_tgz(msa_files()), "bluegenes-msa-viewer", "2.1.1")[0])
+    b = m["dist/bundle.js"]
+    assert "No protein found" not in b and "r(null)" in b
+    assert "if(!(e=k).length)return u(t," in b and bgtools.NO_SEQUENCE_MESSAGE in b
+    assert "No protein found" not in m["src/queries/proteinToSequence.js"]
+    assert "resolve(null);" in m["src/queries/proteinToSequence.js"]
+    assert "results = kept;" in m["src/index.js"] and bgtools.NO_SEQUENCE_MESSAGE in m["src/index.js"]
+
+
+@pytest.mark.parametrize("member,old", [
+    ("dist/bundle.js", 'i("No protein found for UniProtKB accession "+t)'),
+    ("dist/bundle.js", "Promise.all(a).then(e=>{e.forEach("),
+    ("src/queries/proteinToSequence.js", "No protein found for UniProtKB accession"),
+    ("src/index.js", "// concat all sequences together")])
+def test_msa_skip_anchor_missing_or_duplicated_refuses(member, old):
+    f = msa_files()
+    with pytest.raises(PatchError, match="msa-skip-no-sequence.*expected 1 occurrence.*found 0"):
+        bgtools.patch_tarball(make_tgz({**f, member: f[member].replace(old, "zz")}), "bluegenes-msa-viewer", "2.1.1")
+    with pytest.raises(PatchError, match="msa-skip-no-sequence.*found 2"):
+        bgtools.patch_tarball(make_tgz({**f, member: f[member] + (old if member == "dist/bundle.js" else f[member])}), "bluegenes-msa-viewer", "2.1.1")
 
 
 def test_rcsb_patch_applies_to_bundle_and_source():
@@ -148,7 +178,7 @@ def test_stage_and_install(tmp_path):
     assert r["removed"] == ["bluegenes-esyn-viewer"]
     assert (tools / "@intermine" / "bluegenes-jbrowse2-tool" / "dist" / "bundle.js").read_text() == "1"
     edn = (tools / "tools.edn").read_text()
-    assert '"@intermine/bluegenes-msa-viewer" "2.1.1-patched.1"' in edn and "esyn" not in edn
+    assert '"@intermine/bluegenes-msa-viewer" "2.1.1-patched.2"' in edn and "esyn" not in edn
     assert not (tools / ".staging").exists()
     # the JBrowse 2 tool is patched to the page's own origin and carries the -patched.1 version
     assert '"@intermine/bluegenes-jbrowse2-tool" "0.1.0-patched.1"' in edn
