@@ -70,13 +70,15 @@ def rdf_notes(name: str, rec: dict, out_root: Optional[str] = None, cache_meta: 
     return out
 
 
-def stock_notes(mp: dict, entry: Optional[dict] = None, panel_genes: Optional[int] = None) -> List[str]:
+def stock_notes(mp: dict, entry: Optional[dict] = None, panel_genes: Optional[int] = None,
+                file_ids=None) -> List[str]:
     """The notes of a stock source: its mapping file's (`mp`) note, then, when the build has a panel,
-    the cut its stock table entry's (`entry`) file filters make."""
+    the cut its stock table entry's (`entry`) file filters make; `file_ids` (the mapping's
+    `data_set_files` for one data set) limits that to the files feeding it, None = every file."""
     out = _own(mp or {}, None)
     if panel_genes and entry:
         kinds = {(f.get("filter") or {}).get("ids") for f in entry.get("files") or []
-                 if isinstance(f.get("filter"), dict)}
+                 if isinstance(f.get("filter"), dict) and (file_ids is None or f.get("id") in file_ids)}
         kind = next((k for k in _ORDER if k in kinds), None)
         if kind:
             out.append(STOCK_PANEL_CUTS[kind].format(n=panel_genes))
