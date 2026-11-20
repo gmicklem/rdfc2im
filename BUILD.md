@@ -1093,8 +1093,34 @@ items of the 20 Nov rebuild, HGNC's and NCBI's raw groups of 18 Nov, NCBI's `gen
 **The panel** (the 113 Ensembl genes of the 20 Nov rebuild, re-emitted with the new rule): 112 pairs unchanged, all 113
 joined by HGNC. The one change is the old wrong join: ENSG00000242366 moves from UGT1A1 (54658) to UGT1A8 (54576). UGT1A1
 keeps its Ensembl id from HGNC but gets no Ensembl-source data, because the panel's Ensembl ids are still chosen by
-symbol (`scope.resolve_ensembl_symbols`, first match per label), which picked ENSG00000242366 for "UGT1A1". Choosing the
-panel's Ensembl ids by cross-reference too is a follow-up; it changes the cached ensembl group.
+symbol (`scope.resolve_ensembl_symbols`, first match per label), which picked ENSG00000242366 for "UGT1A1". Done in
+im-9n4.59, next section.
+
+#### The panel's Ensembl genes by cross-reference [im-9n4.59]
+
+A gene-panel build (`--genes`) now fetches the Ensembl genes the join above will put on the panel's NCBI genes, by the
+same rule, never by label: sources.yaml `ensembl: gene_scope_resolver: xref_join` makes `cli.source_gene_ids` resolve
+the panel's Entrez ids (`resolve_ncbigene_symbols`, as for ncbigene) and then run `scope.ensembl_xref_resolver`:
+`items.xref_ids_for` over hgnc's and ncbigene's written items (`out/{hgnc,ncbigene}/items`, so ensembl must come after
+them in `--sources`, as the join needs anyway) and Ensembl's own ncbigene cross-references of those genes (one live
+query, `scope.ensembl_ncbigene_xrefs`, every ncbigene xref of the Ensembl genes that name a panel gene, so a gene naming
+two is seen to). `xref_ids_for` and `join_on_xref` share `items.xref_pairing`: every gene fetched joins a panel gene and
+every gene that would join one is fetched (tested on random data). The answer goes into the lookup cache as
+`resolve_ensembl_xref-<taxon>-<md5>.txt` (a new name: the old label answers are never reused), the cached ensembl group
+of a panel build records `gene_select=xref` (full-build.sh `GENE_SELECT`, `cache_meta_for`), so a group fetched for the
+label-chosen ids is refused, and `subset_raw.py idsets` adds the new answer to the ensembl id set. gwascatalog still
+restricts by `resolve_ensembl_symbols` (its Ensembl ids from labels: a follow-up, it changes the cached gwascatalog group
+fetched from TogoVar).
+
+The panel, old (label) against new (cross-reference), 20 Nov 2026 (`scratch/im-9n4.59/bin/compare_panel_ids.py`): 113
+ids against 114; 112 the same. Out: ENSG00000242366 (UGT1A8, 54576, the label "UGT1A1"). In: ENSG00000241635 (UGT1A1,
+54658, via HGNC) and ENSG00000277656 (GSTT1, 2952, via HGNC). All 114 panel NCBI genes have an Ensembl gene by
+cross-reference (all via HGNC) and all 114 are asked for. GSTT1's ENSG00000277656 lies on an alternative haplotype (GSTT1
+is not on the GRCh38 primary assembly) and Ensembl's RDF gives it `obo:RO_0002162 <http://ensembl.org/Homo_sapiens>`, not
+`taxonomy:9606`, so the source's taxon filter returns no row for it: the extract holds 113 genes, as before, and the
+items step says "0 of 113 Ensembl genes not joined". The refetched group (4 tables, 230 / 289 / 339 / 2,657 rows) and the
+new gene-id-lookup group are in `scratch/im-9n4.59/cached_raw_data.9n459/` beside links to every other group of
+`cached_raw_data.remaining-2026-11-20` (not written).
 
 **Open decision (Gos): the 12,300 Ensembl genes with no NCBI counterpart.** Left out (now): a user of the mine sees one
 gene per NCBI gene, as in HumanMine; the Ensembl-only genes (mostly Y_RNA, snoRNA and other small RNA copies, novel
@@ -1648,6 +1674,45 @@ come from the stock mapping files (`data_sets`, read from each converter) and `s
 Since [im-9n4.52] the source is added to every build, with or without the option: it also carries `DataSet.version`
 from the build's caches (`DataSet.version = data-set-links, *`) and some DataSource urls, and took humanmine-static's
 place ("DataSet versions; humanmine-static retired", in the milestone 3 section).
+
+### Notes with the data set [im-9n4.59]
+
+Gos Micklem, 20 Nov 2026: the data-source listing should say that Ensembl genes are loaded only where an NCBI gene
+corresponds ("maybe a new column Notes", after HumanMine's "All data sources" listing: DataSet name, version, url,
+licence, description, its DataSource). No model change: the note goes where that listing already shows text,
+`DataSet.description`, after the status-page sentence (alone without `--data-set-links URL`), and onto the status page as
+its `Notes` row. Per source, in order (`rdfc2im/data_set_notes.py`):
+
+1. `data_set_note` (sources.yaml, or the stock mapping file): a plain fact. Set for **ensembl** ("Ensembl genes are
+   loaded only where HGNC, NCBI or Ensembl gives a one-to-one cross-reference to an NCBI gene in this mine; the others
+   are left out.") and **pubmed** ("Only the PubMed records that other data in this mine cite are loaded, not the whole of
+   PubMed.": full-build.sh always fetches it by the cited PMIDs).
+2. `data_set_note_counts`: ensembl's "{not_joined} of {total} Ensembl genes in this build's scope were not loaded for that
+   reason.", filled from this build's `out/ensembl/items/ensembl_xref_join.tsv` (left out when the build wrote none; no
+   number is in the file). Panel: "0 of 113"; at full scope it would be the 12,300 of 53,636 above.
+3. The gene-panel cut, on a panel build only (`--genes PANEL` to data-set-links and source_manifest.py; full-build.sh
+   passes it unless `--scope full`): an RDF source whose cached extract says `scope=panel` (ensembl, uniprot, clinvar,
+   gwascatalog: "This build loads this data set only for the 114 genes of its gene panel."), and a stock source with a
+   file cut by panel ids (the table's `filter.ids`: entrez, ensembl, uniprot: "only the records ... that involve one of
+   the 114 genes of its gene panel or their proteins"; mgi, rgd: the genes on a PANTHER row with a panel gene; ipr: the
+   InterPro entries of the panel proteins). A file used whole, or one cut to chromosomes, gets none; a data set no file
+   of the build feeds (`data_set_files`) gets none.
+
+Considered and left out: human only (every source; HumanMine is a human mine and the Organism says so); ncbigene's
+`full_scope_filter` (the gene types the stock loader keeps too: no change from HumanMine, and it applies only to an
+unscoped fetch); symbols shared by several genes dropped (`key_ambiguity`: a value rule, not a scope one, and its counts
+are not written to a file the notes could read); hgnc yielding to ncbigene where they disagree (`defer_to`: precedence,
+not scope); the psi-intact/biogrid partner rule (an interaction with a panel participant keeps its non-panel partner:
+covered by "involve one of"); GSTT1's Ensembl gene missing for want of `taxonomy:9606` (one gene, a data quirk found
+in this task, not configuration).
+
+The template: neither this build's template sets (curation/humanmine_templates.xml, 73; curation/demo_public_templates.sql;
+the mine's default-template-queries.xml, 3) nor public HumanMine's 73 public templates (read 20 Nov 2026) has an "All data
+sources" template or any template rooted on DataSet or DataSource; decision 0010 calls it a page listing the 64 DataSet
+records with name, version, URL and licence. The note reaches any such listing through `DataSet.description`. A real
+column would be a new DataSet attribute (`notes`, a String) in the model additions every source shares, which changes the
+mine's model and needs a full rebuild of every mine using it; data-set-links would write it instead of appending to
+description, and the listing (a template or the page) would add the column. That is Gos's decision; nothing here needs it.
 
 ## Watching a build
 

@@ -34,7 +34,8 @@ from .model import load_model
 from .mapping import Knowledge
 from .pipeline import run_source, fetch_source, fetch_source_by_keys, tsv_source
 from .fetch import OfflineError
-from .scope import DEFAULT_TAXA, resolve_ncbigene_symbols, resolve_ensembl_symbols, resolve_gene_ids
+from .scope import (DEFAULT_TAXA, resolve_ncbigene_symbols, resolve_ensembl_symbols, resolve_gene_ids,
+                    ensembl_ncbigene_xrefs, ensembl_xref_resolver)
 from .project import gen_project, check_project
 from .items import emit_items
 from .linkml import gen_linkml
@@ -369,6 +370,42 @@ def _stock_names(a) -> list:
     return parse_names(getattr(a, "stock_source", None) or [])
 
 
+def source_gene_ids(s: str, scfg: dict, genes: list, taxon: str, lookup_dir: str, out: str) -> list:
+    """The identifiers a gene-panel (`--genes`) run restricts source `s` by, in the scheme of its
+    gene_scope_field; [] for a source without one.
+
+    Each source keys genes in its own scheme: ncbigene/hgnc/clinvar share NCBI's numeric Entrez id
+    (hgnc's own primaryIdentifier IS the entrez id, via its see_also_NCBIGene cross-reference - see
+    knowledge.yaml), ensembl/gwascatalog the Ensembl gene id (gwascatalog's snp_gene_ids column
+    carries Ensembl ids too - see sources.yaml), and uniprot's own field is literally the symbol, so
+    it needs no resolution at all. A source with a gene_scope_field but no entry here gets no ids, so
+    run_source's apply_gene_scope will not find its field mapped by identifiers that mean anything -
+    safer to widen this as more resolvers are added than to guess a resolver by source name.
+
+    `gene_scope_resolver: xref_join` (ensembl) [im-9n4.59]: the Ensembl genes the cross-reference join
+    puts on the panel's NCBI genes (scope.ensembl_xref_resolver over the written items of the join's
+    sources, out/<source>/items), never the first gene that carries the panel symbol as a label."""
+    gene_field = scfg.get("gene_scope_field", "")
+    if not gene_field:
+        return []
+    if gene_field == "symbol":
+        return list(genes)
+    if scfg.get("gene_scope_resolver") == "xref_join":
+        entrez = resolve_gene_ids(resolve_ncbigene_symbols, genes, taxon, lookup_dir)
+        xsources = (scfg.get("xref_join") or {}).get("sources") or []
+        resolver = ensembl_xref_resolver(entrez, out, xsources,
+                                         own=lambda e, t: ensembl_ncbigene_xrefs(e, t))
+        return resolve_gene_ids(resolver, genes, taxon, lookup_dir)
+    resolver = {
+        "ncbigene": resolve_ncbigene_symbols,
+        "hgnc": resolve_ncbigene_symbols,
+        "clinvar": resolve_ncbigene_symbols,
+        "ensembl": resolve_ensembl_symbols,
+        "gwascatalog": resolve_ensembl_symbols,
+    }.get(s)
+    return resolve_gene_ids(resolver, genes, taxon, lookup_dir) if resolver else []
+
+
 def run(a, ws) -> int:
     out = ws["out"]
     if a.cmd not in ("fetch", "tsv", "items"):
@@ -408,29 +445,8 @@ def run(a, ws) -> int:
         results = {}
         for s in sources:
             scfg = sources_cfg.get(s, {})
-            gene_ids, gene_field = [], scfg.get("gene_scope_field", "")
-            if genes and gene_field:
-                # Each source keys genes in its own scheme: ncbigene/hgnc/clinvar share NCBI's
-                # numeric Entrez id (hgnc's own primaryIdentifier IS the entrez id, via its
-                # see_also_NCBIGene cross-reference - see knowledge.yaml), ensembl/gwascatalog
-                # share the Ensembl gene id (gwascatalog's snp_gene_ids column carries Ensembl
-                # ids too - see sources.yaml), and uniprot's own field is literally the symbol,
-                # so it needs no resolution at all. A source with a gene_scope_field but no
-                # entry here still gets no gene_ids, so run_source's apply_gene_scope will not
-                # find its field mapped by identifiers that mean anything - safer to widen this
-                # dict as more resolvers are added than to guess a resolver by source name.
-                if gene_field == "symbol":
-                    gene_ids = list(genes)
-                else:
-                    resolver = {
-                        "ncbigene": resolve_ncbigene_symbols,
-                        "hgnc": resolve_ncbigene_symbols,
-                        "clinvar": resolve_ncbigene_symbols,
-                        "ensembl": resolve_ensembl_symbols,
-                        "gwascatalog": resolve_ensembl_symbols,
-                    }.get(s)
-                    if resolver:
-                        gene_ids = resolve_gene_ids(resolver, genes, taxa[0], lookup_dir)
+            gene_field = scfg.get("gene_scope_field", "")
+            gene_ids = source_gene_ids(s, scfg, genes, taxa[0], lookup_dir, out) if genes else []
             results[s] = run_source(m, os.path.join(ws["config_root"], s), os.path.join(out, s), kn,
                                     scfg, include_guess=ws["include_guess"], limit=ws["limit"],
                                     types=ws["types"], use_from=ws["use_from"], taxa=taxa,

@@ -304,6 +304,74 @@ def resolve_ensembl_symbols(symbols: List[str], taxon: str = "9606", timeout: in
     return ids
 
 
+NCBIGENE_IRI = "http://identifiers.org/ncbigene/"
+
+
+def ensembl_ncbigene_xrefs(entrez_ids: List[str], taxon: str = "9606", timeout: int = 60) -> List[Tuple[str, str]]:
+    """Ensembl's own cross-references to NCBI genes, for the Ensembl genes that name one of
+    `entrez_ids`: sorted (Ensembl gene id, Entrez id) pairs, with EVERY ncbigene cross-reference of
+    those genes (so that a gene naming two NCBI genes is seen to, as in the join).  One live query
+    on ensembl's own endpoint, the same rdfs:seeAlso the source's main_ensg_xref table fetches;
+    no FROM, for the reason resolve_ensembl_symbols gives.  Never by label [im-9n4.59]."""
+    if not entrez_ids:
+        return []
+    values = " ".join(f"<{NCBIGENE_IRI}{e}>" for e in sorted(set(entrez_ids)))
+    q = (
+        "PREFIX dcterms: <http://purl.org/dc/terms/>\n"
+        "PREFIX obo: <http://purl.obolibrary.org/obo/>\n"
+        "PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>\n"
+        "PREFIX taxonomy: <http://identifiers.org/taxonomy/>\n"
+        "PREFIX terms: <http://rdf.ebi.ac.uk/terms/ensembl/>\n\n"
+        "SELECT DISTINCT ?ensg_id ?xref\n"
+        "WHERE {\n"
+        "  ?EnsemblGene a terms:EnsemblGene .\n"
+        "  ?EnsemblGene dcterms:identifier ?ensg_id .\n"
+        f"  ?EnsemblGene obo:RO_0002162 taxonomy:{taxon} .\n"
+        "  ?EnsemblGene rdfs:seeAlso ?panel_xref .\n"
+        f"  VALUES ?panel_xref {{ {values} }}\n"
+        "  ?EnsemblGene rdfs:seeAlso ?xref .\n"
+        f'  FILTER(STRSTARTS(STR(?xref), "{NCBIGENE_IRI}"))\n'
+        "}\n"
+    )
+    body, fmt, err = _fetch_once(q, ENSEMBL_ENDPOINT, timeout)
+    if body is None:
+        raise RuntimeError(f"ensembl_ncbigene_xrefs: {err}")
+    out = set()
+    for line in _normalise(body, fmt).decode("utf-8").splitlines()[1:]:
+        cells = [c.strip().strip('"').strip("<>") for c in line.split("\t")]
+        if len(cells) >= 2 and cells[0] and cells[1].startswith(NCBIGENE_IRI) and cells[1][len(NCBIGENE_IRI):]:
+            out.add((cells[0], cells[1][len(NCBIGENE_IRI):]))
+    return sorted(out)
+
+
+def ensembl_xref_resolver(entrez_ids: List[str], items_root: str, sources: List[str], own=None):
+    """The gene-panel resolver of a source with sources.yaml `gene_scope_resolver: xref_join`
+    (ensembl) [im-9n4.59]: a callable named resolve_ensembl_xref (its lookup-cache file name, see
+    resolve_gene_ids) that returns the Ensembl gene ids the cross-reference join will put on the
+    panel's NCBI genes (`entrez_ids`): items.xref_ids_for over the written items of `sources`
+    (hgnc, then ncbigene: their Gene secondaryIdentifier) and Ensembl's own ncbigene
+    cross-references (`own`, default ensembl_ncbigene_xrefs), the Entrez ids of those items being
+    the genes in the build.  The symbols only key the cache."""
+    from .items import xref_ids_for, xref_pairs_from_items
+    own = own or ensembl_ncbigene_xrefs
+
+    def resolve_ensembl_xref(symbols: List[str], taxon: str = "9606") -> List[str]:
+        levels, known = [], set()
+        for s in sources:
+            path = os.path.join(items_root, s, "items", f"{s}.xml")
+            if not os.path.exists(path):
+                print(f"translate: no {s} items at {path}: no panel Ensembl gene is chosen through {s} "
+                      f"(write {s}'s items first)")
+            pairs, k = xref_pairs_from_items(path, "Gene", "primaryIdentifier", "secondaryIdentifier")
+            levels.append((s, pairs))
+            known |= k
+        levels.append(("ensembl", own(list(entrez_ids), taxon)))
+        ids = xref_ids_for(levels, known, set(entrez_ids))
+        print(f"translate: {len(ids)} Ensembl genes by cross-reference for {len(set(entrez_ids))} panel NCBI genes")
+        return ids
+    return resolve_ensembl_xref
+
+
 def resolve_gene_ids(resolver, symbols: List[str], taxon: str, cache_dir: str) -> List[str]:
     """Run a gene-symbol resolver through the lookup cache in `cache_dir`.
 

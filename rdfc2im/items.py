@@ -496,6 +496,45 @@ def drop_items(store: ItemStore, keys) -> int:
     return len(deps)
 
 
+def xref_pairing(levels: List[Tuple[str, List[Tuple[str, str]]]], known: Optional[set] = None):
+    """The rule of join_on_xref, on the pairs alone: (by_level, got_g, got_e).  by_level is
+    [(name, id -> keys, key -> ids, ids whose key is not in `known`)], got_g id -> (key, level) and
+    got_e key -> id for every id the levels pair, one-to-one at the level that decides.  Sorted, so
+    deterministic."""
+    by_level = []
+    for name, pairs in levels:
+        g2e: Dict[str, set] = {}
+        e2g: Dict[str, set] = {}
+        for g, e in pairs:
+            if known is not None and e not in known:
+                continue
+            g2e.setdefault(g, set()).add(e)
+            e2g.setdefault(e, set()).add(g)
+        by_level.append((name, g2e, e2g, {g for g, e in pairs if known is not None and e not in known}))
+    got_g: Dict[str, Tuple[str, str]] = {}   # id -> (key, level)
+    got_e: Dict[str, str] = {}               # key -> id
+    for name, g2e, e2g, _ in by_level:
+        for g in sorted(g2e):
+            es = g2e[g]
+            if g in got_g or len(es) != 1:
+                continue
+            e = next(iter(es))
+            if e in got_e or len(e2g[e]) != 1:
+                continue
+            got_g[g], got_e[e] = (e, name), g
+    return by_level, got_g, got_e
+
+
+def xref_ids_for(levels: List[Tuple[str, List[Tuple[str, str]]]], known: Optional[set], keys) -> List[str]:
+    """The ids (Ensembl gene ids) that join_on_xref's rule pairs with one of `keys` (the Entrez ids
+    of a gene panel), sorted: what a gene-panel build fetches from Ensembl [im-9n4.59].  The same
+    rule as the join, so every gene fetched joins a panel gene and every gene that would join one
+    is fetched; never by label."""
+    keys = set(keys)
+    _, got_g, _ = xref_pairing(levels, known)
+    return sorted(g for g, (e, _) in got_g.items() if e in keys)
+
+
 def join_on_xref(store: ItemStore, levels: List[Tuple[str, List[Tuple[str, str]]]], known: Optional[set] = None,
                  cls: str = "Gene", id_field: str = "secondaryIdentifier", key: str = "primaryIdentifier",
                  unmatched: str = "drop") -> List[dict]:
@@ -519,27 +558,7 @@ def join_on_xref(store: ItemStore, levels: List[Tuple[str, List[Tuple[str, str]]
     unmatched, kept), entrez, via, reason, disagree (what the lower levels said otherwise)."""
     items = sorted(((it.attrs[id_field], k) for k, it in store.items.items()
                     if it.cls == cls and it.attrs.get(id_field)), key=lambda t: t[0])
-    by_level = []
-    for name, pairs in levels:
-        g2e: Dict[str, set] = {}
-        e2g: Dict[str, set] = {}
-        for g, e in pairs:
-            if known is not None and e not in known:
-                continue
-            g2e.setdefault(g, set()).add(e)
-            e2g.setdefault(e, set()).add(g)
-        by_level.append((name, g2e, e2g, {g for g, e in pairs if known is not None and e not in known}))
-    got_g: Dict[str, Tuple[str, str]] = {}   # id -> (key, level)
-    got_e: Dict[str, str] = {}               # key -> id
-    for name, g2e, e2g, _ in by_level:
-        for g in sorted(g2e):
-            es = g2e[g]
-            if g in got_g or len(es) != 1:
-                continue
-            e = next(iter(es))
-            if e in got_e or len(e2g[e]) != 1:
-                continue
-            got_g[g], got_e[e] = (e, name), g
+    by_level, got_g, got_e = xref_pairing(levels, known)
     rows, drop = [], []
     for g, k in items:
         it = store.items[k]

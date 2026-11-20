@@ -156,7 +156,10 @@ def test_the_build_wires_the_cross_reference_resolver_for_ensembl(monkeypatch, t
     cfg = yaml.safe_load(open(os.path.join(ROOT, "rdfc2im", "data", "sources.yaml")))
     assert cfg["ensembl"]["gene_scope_resolver"] == "xref_join"
     calls = []
-    monkeypatch.setattr(cli, "resolve_ncbigene_symbols", lambda s, taxon="9606": ["54658"])
+
+    def resolve_ncbigene_symbols(symbols, taxon="9606"):
+        return ["54658"]
+    monkeypatch.setattr(cli, "resolve_ncbigene_symbols", resolve_ncbigene_symbols)
     monkeypatch.setattr(cli, "ensembl_ncbigene_xrefs", lambda e, t: calls.append(e) or [])
     out = str(tmp_path / "out")
     _items(os.path.join(out, "hgnc", "items", "hgnc.xml"), UGT_HGNC)
@@ -169,8 +172,13 @@ def test_the_build_wires_the_cross_reference_resolver_for_ensembl(monkeypatch, t
 def test_the_other_sources_keep_their_resolvers(monkeypatch, tmp_path):
     from rdfc2im import cli
     cfg = yaml.safe_load(open(os.path.join(ROOT, "rdfc2im", "data", "sources.yaml")))
-    monkeypatch.setattr(cli, "resolve_ncbigene_symbols", lambda s, taxon="9606": ["1"])
-    monkeypatch.setattr(cli, "resolve_ensembl_symbols", lambda s, taxon="9606": ["ENSG_SYM"])
+    def resolve_ncbigene_symbols(symbols, taxon="9606"):
+        return ["1"]
+
+    def resolve_ensembl_symbols(symbols, taxon="9606"):
+        return ["ENSG_SYM"]
+    monkeypatch.setattr(cli, "resolve_ncbigene_symbols", resolve_ncbigene_symbols)
+    monkeypatch.setattr(cli, "resolve_ensembl_symbols", resolve_ensembl_symbols)
     lk, out = str(tmp_path / "lookup"), str(tmp_path / "out")
     assert cli.source_gene_ids("ncbigene", cfg["ncbigene"], ["A"], "9606", lk, out) == ["1"]
     assert cli.source_gene_ids("gwascatalog", cfg["gwascatalog"], ["A"], "9606", lk, out) == ["ENSG_SYM"]

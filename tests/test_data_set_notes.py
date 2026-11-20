@@ -197,12 +197,12 @@ def test_every_note_formats_with_the_join_counts():
 
 def test_the_status_page_shows_the_notes_row(tmp_path):
     man = {"build": {"name": "t", "panel_genes": 114}, "sources": []}
-    src = {"kind": "rdf", "name": "toyrdf", "data_set": "Toy (RDF Portal)", "citation": {},
+    src = {"id": "rdf:toyrdf", "kind": "rdf", "name": "toyrdf", "data_set": "Toy (RDF Portal)", "citation": {},
            "notes": [NOTE, "2 of 4 Toy genes in this build's scope were not loaded for that reason."]}
     page = sp.rdf_page(src, man)
     assert f"| Notes | {NOTE} 2 of 4 Toy genes in this build's scope were not loaded for that reason. |" in page
     assert "| Notes |" not in sp.rdf_page(dict(src, notes=[]), man)
-    stock_src = {"kind": "stock", "name": "whole", "type": "whole", "files": [], "mapping": {}, "notes": ["Whole note."]}
+    stock_src = {"id": "stock:whole", "kind": "stock", "name": "whole", "type": "whole", "files": [], "mapping": {}, "notes": ["Whole note."]}
     assert "| Notes | Whole note. |" in sp.stock_page(stock_src, man)
 
 

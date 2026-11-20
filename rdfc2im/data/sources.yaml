@@ -35,6 +35,14 @@
 #              source's own scheme (see scope.py's resolve_ncbigene_symbols for the reference
 #              one); a source with no resolver wired up is skipped, same as an unsupported
 #              --taxon, rather than silently ignoring the restriction.
+#   gene_scope_resolver: xref_join = a gene-panel build picks this source's genes by the
+#              cross-reference join (`xref_join`) to the panel's NCBI genes, not by symbol (ensembl)
+#   data_set_note: plain sentence(s) a user should read with the data set: written into
+#              DataSet.description after the status-page sentence (tools/source_pages.py
+#              data-set-links) and shown as the Notes row of the status page.  Facts only; the stock
+#              mapping files take the same key.  (`note` is an internal remark, never shown.)
+#   data_set_note_counts: a further sentence with {not_joined} and {total} filled from this build's
+#              cross-reference join report (items/<source>_xref_join.tsv); left out when there is none
 
 ncbigene:
   replaces: [ncbi-gene]
@@ -356,6 +364,8 @@ pubmed:
   rdfportal_licence_note: "RDF Portal's page gives NLM's download page as the licence; read 2026-11-18 (https://www.nlm.nih.gov/databases/download.html): the same NLM Terms and Conditions as the FTP README, \"acknowledge NLM as the source of the data in a clear and conspicuous manner\"."
   scope: good
   pmid_scope_field: identifier
+  # tools/full-build.sh always fetches it by the PubMed ids the other sources' items cite (SCOPE_MODE pmid)
+  data_set_note: "Only the PubMed records that other data in this mine cite are loaded, not the whole of PubMed."
   note: HumanMine fills Publication via update-publications; this would pre-load details for cited papers
 homologene:
   replaces: []
@@ -399,6 +409,15 @@ ensembl:
   rdfportal_licence_note: "RDF Portal's page gives Ensembl's disclaimer page as the licence."
   consts: {Organism.taxonId: "9606"}
   gene_scope_field: secondaryIdentifier
+  # [im-9n4.59] A gene-panel build fetches the Ensembl genes that the cross-reference join below puts
+  # on the panel's NCBI genes (HGNC's Ensembl id, then NCBI's, then Ensembl's own ncbigene xref:
+  # cli.source_gene_ids, scope.ensembl_xref_resolver), not the first gene labelled with the panel
+  # symbol: that was ENSG00000242366 (UGT1A8) for UGT1A1, whose own gene is ENSG00000241635.
+  gene_scope_resolver: xref_join
+  # Shown with the data set (DataSet.description after the status-page sentence, and the Notes row
+  # of its status page); the numbers come from this build's join report [im-9n4.59].
+  data_set_note: "Ensembl genes are loaded only where HGNC, NCBI or Ensembl gives a one-to-one cross-reference to an NCBI gene in this mine; the others are left out."
+  data_set_note_counts: "{not_joined:,} of {total:,} Ensembl genes in this build's scope were not loaded for that reason."
   # [im-9n4.55] Its genes have an Ensembl id and a label but no Entrez id, and with the type's
   # Gene keys they merged into whatever gene had the same symbol or Ensembl id: at full scope 845
   # labels are shared by several Ensembl genes (haplotype copies, PAR genes, Y_RNA, ...), and by
