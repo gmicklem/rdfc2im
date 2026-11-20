@@ -388,6 +388,7 @@ def _apply_stock(sources_el, names: List[str], table_path: Optional[str], out_ro
     problems = st.apply_to_project(sources_el, table, names)
     _move_load_first(sources_el, [n for n in names if table[n].get("load_first")], log)
     added = _add_lengths_sources(sources_el, st.lengths_sources(table, names), type_name, source_version, log)
+    _move_mine_readers_last(sources_el, table, log)
     order = [s.get("name") for s in sources_el if isinstance(s.tag, str) and s.tag == "source"]
     problems += st.order_problems(order, table, names, st.replaced_by(source_dirs(out_root, only), sources_cfg))
     if problems:
@@ -420,6 +421,30 @@ def _add_lengths_sources(sources_el, lengths, type_name: str, source_version: Op
     if added:
         log(f"project: chromosome-lengths source(s) {', '.join(added)} added after their GFF source")
     return added
+
+
+def _move_mine_readers_last(sources_el, table: Dict[str, dict], log=print) -> None:
+    """Put the stock sources that read the built mine (`reads_mine`: update-data-sources, update-publications,
+    entrez-organism) after every other <source>, in stock.place_mine_readers_last's order [im-9n4.56].
+    HumanMine's project.xml lists update-publications before update-data-sources, which writes a Publication
+    per database paper: those papers stayed bare."""
+    from . import stock as st
+    kids = [s for s in sources_el if isinstance(s.tag, str) and s.tag == "source"]
+    names = [s.get("name") for s in kids]
+    want = st.place_mine_readers_last(names, table)
+    if want == names:
+        return
+    by_name = {s.get("name"): s for s in kids}
+    readers = [n for n in want if (table.get(n) or {}).get("reads_mine")]
+    last = kids[-1]
+    for n in readers:
+        el = by_name[n]
+        if el is last:
+            continue
+        sources_el.remove(el)
+        last.addnext(el)
+        last = el
+    log(f"project: sources that read the mine moved last: {', '.join(readers)}")
 
 
 def _move_load_first(sources_el, names: List[str], log=print) -> None:

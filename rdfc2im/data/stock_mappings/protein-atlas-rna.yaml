@@ -12,6 +12,8 @@ data_source: The Human Protein Atlas          # ProteinAtlasRNAConverter.java:39
 data_source_url: "https://www.proteinatlas.org/"
 data_sets: [Protein Atlas RNA Gene data]      # ProteinAtlasRNAConverter.java:38 (licence CC BY-SA 3.0, :40)
 home: https://www.proteinatlas.org/
+citation_pmid: "25613900"
+citation_evidence: "As protein-atlas: https://www.proteinatlas.org/about/licence (read 2026-11-20), the tissue map paper (tissue RNA data)."
 writes: [RNASeqResult, Gene, Organism, DataSet, DataSource, Ontology, SOTerm]
 # No Tissue items: getTissue (:114-121) is never called. Ontology and SOTerm (gene) come from
 # BioFileConverter/BioStoreHook.

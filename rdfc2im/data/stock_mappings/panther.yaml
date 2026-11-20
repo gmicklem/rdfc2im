@@ -13,6 +13,7 @@ data_source_url: "http://pantherdb.org/"
 data_source_description: "PANTHER (Protein ANalysis THrough Evolutionary Relationships) Classification System"
 data_sets: [Panther orthologue and paralogue predictions]
 home: http://pantherdb.org/
+citation_note: "No citation recorded: pantherdb.org refused the sandbox (HTTP 403 from Cloudflare, 20 Nov 2026) and the reachable data.pantherdb.org FTP has no README stating one."
 writes: [DataSource, DataSet, Organism, Gene, Homologue, OrthologueEvidenceCode, OrthologueEvidence,
          CrossReference, SOTerm, Ontology]
 # SOTerm and Ontology: BioFileConverter's store hook gives every Gene a sequenceOntologyTerm (SO 'gene')

@@ -16,6 +16,8 @@ data_source_url: "http://www.informatics.jax.org/"
 data_source_description: "The Mouse genome database (MGD) from Mouse Genome Informatics (MGI)"
 data_sets: [mgi-alleles]
 home: https://www.informatics.jax.org/
+citation_pmid: "38531069"
+citation_evidence: "As mgi-identifiers: https://www.informatics.jax.org/mgihome/other/citation.shtml (read 2026-11-20), the MGD paper."
 writes: [DataSource, DataSet, Ontology, Allele, Gene, Publication, MammalianPhenotypeTerm, Genotype]
 # Ontology: the "Mammalian Phenotype Ontology" item the terms point at (MgiAllelesConverter.java:104-108, 184-188), and
 # the Sequence Ontology item BioFileConverter makes for Allele's SOTerm. The Gene is a stub (primaryIdentifier MGI:n and

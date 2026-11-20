@@ -10,6 +10,8 @@ basis: read from code at intermine 5351d0c301 (RgdIdentifiersConverter.java; For
 data_source: Rat Genome Database
 data_sets: [Rat gene identifiers]
 home: https://rgd.mcw.edu/
+citation_pmid: "36930729"
+citation_evidence: "https://rgd.mcw.edu/wg/citing-rgd/ (read 2026-11-20): \"General Citation for RGD: 2022 updates to the Rat Genome Database: a Findable, Accessible, Interoperable, and Reusable (FAIR) resource. Vedi M ... Genetics 2023. iyad042 ... PMID: 36930729\" (the page's DOI, 10.3390/genes13122304, is another paper's; PubMed gives 10.1093/genetics/iyad042). Second general citation: The Year of the Rat, NAR 2019, PMID 31713623."
 writes: [DataSource, DataSet, Organism, Gene, CrossReference, SOTerm, Ontology]
 # DataSource also gets 'Ensembl' and 'NCBI' items (the sources of the CrossReferences).
 # SOTerm and Ontology: BioFileConverter's store hook gives every Gene a sequenceOntologyTerm (BioStoreHook.java:115-157).

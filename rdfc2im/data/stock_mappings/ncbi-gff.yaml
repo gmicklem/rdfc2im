@@ -25,6 +25,8 @@ data_source_url: "https://www.ncbi.nlm.nih.gov"
 data_source_description: "National Center for Biotechnology Information"
 data_sets: [ncbi-gff]
 home: https://www.ncbi.nlm.nih.gov
+citation_pmid: "39526381"
+citation_evidence: "https://www.ncbi.nlm.nih.gov/refseq/publications/ (read 2026-11-20; RefSeq release notes 5.1 send readers there): \"When using the RefSeq database, please cite one of the following:\" first and newest, Goldfarb T et al., NCBI RefSeq: reference sequence standards through 25 years of curation and annotation, Nucleic Acids Res 2025 (PMID 39526381). Also listed: 27342282 (prokaryotic annotation), 25428358 (viral genomes)."
 # The code has no default names: GFF3ConverterTask throws when gff3.dataSourceName or gff3.dataSetTitle
 # is unset (GFF3ConverterTask.java:185-192); the values are project.xml's.
 writes: [DataSource, DataSet, Organism, Chromosome, Gene, MRNA, Transcript, Exon, CDS, Location, Synonym,

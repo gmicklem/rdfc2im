@@ -136,7 +136,8 @@
 #                       records read and kept, field counts, objects loaded per class from the mine) and
 #                       tools/source_pages.py writes the data-source status pages (Markdown) into DIR. Off by
 #                       default; BUILD.md, "Data-source status pages" [im-9n4.42].
-#   --data-set-links URL  prepare_mine_checkout always adds a last source, data-set-links (type humanmine-items), that
+#   --data-set-links URL  prepare_mine_checkout always adds a source, data-set-links (type humanmine-items; the last
+#                       loader, before only the stock sources that read the mine, `reads_mine` [im-9n4.56]), that
 #                       sets DataSet.version on every data set the selected sources write, from this build's caches
 #                       (the release the file states, else its Last-Modified, and the fetch date) [im-9n4.52]; with
 #                       this option it also sets DataSet.url to the status page URL/<kind>-<source>.md and
@@ -2338,7 +2339,8 @@ phase_apply_public_lists() {
 }
 
 # The data-set-links source [im-9n4.42, im-9n4.52]: an items file of DataSet records for every data set the selected
-# sources write, loaded by one more humanmine-items source after all the others, first for DataSet.version (the
+# sources write, loaded by one more humanmine-items source after all the other loaders (before the sources that read
+# the mine, update-data-sources, update-publications, entrez-organism [im-9n4.56]), first for DataSet.version (the
 # release the file states, else its Last-Modified, and the date this build fetched it: the cache groups' META.json, all
 # written by the fetch phases before this one), DataSet.url and DataSet.description (--data-set-links URL: the
 # source's status page; no loader sets either in this build), and the DataSource url/description of the stock mapping

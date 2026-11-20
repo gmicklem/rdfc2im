@@ -10,6 +10,8 @@ basis: read from code at intermine 5351d0c301 (InterproGoConverter.java; Formatt
 data_source: InterPro
 data_sets: [InterPro domain GO annotations]
 home: https://www.ebi.ac.uk/interpro/
+citation_pmid: "39565202"
+citation_evidence: "As interpro (interpro2go is an InterPro file): https://interpro-documentation.readthedocs.io/en/latest/citing.html (read 2026-11-20). The same page lists the InterPro2GO paper, 'GO annotation in InterPro: why stability does not indicate accuracy...' (Sangrador-Vegas et al. 2016, PMID 26994912), among previous publications without a separate request to cite it."
 writes: [DataSource, DataSet, ProteinDomain, GOTerm, GOAnnotation]
 # The converter is built with storeOntology=false (InterproGoConverter.java:48), so no SO Ontology item.
 files:

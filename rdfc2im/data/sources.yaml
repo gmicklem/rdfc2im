@@ -41,6 +41,7 @@ ncbigene:
   data_source_name: NCBI
   data_source_url: https://rdfportal.org/dataset/ncbigene
   data_set_title: NCBI Gene (RDF Portal)
+  citation_note: "No citation recorded: the NCBI Gene FTP README states none and NCBI's help pages (www.ncbi.nlm.nih.gov/books/NBK3841, /gene/about) answered the sandbox with a reCAPTCHA page (20 Nov 2026), so NCBI Gene's own citation request could not be read."
   data_set_licence: "https://www.ncbi.nlm.nih.gov/home/about/policies/"
   licence: "No restrictions by NCBI (NCBI data-use policy; no licence named)"
   licence_status: verified
@@ -88,6 +89,8 @@ hgnc:
   data_source_name: HGNC
   data_source_url: https://rdfportal.org/dataset/hgnc
   data_set_title: HGNC identifiers (RDF Portal)
+  citation_pmid: "41287213"
+  citation_evidence: "https://www.genenames.org/help/faq/ (read 2026-11-20): \"How should I cite HGNC nomenclature resources? Authors are requested to cite: Seal RL ... Genenames.org: the HGNC and PGNC resources in 2026. Nucleic Acids Res. PMID: 41287213\". https://www.genenames.org/about/ also asks for the committee's name and the URL, or RRID:SCR_002827."
   data_set_licence: "https://creativecommons.org/publicdomain/zero/1.0/"
   licence: "CC0-1.0"
   licence_status: verified
@@ -134,6 +137,8 @@ uniprot:
   # core:reviewed in knowledge.yaml.  Stock names two datasets, "Swiss-Prot data set" and
   # "TrEMBL data set", by input file; one query cannot, so the title says what it holds.
   data_set_title: UniProtKB, Swiss-Prot and TrEMBL (RDF Portal)
+  citation_pmid: "39552041"
+  citation_evidence: "As the stock uniprot source: https://rest.uniprot.org/help/publications (read 2026-11-20), \"please consider citing our latest publication\" UniProt: the Universal Protein Knowledgebase in 2025 (DOI 10.1093/nar/gkae1010; PMID by E-utilities esearch on that DOI). RDF Portal asks that a dataset's original provider be cited."
   data_set_licence: "https://creativecommons.org/licenses/by/4.0/"
   licence: "CC-BY-4.0"
   licence_status: verified
@@ -182,6 +187,8 @@ go:
   # RDF-Portal-hosted sources here).
   data_source_url: https://geneontology.org/
   data_set_title: GO (RDF Portal)
+  citation_pmid: "41413728"
+  citation_evidence: "https://geneontology.org/docs/go-citation-policy/ (read 2026-11-20): \"whenever using the GO and/or annotations in a publication, please cite the two papers below (the original paper describing GO, and our most recent update paper)\": the update paper, The Gene Ontology knowledgebase in 2026 (PubMed link 41413728), recorded here; the original is Ashburner et al. 2000 (DOI 10.1038/75556, no PMID printed). RDF Portal (https://rdfportal.org/documents/manual/) asks that a dataset's original provider be cited."
   data_set_licence: "https://creativecommons.org/licenses/by/4.0/"
   licence: "CC-BY-4.0"
   licence_status: verified
@@ -201,6 +208,8 @@ hpo:
   replaces: [hpo]
   data_source_name: HPO
   data_set_title: Human Phenotype Ontology (RDF Portal)
+  citation_pmid: "37953324"
+  citation_evidence: "As the stock hpo-annotation source: https://hpo.jax.org/citation (read 2026-11-20), \"Please cite our most recent article if you use the HPO for published work\", The Human Phenotype Ontology in 2024 (PMID 37953324)."
   data_set_licence: "https://hpo.jax.org/license"
   licence: "HPO licence (acknowledge and cite; show file dates or versions; content and relationships not to be altered)"
   licence_status: verified
@@ -266,6 +275,8 @@ gwascatalog:
   # out/gwascatalog/queries/*.sparql - so the provenance link is TogoVar's own site.
   data_source_url: https://togovar.org/
   data_set_title: GWAS Catalog (TogoVar)
+  citation_pmid: "39530240"
+  citation_evidence: "https://www.ebi.ac.uk/gwas/docs/citation/ (read 2026-11-20): \"To cite the NHGRI-EBI GWAS Catalog, data or visualisations therein, please use our latest NAR update paper: Cerezo M ... doi.org/10.1093/nar/gkae1070\" (PMID by E-utilities esearch on that DOI). The data come through TogoVar, whose terms (github.com/togovar/togovar terms.pug) ask also for the TogoVar article (PMID 36509753) and say this \"does not replace any terms or citation requirements specified by each provider\"."
   licence: "EMBL-EBI terms of use (summary statistics CC0)"
   licence_status: partial
   licence_url: "https://www.ebi.ac.uk/gwas/docs/about"
@@ -301,6 +312,7 @@ clinvar:
   data_source_name: ClinVar
   data_source_url: https://rdfportal.org/dataset/clinvar
   data_set_title: ClinVar (RDF Portal)
+  citation_note: "No citation recorded: the ClinVar FTP README and its GitHub README state none, and ClinVar's documentation pages (www.ncbi.nlm.nih.gov/clinvar/docs, /clinvar/intro) answered the sandbox with a reCAPTCHA page (20 Nov 2026)."
   data_set_licence: "https://www.ncbi.nlm.nih.gov/home/about/policies/"
   licence: "No restrictions by NCBI (NCBI data-use policy); ClinVar's own data-use page unread"
   licence_status: partial
@@ -325,6 +337,7 @@ pubmed:
   data_source_name: PubMed
   data_source_url: https://rdfportal.org/dataset/pubmed
   data_set_title: PubMed (RDF Portal)
+  citation_note: "No citation recorded: pubmed.ncbi.nlm.nih.gov is blocked from the sandbox (HTTP 403 'Approval required', 20 Nov 2026) and NCBI's help pages answered with a reCAPTCHA page; RDF Portal's pubmed dataset page names no reference."
   data_set_licence: "https://www.nlm.nih.gov/databases/download.html"
   licence: "NLM terms and conditions (free; acknowledge NLM)"
   licence_status: verified
@@ -365,6 +378,8 @@ ensembl:
   data_source_name: Ensembl
   data_source_url: https://rdfportal.org/dataset/ensembl
   data_set_title: Ensembl genes (RDF Portal)
+  citation_pmid: "39656687"
+  citation_evidence: "https://jun2026.archive.ensembl.org/info/about/publications.html (the redirect of www.ensembl.org/info/about/publications.html, read 2026-11-20): \"If you've used Ensembl in your work, please cite the most recent overview article and the Ensembl release you retrieved your data from (currently 116)\": Dyer SC et al., Ensembl 2025, Nucleic Acids Res 2025 (PMID 39656687)."
   licence: "No restrictions by Ensembl (disclaimer); Ensembl code Apache-2.0; third-party constraints may apply"
   licence_status: verified
   licence_url: "https://jun2026.archive.ensembl.org/info/about/legal/disclaimer.html"

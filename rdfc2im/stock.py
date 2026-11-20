@@ -193,6 +193,8 @@ def validate_table(table: Dict[str, dict]) -> List[str]:
             out.append(f"{where}: `resolver_taxa` must be a list of taxon ids from {', '.join(GENE_INFO_PATHS)}")
         if not isinstance(e.get("load_first", False), bool):
             out.append(f"{where}: `load_first` must be true or false")
+        if not isinstance(e.get("reads_mine", False), bool):
+            out.append(f"{where}: `reads_mine` must be true or false")
         if not isinstance(e.get("properties", {}) or {}, dict):
             out.append(f"{where}: `properties` must be a mapping")
         files = e.get("files")
@@ -437,6 +439,33 @@ def order_problems(names_in_order: List[str], table: Dict[str, dict], selected: 
             for b in (replacements or {}).get(a, [a]):
                 if b in pos and pos[b] > pos[n]:
                     out.append(f"{n} must integrate after {b}, but project.xml lists it before")
+        if table[n].get("reads_mine"):
+            later = [m for m in names_in_order[pos[n] + 1:] if not (table.get(m) or {}).get("reads_mine")]
+            if later:
+                out.append(f"{n} reads the mine and must integrate after every source that loads it, "
+                           f"but project.xml lists {', '.join(later)} after it")
+    return out
+
+
+def place_mine_readers_last(names_in_order: List[str], table: Dict[str, dict]) -> List[str]:
+    """NAMES_IN_ORDER with the sources the table marks `reads_mine` moved to the end [im-9n4.56].
+
+    Such a source's first step reads the built mine (update-data-sources: the DataSource names;
+    update-publications: every Publication's pubMedId; entrez-organism: every Organism's taxonId) and writes
+    an items file from what it finds, so it integrates after every source that loads data, whatever HumanMine's
+    project.xml order. Among themselves each goes after those its `after` names (update-publications after
+    update-data-sources, which writes Publications; entrez-organism after update-publications), the rest in the
+    given order: the same result for any order of the input."""
+    readers = [n for n in names_in_order if (table.get(n) or {}).get("reads_mine")]
+    out = [n for n in names_in_order if n not in readers]
+    pending = sorted(readers)          # independent of the given order
+    while pending:
+        ready = next((n for n in pending
+                      if not any(a in pending for a in table[n].get("after") or [])), None)
+        if ready is None:
+            raise StockError(f"`after` constraints among {', '.join(pending)} form a cycle")
+        out.append(ready)
+        pending.remove(ready)
     return out
 
 

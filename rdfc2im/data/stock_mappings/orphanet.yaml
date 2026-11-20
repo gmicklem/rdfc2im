@@ -10,6 +10,7 @@ basis: read from code at humanmine-bio-sources d67fc5d (OrphanetConverter.java, 
 data_source: Orphanet                         # OrphanetConverter.java:39
 data_sets: [orphanet]                         # OrphanetConverter.java:38 (licence CC BY 4.0, :41)
 home: https://www.orpha.net/consor/cgi-bin/index.php
+citation_note: "No citation recorded: https://www.orphadata.com/faq/ (read 2026-11-20) asks for \"Orphadata Science: Free access data from Orphanet. (c) INSERM 1999. Available on http://sciences.orphadata.com. Data version (Date of data version).\", no paper."
 writes: [Disease, DataSet, DataSource, Ontology]
 # Ontology (Sequence Ontology) comes from BioFileConverter; Disease is not a SequenceFeature, so no SOTerm.
 # Disease.organism is not set. Any file other than en_product1.xml throws (:59-63).

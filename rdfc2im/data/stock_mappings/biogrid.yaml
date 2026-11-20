@@ -13,6 +13,8 @@ basis: >-
 data_source: BioGRID
 data_sets: [BioGRID interaction data set]
 home: http://www.thebiogrid.org/
+citation_pmid: "16381927"
+citation_evidence: "https://downloads.thebiogrid.org/BioGRID (read 2026-11-20): \"Publications are requested to please cite the original contributing authors (where applicable) and also: Stark C ... Biogrid: A General Repository for Interaction Datasets. Nucleic Acids Res. Jan 1, 2006; 34:D535-9\" (PubMed link 16381927). wiki.thebiogrid.org/doku.php/aboutus lists later BioGRID papers (newest Protein Sci 2020, 33070389) without asking for them; thebiogrid.org itself is blocked from the sandbox (approval required)."
 writes: [DataSource, DataSet, Organism, Gene, CrossReference, Publication, InteractionTerm, InteractionExperiment,
          Interaction, InteractionDetail]
 # Notes:

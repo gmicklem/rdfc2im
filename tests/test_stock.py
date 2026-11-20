@@ -74,11 +74,69 @@ def test_every_entry_matches_humanmines_own_project_xml():
 
 
 def test_the_table_orders_cleanly_in_humanmines_project_xml():
+    """HumanMine's own order, with the sources that read the mine put last as `rdfc2im project` puts them."""
     if not _have_hm():
         return
     t = stock.load_table()
-    names = stock.project_order(HM_PROJECT)
+    names = stock.place_mine_readers_last(stock.project_order(HM_PROJECT), t)
     assert stock.order_problems(names, t, list(t)) == []
+    # HumanMine's own file has update-publications before update-data-sources, which writes Publications
+    raw = stock.project_order(HM_PROJECT)
+    assert raw.index("update-publications") < raw.index("update-data-sources")
+    assert "update-publications must integrate after update-data-sources, but project.xml lists it before" in \
+        stock.order_problems(raw, t, list(t))
+
+
+# ------------------------------------------------------------------ the sources that read the mine [im-9n4.56]
+
+READERS = ["update-data-sources", "update-publications", "entrez-organism"]
+
+
+def test_the_sources_that_read_the_mine_are_marked_and_ordered_by_what_they_read():
+    """update-data-sources reads the DataSource names and writes a Publication per database paper;
+    update-publications reads every Publication's pubMedId; entrez-organism reads every Organism. Each
+    reads what all the loaders stored, so they integrate after every other source (data-set-links too),
+    update-publications after update-data-sources, entrez-organism after update-publications."""
+    t = stock.load_table()
+    assert sorted(n for n in t if t[n].get("reads_mine")) == sorted(READERS)
+    assert "update-data-sources" in t["update-publications"]["after"]
+    assert "update-publications" in t["entrez-organism"]["after"]
+    # HumanMine's order (update-publications before update-data-sources), and any other: always the same result
+    loaders = ["uniprot", "humanmine-pubmed", "pubmed-gene", "gtex"]
+    for given in (["uniprot", "humanmine-pubmed", "pubmed-gene", "update-publications", "gtex",
+                   "update-data-sources", "entrez-organism"],
+                  ["entrez-organism", "update-publications", "update-data-sources", "uniprot", "humanmine-pubmed",
+                   "pubmed-gene", "gtex"]):
+        assert stock.place_mine_readers_last(given, t) == loaders + READERS, given
+    bad = dict(t, gtex=dict(t["gtex"], reads_mine="yes"))
+    assert any("`reads_mine` must be true or false" in p for p in stock.validate_table(bad))
+
+
+def test_a_source_that_reads_the_mine_before_a_loader_is_an_order_problem():
+    t = stock.load_table()
+    probs = stock.order_problems(["uniprot", "update-data-sources", "gtex"], t, ["uniprot", "update-data-sources", "gtex"])
+    assert probs == ["update-data-sources reads the mine and must integrate after every source that loads it, "
+                     "but project.xml lists gtex after it"]
+    assert stock.order_problems(["uniprot", "gtex", "update-data-sources"], t, ["uniprot", "update-data-sources", "gtex"]) == []
+
+
+def test_rdfc2im_project_writes_the_readers_last_whatever_humanmines_order(tmp_path):
+    """The stock half of `rdfc2im project` on HumanMine's own project.xml, with the ut demo's stock list."""
+    if not _have_hm():
+        return
+    from rdfc2im.project import _apply_stock
+    names = ("uniprot uniprot-fasta uniprot-keywords ncbi-gff go-annotation interpro-go panther mgi-identifiers "
+             "rgd-identifiers psi-mi-ontology psi-intact biogrid protein-atlas protein-atlas-rna gtex atlas-express "
+             "hpo-annotation orphanet protein2ipr interpro mgi-alleles pubmed-gene update-data-sources "
+             "update-publications entrez-organism").split()
+    sources_el = copy.deepcopy(etree.parse(HM_PROJECT).getroot().find("sources"))
+    for s in list(sources_el):
+        if isinstance(s.tag, str) and s.get("name") not in names:
+            sources_el.remove(s)
+    _apply_stock(sources_el, names, None, str(tmp_path), [], {}, log=lambda *a: None)
+    order = [s.get("name") for s in sources_el if isinstance(s.tag, str)]
+    assert order[-3:] == READERS, order
+    assert set(order[:-3]) == (set(names) - set(READERS)) | {"ncbi-gff-lengths"}
 
 
 def test_a_verified_file_has_a_url_and_the_uniprot_files_use_the_ebi_mirror():

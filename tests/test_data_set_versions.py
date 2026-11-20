@@ -8,6 +8,7 @@ groups' META.json), and the DataSource url/description HumanMine's file gave tha
 files' data_source_url / data_source_description). All offline, on small cache trees made here."""
 import json
 import os
+import re
 import sys
 import xml.etree.ElementTree as ET
 
@@ -299,6 +300,97 @@ def test_the_cli_writes_the_file_from_the_caches(tmp_path):
     assert got[("DataSet", "Bare data set")]["version"] == "fetched 2026-11-19"
 
 
+# ---------------------------------------------------------------- the reference publication of each data set [im-9n4.56]
+
+def _cite(t, name, pmid, kind="stock"):
+    if kind == "stock":
+        p = os.path.join(t["mappings_dir"], name + ".yaml")
+        mp = yaml.safe_load(open(p, encoding="utf-8"))
+        mp.update(citation_pmid=pmid, citation_evidence=f"https://{name}.example.org/cite (read 2026-11-20)")
+        _w(p, yaml.safe_dump(mp, sort_keys=False))
+    else:
+        cfg = yaml.safe_load(open(t["sources_yaml"], encoding="utf-8"))
+        cfg[name].update(citation_pmid=pmid, citation_evidence="https://toy.example.org/cite (read 2026-11-20)")
+        _w(t["sources_yaml"], yaml.safe_dump(cfg, sort_keys=False))
+
+
+def _cited_items(tmp_path, stock_names=ALL_STOCK, rdf_names=("toyrdf",)):
+    t = _tree(tmp_path)
+    _cite(t, "relsrc", "11111111")
+    _cite(t, "toyrdf", "22222222", kind="rdf")
+    stock_names, rdf_names = list(stock_names), list(rdf_names)
+    pages = sp.data_set_pages(stock_names, rdf_names, t["mappings_dir"], t["sources_yaml"])
+    versions = sp.data_set_versions(stock_names, rdf_names, **t)
+    cites = sp.data_set_citations(stock_names, rdf_names, t["mappings_dir"], t["sources_yaml"])
+    return cites, sp.data_set_links_xml(pages, None, versions, sp.data_source_records(stock_names, t["mappings_dir"]),
+                                        citations=cites)
+
+
+def test_a_source_with_a_citation_links_its_data_sets_to_that_paper_and_one_without_to_none(tmp_path):
+    cites, xml = _cited_items(tmp_path)
+    assert cites == {"Rel data set": "11111111", "Toy (RDF Portal)": "22222222"}
+    root = ET.fromstring(xml)
+    by_id = {it.get("id"): it for it in root}
+    pubs = {it.get("id"): it.find("attribute[@name='pubMedId']").get("value")
+            for it in root if it.get("class") == "Publication"}
+    assert sorted(pubs.values()) == ["11111111", "22222222"]
+    linked = {}
+    for it in root:
+        if it.get("class") == "DataSet":
+            name = it.find("attribute[@name='name']").get("value")
+            ref = it.find("reference[@name='publication']")
+            linked[name] = pubs[ref.get("ref_id")] if ref is not None else None
+            if ref is not None:
+                assert by_id[ref.get("ref_id")].get("class") == "Publication"
+    assert linked["Rel data set"] == "11111111" and linked["Toy (RDF Portal)"] == "22222222"
+    assert linked["Date data set"] is None and linked["Bare data set"] is None
+
+
+def test_the_cited_items_file_is_byte_identical_when_made_again(tmp_path):
+    a = _cited_items(tmp_path / "a")[1]
+    assert a == _cited_items(tmp_path / "b")[1]
+    assert a == _cited_items(tmp_path / "c", stock_names=list(reversed(ALL_STOCK)))[1]
+
+
+def test_a_citation_needs_its_evidence_and_two_sources_of_one_data_set_must_agree(tmp_path):
+    t = _tree(tmp_path)
+    _cite(t, "datesrc", "33333333")
+    _cite(t, "bare", "44444444")            # both write "Shared data set"
+    try:
+        sp.data_set_citations(["datesrc", "bare"], [], t["mappings_dir"], t["sources_yaml"])
+    except ValueError as e:
+        assert "Shared data set" in str(e)
+    else:
+        raise AssertionError("two citations of one data set accepted")
+    p = os.path.join(t["mappings_dir"], "bare.yaml")
+    mp = yaml.safe_load(open(p, encoding="utf-8"))
+    mp["citation_pmid"], mp["citation_evidence"] = "33333333", ""
+    _w(p, yaml.safe_dump(mp))
+    try:
+        sp.data_set_citations(["bare"], [], t["mappings_dir"], t["sources_yaml"])
+    except ValueError as e:
+        assert "citation_evidence" in str(e)
+    else:
+        raise AssertionError("a citation without evidence accepted")
+
+
+def test_add_links_source_ranks_the_source_first_for_the_data_set_publication(tmp_path):
+    proj = _w(str(tmp_path / "project.xml"), '<project type="bio">\n  <sources>\n'
+              '    <source name="gtex" type="gtex"/>\n  </sources>\n</project>\n')
+    pri = _w(str(tmp_path / "p.properties"), "")
+    sp.add_links_source(proj, pri, "/d/links.xml")
+    assert "DataSet.publication = data-set-links, *" in open(pri, encoding="utf-8").read()
+
+
+def test_every_real_citation_is_a_pubmed_id_with_its_evidence():
+    """The curated records in the stock mapping files and sources.yaml (each read at the source's own citation page)."""
+    names = sorted(n[:-5] for n in os.listdir(sp.MAPPINGS_DIR))
+    with open(sp.SOURCES_YAML, encoding="utf-8") as fh:
+        rdf = sorted(yaml.safe_load(fh))
+    cites = sp.data_set_citations(names, rdf)        # raises on a disagreement or a citation without evidence
+    assert cites and all(re.fullmatch(r"[1-9]\d{4,8}", p) for p in cites.values()), cites
+
+
 def test_add_links_source_ranks_the_source_first_for_the_version(tmp_path):
     proj = _w(str(tmp_path / "project.xml"), '<project type="bio">\n  <sources>\n'
               '    <source name="humanmine-go" type="humanmine-items" version="4.3.0">\n'
@@ -308,6 +400,30 @@ def test_add_links_source_ranks_the_source_first_for_the_version(tmp_path):
         sp.add_links_source(proj, pri, "/d/links.xml")
     ptext = open(pri, encoding="utf-8").read()
     assert ptext.count("DataSet.version = data-set-links, *") == 1 and "DataSet.version = x" not in ptext
+
+
+def test_add_links_source_goes_before_the_sources_that_read_the_mine(tmp_path):
+    """[im-9n4.56] update-data-sources, update-publications and entrez-organism read what every loader stored;
+    data-set-links is a loader (DataSets, DataSources), so it goes in front of the first of them, not at the end."""
+    proj = _w(str(tmp_path / "project.xml"), '<project type="bio">\n  <sources>\n'
+              '    <source name="humanmine-go" type="humanmine-items" version="4.3.0">\n'
+              '      <property name="src.data.file" location="/d/go.xml"/>\n    </source>\n'
+              '    <source name="gtex" type="gtex"/>\n'
+              '    <source name="update-data-sources" type="update-data-sources"/>\n'
+              '    <source name="update-publications" type="update-publications"/>\n'
+              '    <source name="entrez-organism" type="entrez-organism"/>\n  </sources>\n</project>\n')
+    pri = _w(str(tmp_path / "p.properties"), "")
+    sp.add_links_source(proj, pri, "/d/links.xml")
+    text = open(proj, encoding="utf-8").read()
+    names = re.findall(r'<source name="([^"]+)"', text)
+    assert names == ["humanmine-go", "gtex", "data-set-links", "update-data-sources", "update-publications",
+                     "entrez-organism"], names
+    assert '<source name="data-set-links" type="humanmine-items" version="4.3.0">' in text
+    # without a mine reader it is the last source, as before
+    proj2 = _w(str(tmp_path / "project2.xml"), '<project type="bio">\n  <sources>\n'
+               '    <source name="gtex" type="gtex"/>\n  </sources>\n</project>\n')
+    sp.add_links_source(proj2, pri, "/d/links.xml")
+    assert re.findall(r'<source name="([^"]+)"', open(proj2, encoding="utf-8").read()) == ["gtex", "data-set-links"]
 
 
 # ---------------------------------------------------------------- the repository's own files

@@ -1032,14 +1032,13 @@ def test_publications_terms_and_genes_are_not_duplicated_by_the_interaction_load
                        ("InteractionTerm.identifier", "InteractionTerm.identifier"),
                        ("Gene.primaryIdentifier", "Gene.primaryIdentifier")):
         ids = [r[0] for r in query_rows(view, path, "IS NOT NULL", "")]
-        # One paper is in the mine twice because an Items XML source lists it twice in the one file it loads:
-        # update-data-sources writes 28138153 for two databases (the converter now keys Publication, which merges
-        # the papers the mine already had, but the loader does not merge two objects of the one load) [im-9n4.27].
-        # The bound was 5 while the keys file lacked the Publication key, 3 after the rebuild of 20 Nov [im-9n4.28]
-        # while humanmine-static's datasets.xml named 27899635 and 10802651 twice each; it is retired [im-9n4.52].
+        # None, Publication included [im-9n4.56]. A loader does not merge two items of one load that share a key,
+        # so a source that wrote one paper twice in its file stored it twice, and update-publications then stopped
+        # on an item matching both: update-data-sources wrote 28138153 for NDEx and for CIViC (it now writes one
+        # Publication per PubMed id), humanmine-static's datasets.xml 27899635 and 10802651 twice each (retired,
+        # im-9n4.52). The bound was 5 before the keys file had a Publication key [im-9n4.28], then 3, then 1.
         # The interaction loaders' duplicates were hundreds.
-        allowed = 1 if view == "Publication.pubMedId" else 0
-        assert len(ids) - len(set(ids)) <= allowed, f"duplicate {view}: {len(ids) - len(set(ids))}"
+        assert len(ids) == len(set(ids)), f"duplicate {view}: {len(ids) - len(set(ids))}"
     named = query_rows("InteractionTerm.identifier InteractionTerm.name", "InteractionTerm.identifier", "=", "MI:0018")
     assert named and named[0][1] == "two hybrid", named        # the term merged with psi-mi-ontology's
 
@@ -1072,10 +1071,11 @@ def test_every_loaded_publication_is_cited_by_a_loaded_object():
     reached from some object through a reference or collection other than the paper's own authors, MeSH terms and
     cross-references.
 
-    A Publication with no title is a bare pubMedId a loader wrote for a reference: those the stock psi-intact
-    and go-annotation loaders write for experiments and annotation rows the panel filter left without a loaded
-    object (84 on the same demo, 80 of them psi-intact bibrefs) are not the pubmed source's; they are held to
-    a bound here and are a question of their own."""
+    No Publication at all may be uncited, titled or bare [im-9n4.56]. The bare ones of the 20 Nov demo (84, then 66
+    after update-publications titled most of them) were the bibrefs of IntAct experiments whose interactions the panel
+    cut dropped (62: PsiConverter stored the paper when it read the bibref, the experiment only with a kept
+    interaction; it now stores the paper with the experiment) and humanmine-static's papers (4, retired). The rebuild
+    of 20 Nov 2026 had none."""
     if not mine_up():
         return _skip(f"live checks off or no mine at {MINE_BASE} (make test-live)")
     classes = _get_json(f"{MINE_BASE}/service/model?format=json")["model"]["classes"]
@@ -1091,19 +1091,9 @@ def test_every_loaded_publication_is_cited_by_a_loaded_object():
         else:
             xml = f'<query model="genomic" view="{path}.id"/>'
         cited |= {r[0] for r in query_rows_q(xml)}
-    uncited = set(pubs) - cited
-    # update-publications [im-9n4.27] gives a title to every PubMed id the mine holds, so on a mine it has run on
-    # "has a title" no longer means "the pubmed source loaded it": the bare ids that no object cites (84 on the
-    # demo, 66 of them titled afterwards) are titled too. Such a mine is told by Publication.firstAuthor, which the
-    # RDF pubmed source never sets, and its uncited Publications are held to the one bound below, titled or not.
-    if query_rows_q('<query model="genomic" view="Publication.id"><constraint path="Publication.firstAuthor" '
-                    'op="IS NOT NULL"/></query>'):
-        titled = set()
-    detailed = sorted(pubs[i] or f"id {i}" for i in uncited & titled)
-    bare = sorted(pubs[i] or f"id {i}" for i in uncited - titled)
-    assert not detailed, (f"{len(detailed)} of {len(titled)} Publications with a title are cited by no object, "
-                          f"e.g. {detailed[:10]}")
-    assert len(bare) <= 150, f"{len(bare)} bare (pubMedId only, or titled by update-publications) Publications are cited by no object, e.g. {bare[:10]}"
+    uncited = sorted(pubs[i] or f"id {i}" for i in set(pubs) - cited)
+    assert not uncited, (f"{len(uncited)} of {len(pubs)} Publications ({len(titled)} with a title) are cited by no "
+                         f"object, e.g. {uncited[:10]}")
 
 
 def test_the_cytoscape_tool_query_runs_for_the_example_gene():
@@ -1477,6 +1467,22 @@ def test_pax6_has_protein_domain_regions_named_by_interpro():
     assert {"Pfam", "PROSITE"} & {r[4] for r in rows}, rows[:5]
 
 
+def test_pfam_is_one_data_source_spelt_pfam():
+    """[im-9n4.54] Gos Micklem, 20 Nov 2026: "The correct capitalisation is Pfam". interpro wrote the member database
+    as interpro.xml spells it ("PFAM") and go-annotation followed it; protein2ipr, UniProt's dbxref.txt and the RDF
+    uniprot source write "Pfam". The mine had a DataSource of each (209 and 130 CrossReferences); now one, with
+    interpro's member cross-references, protein2ipr's ProteinDomainRegion.database and update-data-sources' url on it."""
+    if (s := _m3_skip("InterPro data set", "protein2ipr interpro")) is not None:
+        return s
+    names = [r[0] for r in query_rows("DataSource.name", "DataSource.name", "=", "pfam")]   # = is case-insensitive
+    assert names == ["Pfam"], names
+    xrefs = query_rows_q('<query model="genomic" view="CrossReference.identifier CrossReference.source.name">'
+                         '<constraint path="CrossReference.identifier" op="=" value="PF*"/></query>')
+    assert xrefs and {r[1] for r in xrefs} == {"Pfam"}, {r[1] for r in xrefs}
+    dbs = {r[0] for r in query_rows("ProteinDomainRegion.database", "ProteinDomainRegion.database", "=", "pfam")}
+    assert dbs == {"Pfam"}, dbs
+
+
 def test_every_domain_a_panel_protein_has_is_an_interpro_entry_with_a_name():
     """interpro.xml is cut to the entries of the loaded matches: none may be left a bare stub the protein2ipr
     loader made. (NCBIfam `NF...` matches load since the converter names them [im-9n4.28], but the cached protein2ipr cut
@@ -1612,6 +1618,35 @@ def test_every_data_set_has_a_version_from_this_build():
     # most end with the date this build fetched the file (a cut of an earlier download states its release alone)
     fetched = [r for r in rows if r[1] and "fetched 20" in r[1]]
     assert len(fetched) >= 0.8 * len(rows), sorted(f"{r[0]}: {r[1]}" for r in rows if r not in fetched)
+
+
+def test_every_data_set_whose_source_asks_to_be_cited_links_to_that_paper_with_a_title():
+    """[im-9n4.56] Gos Micklem, 20 Nov 2026: data sets link to their reference publication. The curated citation_pmid
+    of the stock mapping files and sources.yaml (each read at the source's own citation page) is written by
+    data-set-links as DataSet.publication, before update-publications gives the paper its title."""
+    if not mine_up():
+        return _skip(f"live checks off or no mine at {MINE_BASE} (make test-live)")
+    import sys
+    tools = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools")
+    if tools not in sys.path:
+        sys.path.insert(0, tools)
+    import source_pages as sp
+    import yaml
+    with open(sp.SOURCES_YAML, encoding="utf-8") as fh:
+        rdf = sorted(yaml.safe_load(fh))
+    want = sp.data_set_citations(sorted(n[:-5] for n in os.listdir(sp.MAPPINGS_DIR)), rdf)
+    rows = query_rows_q('<query model="genomic" view="DataSet.name DataSet.publication.pubMedId DataSet.publication.title">'
+                        '<join path="DataSet.publication" style="OUTER"/></query>')
+    have = {r[0]: (r[1], r[2]) for r in rows}
+    checked = {ds: pmid for ds, pmid in want.items() if ds in have}
+    assert checked, f"no DataSet of the mine has a curated citation (curated: {sorted(want)})"
+    wrong = sorted(f"{ds}: want PubMed {pmid}, has {have[ds][0]}" for ds, pmid in checked.items() if have[ds][0] != pmid)
+    assert not wrong, wrong
+    untitled = sorted(ds for ds in checked if not have[ds][1])
+    assert not untitled, f"cited papers without a title (update-publications did not reach them): {untitled}"
+    # a data set whose source states no citation links to none (humanmine-static's guesses are gone)
+    extra = sorted(f"{ds}: {v[0]}" for ds, v in have.items() if v[0] and ds not in want)
+    assert not extra, extra
 
 
 def test_publications_cited_by_genes_have_titles_after_update_publications():

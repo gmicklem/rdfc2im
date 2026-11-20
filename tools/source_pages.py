@@ -8,7 +8,7 @@
 
   source_pages.py data-set-links --out ITEMS.xml [--base-url URL] [--sources "..."] [--stock-sources "..."]
                                  [--stock-dir DIR] [--filtered-cache DIR] [--cache-dir DIR]
-      Items XML for an items source loaded last (see add-links-source), on every data set the selected sources
+      Items XML for an items source loaded after the others (see add-links-source), on every data set the selected sources
       write: DataSet.version from the build's caches (the release the file states, else its Last-Modified, and
       the date the build fetched it; an RDF source's SPARQL extract date) [im-9n4.52]; with --base-url also
       DataSet.url (the source's page) and DataSet.description; and the DataSource url/description the stock
@@ -16,8 +16,10 @@
 
   source_pages.py add-links-source --project project.xml --priorities genomic_priorities.properties
                                    --items PATH [--name data-set-links]
-      Appends that source to a mine's project.xml (type humanmine-items, the version of the other
-      humanmine-items entries) and gives it first priority for DataSet.url and DataSet.description.
+      Adds that source to a mine's project.xml (type humanmine-items, the version of the other
+      humanmine-items entries) after every loader and before the stock sources that read the mine
+      (stock_sources.yaml reads_mine) [im-9n4.56], and gives it first priority for DataSet.url and
+      DataSet.description.
 
 Page contents: a header (data source, loader, licence, download), "This build" (scope, files with URL,
 release, Last-Modified, fetch time, size, sha256, records read and kept, objects loaded), "Fields" (a
@@ -291,6 +293,27 @@ def licence_cell(s):
     return cell(name) + (f" [{st_}]" if st_ and st_ != "verified" else "")
 
 
+def citation_rows(rec):
+    """The page row for the paper a source asks to be cited (`citation_pmid`, `citation_evidence`) or why none is
+    recorded (`citation_note`): the record data-set-links writes as DataSet.publication [im-9n4.56]."""
+    rec = rec or {}
+    if rec.get("citation_pmid"):
+        p = str(rec["citation_pmid"]).strip()
+        return [f"| Reference publication | PubMed [{p}](https://pubmed.ncbi.nlm.nih.gov/{p}/), as the source asks: "
+                f"{cell(rec.get('citation_evidence'))} |"]
+    if rec.get("citation_note"):
+        return [f"| Reference publication | none: {cell(rec['citation_note'])} |"]
+    return []
+
+
+def _rdf_source_record(name):
+    try:
+        with open(SOURCES_YAML, encoding="utf-8") as fh:
+            return (yaml.safe_load(fh) or {}).get(name) or {}
+    except OSError:
+        return {}
+
+
 def stock_page(src, man):
     mp = load_mapping(src["name"]) or {}
     msum = src.get("mapping") or {}
@@ -305,6 +328,7 @@ def stock_page(src, man):
             f"| Loader | {_loader_line(mp)}; source type `{src.get('type')}` |",
             f"| Data sets in the mine | {cell(', '.join(msum.get('data_sets') or [])) or 'not recorded'} |",
             ]
+    out += citation_rows(mp)
     out += licence_rows(src.get("licence_info"), src.get("licence"), bool(src.get("redistributable")))
     for f in files:
         if f.get("url"):
@@ -446,6 +470,7 @@ def rdf_page(src, man):
             f"| SPARQL endpoint | <{src.get('endpoint')}> |" if src.get("endpoint") else "| SPARQL endpoint | not recorded |",
             f"| Graphs | {cell(', '.join(src.get('graphs') or [])) or 'none named (the whole endpoint)'} |",
             ]
+    out += citation_rows(src["citation"] if "citation" in src else _rdf_source_record(src["name"]))
     out += licence_rows(src.get("licence_info"), src.get("licence"), None, rdf=True)
     if src.get("replaces"):
         out.append(f"| Replaces stock source | {cell(', '.join(src['replaces']))} |")
@@ -742,18 +767,67 @@ def data_source_records(stock_names, mappings_dir=None):
     return out
 
 
-def data_set_links_xml(pages, base_url=None, versions=None, data_sources=None):
+def _citation(rec, where):
+    """(pmid, evidence) of one source's record (a stock mapping file or a sources.yaml entry), or None [im-9n4.56]."""
+    pmid = rec.get("citation_pmid")
+    if pmid in (None, ""):
+        return None
+    pmid = str(pmid).strip()
+    if not re.fullmatch(r"[1-9]\d{0,8}", pmid):
+        raise ValueError(f"{where}: citation_pmid {pmid!r} is not a PubMed id")
+    if not str(rec.get("citation_evidence") or "").strip():
+        raise ValueError(f"{where}: citation_pmid {pmid} without citation_evidence (the source's citation page, date read)")
+    return pmid, rec["citation_evidence"]
+
+
+def data_set_citations(stock_names, rdf_names, mappings_dir=None, sources_yaml=SOURCES_YAML):
+    """{DataSet name: PubMed id} of the paper each data set's source asks to be cited (`citation_pmid`, with
+    `citation_evidence`: the URL of the source's own citation page and the date it was read), from the stock mapping
+    files and sources.yaml [im-9n4.56]. A data set whose sources state none is absent. Two sources of one data set
+    that name different papers: ValueError."""
+    with open(sources_yaml, encoding="utf-8") as fh:
+        scfg = yaml.safe_load(fh) or {}
+    found = []
+    for n in rdf_names:
+        rec = scfg.get(n) or {}
+        c = _citation(rec, f"sources.yaml {n}")
+        if c and rec.get("data_set_title"):
+            found.append((rec["data_set_title"], c[0], f"rdf {n}"))
+    names = list(stock_names) + (["reactome"] if "reactome" in rdf_names else [])
+    for n in names:
+        mp = load_mapping(n, mappings_dir) or {}
+        c = _citation(mp, f"stock mapping {n}")
+        if c:
+            found += [(ds, c[0], f"stock {n}") for ds in mp.get("data_sets") or []]
+    out, by = {}, {}
+    for ds, pmid, who in found:
+        if ds in out and out[ds] != pmid:
+            raise ValueError(f"data set {ds!r}: {by[ds]} cites PubMed {out[ds]}, {who} cites {pmid}")
+        out[ds], by[ds] = pmid, by.get(ds, who)
+    return out
+
+
+def data_set_links_xml(pages, base_url=None, versions=None, data_sources=None, citations=None):
     """The items of the data-set-links source: per data set its status page (url, description) when base_url is given
     and its version where one is known; per DataSource of data_source_records its url and description. A data set with
     nothing to set gets no item. Deterministic: sorted by name, numbered in that order."""
     base = base_url.rstrip("/") + "/" if base_url else None
     versions = versions or {}
+    citations = citations or {}
     lines = ['<?xml version="1.0" encoding="UTF-8"?>',
              "<!-- generated by rdfc2im tools/source_pages.py data-set-links: DataSet.version (from the build's caches),",
-             "     DataSet.url and description (the data-source status pages), DataSource url/description (the stock",
-             "     mapping files); load as the last source (add-links-source) -->", "<items>"]
+             "     DataSet.url and description (the data-source status pages), DataSet.publication (the paper the source",
+             "     asks to be cited), DataSource url/description (the stock mapping files); loaded after the other",
+             "     loaders and before the sources that read the mine (add-links-source) -->", "<items>"]
+    # one Publication per cited PubMed id, numbered first in id order (update-publications, later, gives the details)
+    pub_ids = {}
+    for i, pmid in enumerate(sorted(set(citations.values()), key=int), 1):
+        pub_ids[pmid] = f"1_{i}"
+        lines.append(f'  <item id="1_{i}" class="Publication" implements="">')
+        lines.append(f'    <attribute name="pubMedId" value="{pmid}"/>')
+        lines.append("  </item>")
     i = 0
-    for ds in sorted(set(pages) | {d for d, v in versions.items() if v}):
+    for ds in sorted(set(pages) | {d for d, v in versions.items() if v} | set(citations)):
         files = pages.get(ds) or []
         attrs = [("name", ds)]
         if versions.get(ds):
@@ -763,11 +837,13 @@ def data_set_links_xml(pages, base_url=None, versions=None, data_sources=None):
             attrs += [("url", base + files[0]),
                       ("description", f"Status page of this data set's source ({names}): the file, release and fetch "
                                       "date this build loaded, and which fields of the source are loaded and which are not.")]
-        if len(attrs) == 1:
+        if len(attrs) == 1 and ds not in citations:
             continue
         i += 1
         lines.append(f'  <item id="0_{i}" class="DataSet" implements="">')
         lines += [f'    <attribute name="{k}" value={quoteattr(v)}/>' for k, v in attrs]
+        if ds in citations:
+            lines.append(f'    <reference name="publication" ref_id="{pub_ids[citations[ds]]}"/>')
         lines.append("  </item>")
     for name, rec in sorted((data_sources or {}).items()):
         i += 1
@@ -792,7 +868,12 @@ def add_links_source(project, priorities, items, name="data-set-links"):
         block = (f'    <source name="{name}" type="humanmine-items"{version}>\n'
                  f'      <property name="src.data.file" location="{items}"/>\n'
                  f'    </source>\n')
-        idx = text.rfind("</sources>")
+        # in front of the first source that reads the built mine (update-data-sources, update-publications,
+        # entrez-organism: the stock table's reads_mine), which must see what this one loads; else last [im-9n4.56]
+        from rdfc2im import stock
+        table = stock.load_table()
+        readers = [m for m in re.finditer(r'<source name="([^"]+)"', text) if (table.get(m.group(1)) or {}).get("reads_mine")]
+        idx = readers[0].start() if readers else text.rfind("</sources>")
         if idx < 0:
             raise SystemExit(f"{project}: no </sources>")
         line_start = text.rfind("\n", 0, idx) + 1
@@ -801,11 +882,12 @@ def add_links_source(project, priorities, items, name="data-set-links"):
             fh.write(text)
     with open(priorities, encoding="utf-8") as fh:
         ptext = fh.read()
-    keep = [ln for ln in ptext.splitlines() if not re.match(r"^DataSet\.(url|description|version)\s*=", ln)
+    keep = [ln for ln in ptext.splitlines() if not re.match(r"^DataSet\.(url|description|version|publication)\s*=", ln)
             and not ln.startswith("# DataSet.url/description")]
-    keep += [f"# DataSet.url/description/version: the data-source status pages and the build's own release and fetch "
-             f"dates (rdfc2im source_pages.py, {name})",
-             f"DataSet.url = {name}, *", f"DataSet.description = {name}, *", f"DataSet.version = {name}, *"]
+    keep += [f"# DataSet.url/description/version/publication: the data-source status pages, the build's own release and "
+             f"fetch dates, the paper each source asks to be cited (rdfc2im source_pages.py, {name})",
+             f"DataSet.url = {name}, *", f"DataSet.description = {name}, *", f"DataSet.version = {name}, *",
+             f"DataSet.publication = {name}, *"]
     with open(priorities, "w", encoding="utf-8") as fh:
         fh.write("\n".join(keep) + "\n")
 
@@ -850,11 +932,14 @@ def main(argv=None):
         versions = data_set_versions(stock_names, rdf_names, a.stock_dir, a.filtered_cache, a.cache_dir, table,
                                      a.mappings)
         dsrc = data_source_records(stock_names, a.mappings)
+        cites = data_set_citations(stock_names, rdf_names, a.mappings)
         os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
         with open(a.out, "w", encoding="utf-8") as fh:
-            fh.write(data_set_links_xml(pages, a.base_url, versions, dsrc))
+            fh.write(data_set_links_xml(pages, a.base_url, versions, dsrc, citations=cites))
         none = sorted(ds for ds in pages if not versions.get(ds))
-        print(f"{a.out}: {len(pages)} data sets, {len(pages) - len(none)} with a version, {len(dsrc)} data sources"
+        print(f"{a.out}: {len(pages)} data sets, {len(pages) - len(none)} with a version, "
+              f"{sum(1 for ds in pages if ds in cites)} with a cited paper ({len(set(cites.values()))} PubMed ids), "
+              f"{len(dsrc)} data sources"
               + (f"; no version (nothing cached feeds them): {', '.join(none)}" if none else ""))
     else:
         add_links_source(a.project, a.priorities, a.items, a.name)

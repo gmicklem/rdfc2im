@@ -14,6 +14,7 @@ data_source_url: "https://www.gtexportal.org/home/"
 data_set_files: {"Single-Tissue cis-eQTL Data": []}
 data_sets: [RNA-Seq Data, Single-Tissue cis-eQTL Data]   # GtexConverter.java:38-39, stored at :69-87 (no licence)
 home: https://www.gtexportal.org/home/
+citation_note: "No citation recorded: the GTEx Portal (gtexportal.org, 'Citing GTEx', read 2026-11-20) asks for a data statement (\"The data used for the analyses described in this manuscript were obtained from: the GTEx Portal on MM/DD/YY and/or dbGaP accession number phs000424.vN.pN\") and an acknowledgement, not a paper."
 writes: [RNASeqResult, Gene, Organism, DataSet, DataSource, Ontology, SOTerm]
 # Both DataSets are always stored; "Single-Tissue cis-eQTL Data" stays empty, and SNP items are made
 # only from a "signif" file (:102-103, :234-247), which is not staged. The DataSource/DataSet names are
