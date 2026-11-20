@@ -819,3 +819,55 @@ sources:
         last_modified: "2026-11-04"
         stage_as: interpro.xml
         filter: {format: interpro-xml, ids: ipr}
+
+  mgi-alleles:
+    type: mgi-alleles
+    jar: humanmine-bio-sources
+    licence: "CC-BY-4.0"
+    licence_status: verified
+    licence_url: "https://www.informatics.jax.org/mgihome/other/copyright.shtml"
+    licence_checked: "2026-11-20"
+    licence_quote: "MGI data and annotations are licensed under a Creative Commons Attribution 4.0 International License (CC-BY)."
+    licence_conditions:
+      - "Attribution to MGI (Mouse Genome Informatics)."
+      - "Images on the site are excluded (the authors' copyright); the MGI report files used here hold no images."
+      - "The Mammalian Phenotype Ontology is also CC BY 4.0 (same page)."
+    redistributable: true
+    redistributable_reason: "CC BY 4.0 allows redistribution of changed copies with attribution."
+    data_dir: metabolic/mouse-pheno/current
+    needs: [panther]      # its cut is the mouse genes on panther's rows
+    notes: >-
+      Mouse alleles and genotypes with Mammalian Phenotype terms (MGI_PhenotypicAllele.rpt, 32 MB, 141,986 alleles;
+      MGI_QTLAllele.rpt; MGI_PhenoGenoMP.rpt, 54 MB). Every file is cut to the rows of the mouse genes on the
+      panel's PANTHER rows (`subset_raw.py partner-ids`, idsets/mgi.txt: the marker is column 7, 6 and 6). The
+      loader makes a Gene `MGI:<n>` for each allele's marker, the key panther gives its mouse genes, so the two
+      merge. Two drifts since the 2020 converter: MGI_PhenotypicAllele.rpt gained a Marker Ensembl ID as column 10
+      where the converter reads the high-level phenotype ids (line[9]); the cut drops column 10 (`drop_columns`),
+      which restores the converter's layout. MGI_PhenoGenoMP.rpt now has the PubMed ids in column 5 where the
+      converter reads the marker ids (line[4]) to decide `complex: > 1 genome feature`: a genotype of two alleles of
+      different genes is called heterozygote instead (T3.4). MGI_QTLAllele.rpt's phenotype ids moved from column 9
+      to column 14, and column 9 now holds the marker's Ensembl id, which the converter reads as a phenotype term
+      (T3.4; no QTL marker is a panel gene's mouse orthologue, so the cut keeps none of its rows). The Mammalian Phenotype terms get names only from
+      the mammalian-phenotype-ontology source (MPheno_OBO.obo), which is not in this build.
+    files:
+      - id: phenotypic-alleles
+        url: https://www.informatics.jax.org/downloads/reports/MGI_PhenotypicAllele.rpt
+        verified: true
+        size: 32391594
+        last_modified: "2026-11-16"
+        stage_as: MGI_PhenotypicAllele.rpt
+        filter: {format: tab, ids: mgi, column: "7", drop_columns: "10"}
+      - id: qtl-alleles
+        url: https://www.informatics.jax.org/downloads/reports/MGI_QTLAllele.rpt
+        verified: true
+        size: 1333310
+        last_modified: "2026-11-16"
+        stage_as: MGI_QTLAllele.rpt
+        filter: {format: tab, ids: mgi, column: "6"}
+      - id: genotypes
+        url: https://www.informatics.jax.org/downloads/reports/MGI_PhenoGenoMP.rpt
+        verified: true
+        size: 54186437
+        last_modified: "2026-11-16"
+        stage_as: MGI_PhenoGenoMP.rpt
+        filter: {format: tab, ids: mgi, column: "6"}

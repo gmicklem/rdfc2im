@@ -518,6 +518,16 @@ def test_protein2ipr_is_cut_while_it_downloads_and_interpro_is_cut_to_its_entrie
     assert stock.download_bytes(t, ["interpro"]) == 45100722
 
 
+def test_the_filter_spec_and_cache_key_carry_the_column_drop_and_the_required_values():
+    t = stock.load_table()
+    assert "drop_columns=10" in stock.filter_spec(t["mgi-alleles"]["files"][0])
+    assert "require=4=^(PF|SM" in stock.filter_spec(t["protein2ipr"]["files"][0])
+    a = stock.cache_meta(t, "mgi-alleles")
+    t2 = copy.deepcopy(t)
+    t2["mgi-alleles"]["files"][0]["filter"]["drop_columns"] = "9"
+    assert stock.cache_meta(t2, "mgi-alleles")[0] != a[0]
+
+
 def test_validation_of_stream_drop_columns_and_require():
     bad = {
         "a": _entry(files=[{"id": "x", "url": "https://e/x.gz", "stage_as": "x", "stream": True}]),
