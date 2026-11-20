@@ -72,33 +72,39 @@ verified licence from an unverified one; this file and `licence_status` do.
 ## What the converters stamp, and what the mine shows
 
 "Converter stamps" is the value hard-coded in the loader (or its project.xml property); "Mine shows" is
-`DataSet.licence` in the demo mine on port 18090, read 2026-11-18 through `service/query/results`. RDF sources
-load through `humanmine-items`, and rdfc2im's items carried no `DataSet.licence`, so all ten RDF data sets show empty; since the second pass the items write one for eight of them (see "The ten RDF data sets" below), visible after the next build.
+`DataSet.licence` in the demo mine on port 18090 as rebuilt on 20 Nov 2026 (27 of its 67 data sets carry one; 18 of 67 before; 2026-11-18 reading through `service/query/results`). The table
+below is the state after the rebuild of 20 Nov 2026 (im-9n4.50): the converters of mgi-identifiers, rgd-identifiers,
+interpro-go, protein-atlas, protein-atlas-rna, atlas-express, gtex, hpo-annotation and hpo now stamp the licence read at
+source, and the stock table passes the licence of go-annotation, uniprot-fasta, ncbi-fasta and ncbi-gff to their
+loaders as a project.xml property (`properties` in `stock_sources.yaml`, applied by `rdfc2im project`, phase rdfc2im_project). RDF sources
+load through `humanmine-items` and the items carry `data_set_licence` (see "The ten RDF data sets" below). Four stock
+converters still stamp nothing and read no property: interpro, protein2ipr, mgi-alleles and pubmed-gene (see the list
+after the table).
 
 | Source | Table said before | Converter stamps (file:line) | Mine shows (DataSet.licence) |
 |---|---|---|---|
 | stock `uniprot` | CC BY 4.0 (UniProt) | http://creativecommons.org/licenses/by/4.0/ (intermine UniprotConverter.java:82) | Swiss-Prot data set, UniProt data set: same URL |
-| stock `uniprot-fasta` | CC BY 4.0 (UniProt) | none: FastaLoaderTask.java:385 sets it only when the project.xml `licence` property is given, and it is not | uniprot-fasta: empty |
+| stock `uniprot-fasta` | CC BY 4.0 (UniProt) | the project.xml property `fasta.licence` (FastaLoaderTask.java:385), now set by the stock table to https://creativecommons.org/licenses/by/4.0/ | uniprot-fasta: https://creativecommons.org/licenses/by/4.0/ |
 | stock `uniprot-keywords` | CC BY 4.0 (UniProt) | http://creativecommons.org/licenses/by/4.0/ (UniprotKeywordConverter.java:45) | UniProt data set: same URL (shared with uniprot) |
-| stock `ncbi-gff` | public domain (NCBI RefSeq) | none (the GFF3 loader's DataSet has no licence property set) | ncbi-gff: empty |
-| stock `go-annotation` | CC BY 4.0 (GO Consortium, GOA) | none: GoConverter.java:113 takes a `licence` property that project.xml does not set | GO Annotation data set: empty |
-| stock `interpro-go` | CC0 (InterPro) | none, passes null (InterproGoConverter.java:48) | InterPro domain GO annotations: empty |
+| stock `ncbi-gff` | public domain (NCBI RefSeq) | the project.xml property `gff3.licence` (GFF3ConverterTask.setLicence), now set by the stock table to https://www.ncbi.nlm.nih.gov/home/about/policies/ | ncbi-gff: the NCBI policy URL |
+| stock `go-annotation` | CC BY 4.0 (GO Consortium, GOA) | none: GoConverter.java:113 takes a `licence` property, but the converter makes its DataSet in the constructor (GoConverter.java:104, 146), before the setter runs, and getDataSet then returns that unstamped DataSet; with the property set in project.xml the mine still showed no licence on 20 Nov 2026, so the table sets none. Needs a converter change (build the DataSet when the licence is known, e.g. in `process`) | GO Annotation data set: empty |
+| stock `interpro-go` | CC0 (InterPro) | https://creativecommons.org/publicdomain/zero/1.0/ (InterproGoConverter.java:39) | InterPro domain GO annotations: same URL |
 | stock `panther` | PANTHER terms of use, free with citation (unverified) | http://www.gnu.org/licenses/gpl.txt (PantherConverter.java:69-70) | Panther orthologue and paralogue predictions: the GPL URL |
-| stock `mgi-identifiers` | MGI data are free to use with citation | none (MgiIdentifiersConverter.java:43) | Mouse gene identifiers: empty |
-| stock `protein2ipr` | (new 20 Nov) | none (Protein2iprConverter, `super(writer, model, source, dataset)` with no licence) | InterPro data set: empty |
-| stock `interpro` | (new 20 Nov) | none, passes null (InterProConverter `super(..., null, false)`) | InterPro data set: empty (shared with protein2ipr) |
-| stock `mgi-alleles` | (new 20 Nov) | none (MgiAllelesConverter) | mgi-alleles: empty |
-| stock `pubmed-gene` | (new 20 Nov) | none (PubMedGeneConverter) | PubMed to gene mapping: empty |
+| stock `mgi-identifiers` | MGI data are free to use with citation | https://creativecommons.org/licenses/by/4.0/ (MgiIdentifiersConverter.java:37) | Mouse gene identifiers: same URL |
+| stock `protein2ipr` | (new 20 Nov) | none (Protein2iprConverter, `super(writer, model, source, dataset)` with no licence; no property read) | InterPro data set: empty. Needs a converter change: CC0 1.0 `https://creativecommons.org/publicdomain/zero/1.0/` |
+| stock `interpro` | (new 20 Nov) | none, passes null (InterProConverter `super(..., null, false)`; no property read) | InterPro data set: empty (shared with protein2ipr). Needs a converter change: CC0 1.0 |
+| stock `mgi-alleles` | (new 20 Nov) | none (MgiAllelesConverter, 4-argument super; no property read) | mgi-alleles: empty. Needs a converter change: CC BY 4.0 `https://creativecommons.org/licenses/by/4.0/` |
+| stock `pubmed-gene` | (new 20 Nov) | none (PubMedGeneConverter, 4-argument super; no property read) | PubMed to gene mapping: empty. Needs a converter change: the NCBI policy URL |
 | stock `humanmine-static`, `update-data-sources`, `update-publications`, `entrez-organism` | (new 20 Nov) | no converter sets one: they write items XML and the DataSets of other sources are untouched | no data set of their own |
-| stock `rgd-identifiers` | RGD data are free to use with citation (unverified) | none, passes null (RgdIdentifiersConverter.java:50) | Rat gene identifiers: empty |
+| stock `rgd-identifiers` | RGD data are free to use with citation (unverified) | https://creativecommons.org/licenses/by/4.0/ (RgdIdentifiersConverter.java:40) | Rat gene identifiers: same URL |
 | stock `psi-mi-ontology` | CC BY 4.0 (HUPO-PSI; unverified) | https://creativecommons.org/licenses/by/4.0/ (psi-mi-ontology.properties:10) | PSI Molecular Interactions: same URL |
-| stock `psi-intact` | CC BY 4.0 (IntAct, EMBL-EBI) | https://creativecommons.org/licenses/by/4.0/ in intermine `maint-2026` (PsiConverter.java:80-83, fixed in 6e1209b48c); the old code stamped the Apache-2.0 URL | IntAct molecular interactions: the Apache URL (the demo mine still runs the old code until its next rebuild) |
+| stock `psi-intact` | CC BY 4.0 (IntAct, EMBL-EBI) | https://creativecommons.org/licenses/by/4.0/ (PsiConverter.java:83) | IntAct molecular interactions: same URL |
 | stock `biogrid` | MIT (BioGRID; unverified) | https://opensource.org/licenses/MIT (BioGridConverter.java:97) | BioGRID interaction data set: same URL |
-| stock `protein-atlas` | CC BY-SA 4.0, share-alike | https://creativecommons.org/licenses/by-sa/3.0/ (humanmine-bio-sources ProteinAtlasConverter.java:53) | The Human Protein Atlas expression profiles: the by-sa/3.0 URL |
-| stock `protein-atlas-rna` | CC BY-SA 4.0, share-alike | https://creativecommons.org/licenses/by-sa/3.0/ (ProteinAtlasRNAConverter.java:40; also protein-atlas-rna-tgt.xml:50) | Protein Atlas RNA Gene data: the by-sa/3.0 URL |
-| stock `gtex` | GTEx open-access summary data | none (GtexConverter.java:55 passes null names; no licence) | RNA-Seq Data, Single-Tissue cis-eQTL Data: empty |
-| stock `atlas-express` | CC BY 4.0 (Expression Atlas, EMBL-EBI) | none (AtlasExpressConverter.java:53) | atlas-express: empty |
-| stock `hpo-annotation` | HPO licence (reuse with attribution, terms not to be altered; unverified) | https://hpo.jax.org/app/license (HpoConverter.java:80) | hpo-annotation: same URL |
+| stock `protein-atlas` | CC BY 4.0, not share-alike | https://creativecommons.org/licenses/by/4.0/ (humanmine-bio-sources ProteinAtlasConverter.java:53) | The Human Protein Atlas expression profiles: same URL |
+| stock `protein-atlas-rna` | CC BY 4.0, not share-alike | https://creativecommons.org/licenses/by/4.0/ (ProteinAtlasRNAConverter.java:40) | Protein Atlas RNA Gene data: same URL |
+| stock `gtex` | GTEx Portal Data License | https://www.gtexportal.org/home/license (GtexConverter.java:45) | RNA-Seq Data, Single-Tissue cis-eQTL Data: same URL; "GTEx RNA-Seq Data" (a data set another path makes) stays empty |
+| stock `atlas-express` | CC BY 4.0 (Expression Atlas, EMBL-EBI) | https://creativecommons.org/licenses/by/4.0/ (AtlasExpressConverter.java:37) | atlas-express: same URL |
+| stock `hpo-annotation` | HPO licence | https://hpo.jax.org/license (HpoConverter.java:80) | hpo-annotation: same URL |
 | stock `orphanet` | CC BY 4.0 (Orphanet) | https://creativecommons.org/licenses/by/4.0/ (OrphanetConverter.java:41) | orphanet: same URL |
 | stock `reactome` | CC0 (Reactome), written in tools/source_manifest.py | https://creativecommons.org/publicdomain/zero/1.0/ (intermine ReactomeConverter.java:54) | Reactome pathways data set: same URL |
 | ID resolver `gene_info` | not recorded | n/a (not a data set) | n/a |
@@ -154,6 +160,13 @@ conditions: GTEx and HPO now carry conditions a copy must meet (see the notices)
 without any stated term (Ensembl was settled in the third pass, below).
 
 ## Converter mismatches (for a follow-up in the intermine and humanmine-bio-sources checkouts)
+
+State after the rebuild of 20 Nov 2026 (im-9n4.50): fixed in the converters and seen in the mine: protein-atlas, protein-atlas-rna,
+atlas-express, gtex, hpo-annotation (the ontology `hpo` is not loaded by this build), mgi-identifiers, rgd-identifiers, interpro-go;
+psi (IntAct) was already right. Set through project.xml: uniprot-fasta and ncbi-gff (seen), ncbi-fasta (the same property; the source is not
+in this build). Still to do in a converter: panther (GPL URL, terms unread), go-annotation (the setter runs after the DataSet is made),
+and interpro, protein2ipr, mgi-alleles and pubmed-gene (no licence stamped, no property read). The table below is the record
+of 18 Nov and keeps its original wording.
 
 Paths: intermine is the `maint-2026` merge worktree (`worktrees/intermine/merge-maint-2026`, `bio/sources/<source>/...`,
 which has the IntAct fix 6e1209b48c); humanmine-bio-sources is `repos/humanmine-bio-sources`. Nothing there was edited.
