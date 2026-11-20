@@ -943,6 +943,7 @@ sources:
     data_dir: uniprot/xrefs/current
     data_property: none        # project.xml keeps src.data.file=datasources.xml (written by the source's own pre-retrieve step)
     after: [uniprot]
+    reads_mine: true           # reads the DataSource names every loader stored: integrates after all of them [im-9n4.56]
     notes: >-
       A two-step source: DataSourceUpdater (the pre-retrieve step of `integrate -Psource=update-data-sources`)
       reads UniProt's dbxref.txt (project.xml `dataSourceFile`), takes every DataSource name in the mine
@@ -975,7 +976,10 @@ sources:
     redistributable: true
     redistributable_reason: "No stated term forbids a filtered copy; nothing is cached (the source reads the mine and E-utilities at build time and stores no raw file)."
     data_property: none
-    after: [pubmed-gene]
+    # every source that writes Publications: update-data-sources writes one per database paper (dbxref.txt Ref:),
+    # which HumanMine's project.xml order (update-publications first) left with no title [im-9n4.56]
+    after: [pubmed-gene, update-data-sources]
+    reads_mine: true           # reads the pubMedId of every Publication the loaders stored
     notes: >-
       A two-step source (the pre-retrieve step of `integrate -Psource=update-publications`): EntrezPublicationsRetriever
       reads the pubMedId of every Publication in the mine (os.production), asks NCBI's E-utilities (esummary, or
@@ -1000,6 +1004,7 @@ sources:
     redistributable_reason: "NCBI places no restrictions on use or distribution of its data; nothing is cached."
     data_property: none
     after: [update-publications]
+    reads_mine: true           # reads the taxonId of every Organism the loaders stored
     notes: >-
       A two-step source (the pre-retrieve step of `integrate -Psource=entrez-organism`): EntrezOrganismRetriever reads
       the taxon id of every Organism in the mine, asks E-utilities (esummary, db=taxonomy) for its names and writes

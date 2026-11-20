@@ -8,7 +8,7 @@
 
   source_pages.py data-set-links --out ITEMS.xml [--base-url URL] [--sources "..."] [--stock-sources "..."]
                                  [--stock-dir DIR] [--filtered-cache DIR] [--cache-dir DIR]
-      Items XML for an items source loaded last (see add-links-source), on every data set the selected sources
+      Items XML for an items source loaded after the others (see add-links-source), on every data set the selected sources
       write: DataSet.version from the build's caches (the release the file states, else its Last-Modified, and
       the date the build fetched it; an RDF source's SPARQL extract date) [im-9n4.52]; with --base-url also
       DataSet.url (the source's page) and DataSet.description; and the DataSource url/description the stock
@@ -16,8 +16,10 @@
 
   source_pages.py add-links-source --project project.xml --priorities genomic_priorities.properties
                                    --items PATH [--name data-set-links]
-      Appends that source to a mine's project.xml (type humanmine-items, the version of the other
-      humanmine-items entries) and gives it first priority for DataSet.url and DataSet.description.
+      Adds that source to a mine's project.xml (type humanmine-items, the version of the other
+      humanmine-items entries) after every loader and before the stock sources that read the mine
+      (stock_sources.yaml reads_mine) [im-9n4.56], and gives it first priority for DataSet.url and
+      DataSet.description.
 
 Page contents: a header (data source, loader, licence, download), "This build" (scope, files with URL,
 release, Last-Modified, fetch time, size, sha256, records read and kept, objects loaded), "Fields" (a
@@ -792,7 +794,12 @@ def add_links_source(project, priorities, items, name="data-set-links"):
         block = (f'    <source name="{name}" type="humanmine-items"{version}>\n'
                  f'      <property name="src.data.file" location="{items}"/>\n'
                  f'    </source>\n')
-        idx = text.rfind("</sources>")
+        # in front of the first source that reads the built mine (update-data-sources, update-publications,
+        # entrez-organism: the stock table's reads_mine), which must see what this one loads; else last [im-9n4.56]
+        from rdfc2im import stock
+        table = stock.load_table()
+        readers = [m for m in re.finditer(r'<source name="([^"]+)"', text) if (table.get(m.group(1)) or {}).get("reads_mine")]
+        idx = readers[0].start() if readers else text.rfind("</sources>")
         if idx < 0:
             raise SystemExit(f"{project}: no </sources>")
         line_start = text.rfind("\n", 0, idx) + 1
