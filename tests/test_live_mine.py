@@ -1697,7 +1697,8 @@ def test_every_data_set_has_a_version_from_this_build():
 def test_the_all_data_sources_template_is_public_in_metadata_and_lists_every_data_set():
     """The public template "All data sources" (curation/metadata_templates.sql, phase apply_templates) [im-9n4.60,
     Gos 20 Nov 2026]: tagged im:aspect:Metadata, so BlueGenes' Templates page has a Metadata category; run with its
-    default (DataSet.name = *) it gives one row per DataSet, sorted by data source then data set, each with a
+    default (DataSet.name = *) it gives one row per DataSet, a DataSet without a DataSource too ("modMine gene
+    flanking regions" on the mine of 20 Nov 2026: an inner join left it out), sorted by data set name, each with a
     version but DATA_SETS_WITHOUT_VERSION."""
     if not mine_up():
         return _skip(f"live checks off or no mine at {MINE_BASE} (make test-live)")
@@ -1712,11 +1713,13 @@ def test_the_all_data_sources_template_is_public_in_metadata_and_lists_every_dat
     assert payload.get("wasSuccessful", False), payload.get("error")
     rows = payload["results"]
     names = sorted(r[0] for r in query_rows("DataSet.name", "DataSet.name", "IS NOT NULL", ""))
-    assert sorted(r[1] for r in rows) == names, "not one row per DataSet (a DataSet without a DataSource is left out)"
-    # sorted by data source (the database's collation decides the order): each source's data sets are together
-    sources = [r[0] for r in rows]
-    runs = [s for i, s in enumerate(sources) if i == 0 or s != sources[i - 1]]
-    assert len(runs) == len(set(runs)), f"rows not grouped by data source: {runs}"
+    assert sorted(r[1] for r in rows) == names, \
+        f"not one row per DataSet: missing {sorted(set(names) - {r[1] for r in rows})}"
+    assert len(rows) == len(names)
+    # sorted by data set name (the database's collation decides the order): the case-folded names do not go down
+    # more than a collation can explain, so check only that the first and last are the extremes
+    folded = [(r[1] or "").casefold() for r in rows]
+    assert folded[0] == min(folded) and folded[-1] == max(folded), (folded[0], folded[-1])
     missing = sorted(r[1] for r in rows if not r[2] and r[1] not in DATA_SETS_WITHOUT_VERSION)
     assert not missing, f"data sets without a version: {missing}"
 
