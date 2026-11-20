@@ -428,3 +428,19 @@ def test_protein2ipr_is_streamed_through_the_panel_filter_and_interpro_is_cut_to
     # offline cannot stream: with no filtered group it says so rather than reaching for the network
     rc, out = _run(tmp_path, "--only", "subset_stock_data", "--offline", *args)
     assert rc == 0, out      # a dry run logs the plan; the check is the die() that --offline takes in a real run
+
+
+def test_update_data_sources_gets_the_publication_key_in_the_copy_of_the_checkout(tmp_path):
+    """[im-9n4.27] DataSourceUpdater writes a Publication per data source and its keys file keys only DataSource, so
+    every run duplicated the papers the mine already had. The copy of the checkout (not the checkout) is edited.
+    (The stand-in checkout has no module list, so the phase stops after the edit: only the log up to there is read.)"""
+    src = _fake_intermine_60(tmp_path)
+    rc, plan = _run(tmp_path, "--only", "publish_intermine", "--intermine-src", src, "--stock-sources", "update-data-sources")
+    if "[check_prereqs] FATAL" in plan and "stock" not in plan.split("FATAL", 1)[1][:200]:
+        return
+    edit = [ln for ln in plan.splitlines() if "deployer edit:" in ln and "update-data-sources_keys.properties" in ln]
+    assert edit and "Publication keyed on pubMedId" in edit[0], plan
+    sed = [c for c in _cmds(plan, "publish_intermine") if c.startswith("sed -i") and "Publication.key_pubmed" in c]
+    assert sed and "/trial_home/intermine-src/bio/sources/update-data-sources/" in sed[0] and src not in sed[0], sed
+    rc, plan = _run(tmp_path, "--only", "publish_intermine", "--intermine-src", src, "--stock-sources", "go-annotation uniprot")
+    assert "update-data-sources_keys" not in plan

@@ -48,6 +48,8 @@ verified licence from an unverified one; this file and `licence_status` do.
 | stock `interpro` | CC0-1.0 | verified | <https://interpro-documentation.readthedocs.io/en/latest/license.html> | 2026-11-20 | yes | none (citation requested) |
 | stock `mgi-alleles` | CC-BY-4.0 | verified | <https://www.informatics.jax.org/mgihome/other/copyright.shtml> | 2026-11-20 | yes | attribution (CC BY); images excluded (none used) |
 | stock `pubmed-gene` | No restrictions by NCBI (no licence named) | verified | <https://www.ncbi.nlm.nih.gov/home/about/policies/> | 2026-11-20 | yes | as ncbi-gff; the file holds identifiers only |
+| stock `humanmine-static` | not verified | not stated | <https://github.com/intermine/humanmine-datasets> | 2026-11-20 | yes (flag only) | unknown: the repository has no LICENSE (README and datasets.xml only; GitHub's licence field is null) |
+| stock `update-data-sources` | CC-BY-4.0 | verified | <https://ftp.ebi.ac.uk/pub/databases/uniprot/current_release/knowledgebase/complete/README> | 2026-11-20 | yes | attribution to the UniProt Consortium |
 | stock `ncbi-fasta` | No restrictions by NCBI (no licence named) | verified | <https://www.ncbi.nlm.nih.gov/home/about/policies/> | 2026-11-18 | yes | as ncbi-gff |
 | stock `omim` | OMIM licensed download (personal or institutional use only) | not checked | none found | 2026-11-18 | no | licensed copy only (not read today) |
 | stock `reactome` | CC0-1.0 | verified | <https://reactome.org/license> | 2026-11-18 | yes | attribution encouraged, not required |
@@ -194,6 +196,7 @@ reactome data set is shared with stock reactome, which stamps the same CC0 URL.
 | Source | Why not | What would settle it |
 |---|---|---|
 | stock `panther` | www.pantherdb.org answers curl with Cloudflare's "Just a moment" page and a headless browser times out; pantherdb.org (no www) fails the certificate check through the proxy; no LICENSE or README with terms in the data.pantherdb.org/ftp tree (about 14 directories listed) | a person reads https://www.pantherdb.org/tou.jsp in an ordinary browser and pastes the wording (no sbx rule helps) |
+| stock `humanmine-static` | nothing states a licence: the repository intermine/humanmine-datasets has only README.md ("# humanmine-datasets to store datasets.xml") and datasets.xml; GitHub's licence field is null | the InterMine maintainers say how the descriptive text may be reused |
 | RDF `ensembl` | the disclaimer page redirects to https://jun2026.archive.ensembl.org/info/about/legal/disclaimer.html, HTTP 403 "Approval required for jun2026.archive.ensembl.org" (useast., asia. and ftp.ensembl.org likewise) | `sbx policy allow network jun2026.archive.ensembl.org` (the archive host name will change with each Ensembl release; `ftp.ensembl.org` would also give the README beside the data) |
 | RDF `gwascatalog` (TogoVar's terms) | togovar.org answers with a Cloudflare bot check, plain client and headless browser alike | a person reads https://togovar.org/doc/terms in a browser; the GWAS Catalog's own EMBL-EBI terms are read |
 | RDF `clinvar` (ClinVar's own page) | www.ncbi.nlm.nih.gov/clinvar/docs/maintenance_use/ answers with a reCAPTCHA page ("Checking your browser before accessing www.ncbi.nlm.nih.gov") | a person reads the page in a browser; NCBI's general policy (read) already says no restrictions |

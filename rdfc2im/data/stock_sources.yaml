@@ -904,3 +904,65 @@ sources:
         last_modified: "2026-11-19"
         stage_as: gene2pubmed
         filter: {format: tab, ids: entrez, column: "2"}
+
+  humanmine-static:
+    type: humanmine-static
+    jar: humanmine-bio-sources
+    licence: "not verified"
+    licence_status: not-stated
+    licence_url: "https://github.com/intermine/humanmine-datasets"
+    licence_checked: "2026-11-20"
+    licence_conditions:
+      - "Looked at: the repository's file list (README.md and datasets.xml only, no LICENSE file), the README (\"# humanmine-datasets to store datasets.xml\") and GitHub's repository record (\"license\": null), all on 2026-11-20. The repository belongs to the InterMine organisation and holds InterMine's own description of HumanMine's data sets."
+    redistributable: true
+    redistributable_reason: "No stated term forbids it and none permits it: unverified. The file is InterMine's own, descriptive text about data sets; the flag stays true so the build does not break."
+    data_dir: humanmine/datasets/git/humanmine-datasets
+    data_property: src.data.file
+    data_file: datasets.xml
+    notes: >-
+      datasets.xml is an Items XML file of 41 DataSet, 26 DataSource and 27 Publication items (last commit 11 Feb
+      2022, e7a86ea; the URL is pinned to it), which HumanMine loads as it is (the source has no converter) to
+      give DataSet.description, version and url and DataSource.description and url. The names are HumanMine's own
+      (`ncbi-gff`, `panther`, `interpro`, ...): a DataSet or DataSource of this build with another name is
+      untouched, and the versions it records are those of 2021 ("109.20210514; September 2021"): the file is not
+      a statement about the data of this build.
+    files:
+      - id: datasets
+        url: https://raw.githubusercontent.com/intermine/humanmine-datasets/e7a86ea3bd133f419f72d094b44fbb4cb563ac87/datasets.xml
+        verified: true
+        size: 28346
+        last_modified: "2022-02-11"
+        stage_as: datasets.xml
+        filter: none
+
+  update-data-sources:
+    type: update-data-sources
+    jar: intermine
+    licence: "CC-BY-4.0"
+    licence_status: verified
+    licence_url: "https://ftp.ebi.ac.uk/pub/databases/uniprot/current_release/knowledgebase/complete/README"
+    licence_checked: "2026-11-20"
+    licence_quote: "We have chosen to apply the Creative Commons Attribution 4.0 International (CC BY 4.0) License (https://creativecommons.org/licenses/by/4.0/) to all copyrightable parts of our databases."
+    licence_conditions:
+      - "Attribution: credit the UniProt Consortium. dbxref.txt (the list of cross-referenced databases, with their URLs) is in the docs directory of the same release tree and has no licence line of its own."
+    redistributable: true
+    redistributable_reason: "CC BY 4.0 allows redistribution with attribution (the file is used whole)."
+    data_dir: uniprot/xrefs/current
+    data_property: none        # project.xml keeps src.data.file=datasources.xml (written by the source's own pre-retrieve step)
+    after: [uniprot]
+    notes: >-
+      A two-step source: DataSourceUpdater (the pre-retrieve step of `integrate -Psource=update-data-sources`)
+      reads UniProt's dbxref.txt (project.xml `dataSourceFile`), takes every DataSource name in the mine
+      (os.production) that equals an `Abbrev:` of dbxref.txt (release 2026_04 lists a few hundred databases) and
+      writes datasources.xml with that database's `Name:` as DataSource.description, its `Server:` as url and the
+      PubMed id of its `Ref:` as a Publication, which is then loaded. A DataSource whose name is no UniProt
+      abbreviation (this mine's "NCBI", "The Mouse genome database ...") is not touched. It must run after the
+      sources that make the DataSources (HumanMine lists it last). The 56,258-byte dbxref.txt is used whole.
+    files:
+      - id: dbxref
+        url: https://ftp.ebi.ac.uk/pub/databases/uniprot/current_release/knowledgebase/complete/docs/dbxref.txt
+        verified: true
+        size: 56258
+        last_modified: "2026-11-04"
+        stage_as: dbxref.txt
+        filter: none
