@@ -2445,9 +2445,10 @@ writes the paper as `DataSet.publication` (a Publication with the pubMedId; upda
 the title and authors) and the status pages show it. Every PMID was read on the source's page and resolved through
 E-utilities esummary on 20 Nov 2026; where the page prints only a DOI, esearch on the DOI gave the PMID. RDF sources
 cite the original provider, as RDF Portal's FAQ asks. 23 of the 32 data sets are cited (16 papers); none for PANTHER
-(pantherdb.org refuses the sandbox), PSI-MI (psidev.info blocked), GTEx and Orphanet (they ask for a data statement, not a
-paper), and NCBI Gene, ClinVar, PubMed and gene2pubmed (NCBI's help pages answered with a reCAPTCHA page,
-pubmed.ncbi.nlm.nih.gov blocked). Live test `test_every_data_set_whose_source_asks_to_be_cited_links_to_that_paper_with_a_title`.
+(pantherdb.org refuses the sandbox; Gos reads it), PSI-MI (psidev.info, allowed and read on 20 Nov, asks for no
+citation), GTEx and Orphanet (they ask for a data statement, not a paper), PubMed (pubmed.ncbi.nlm.nih.gov/about asks
+for none), and NCBI Gene, ClinVar and gene2pubmed (their help pages on www.ncbi.nlm.nih.gov answer the sandbox with a
+reCAPTCHA page). Live test `test_every_data_set_whose_source_asks_to_be_cited_links_to_that_paper_with_a_title`.
 
 **DepMap** (`depmap-sample-info`, `depmap-expression`) is not wired; its licence is being read elsewhere. What it
 needs: `sample_info.csv` and `CCLE_expression.csv` from the DepMap portal (no stable URL: a release is picked by
