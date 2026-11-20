@@ -241,6 +241,16 @@ Tests: `tests/test_apply_public_lists.py` (the web service and the export script
 `tests/test_full_build_public_lists.py` (dry-run), and three live checks in `tests/test_live_mine.py` that skip unless the
 mine has the Genomics England lists.
 
+## "All data sources" template and the home-page link [im-9n4.60]
+
+Every build gets the public template "All data sources" (`curation/metadata_templates.sql`, phase `apply_templates`):
+one row per data set with its data source, version, description, url, licence and citation, in BlueGenes' Templates page
+under the category Metadata (tag `im:aspect:Metadata`). The BlueGenes home page's second block, "All data sources", opens
+it in a new tab (`curation/rdfc2im.web.properties`, staged into the webapp by `tools/trial-stage.sh`; the other seven
+blocks are BlueGenes' defaults). Re-apply to a built mine without a rebuild: BUILD.md, "All data sources". Tests:
+`tests/test_templates_model.py`, `tests/test_homepage_cta.py`, `tests/test_full_build_wiring.py`, and a live check in
+`tests/test_live_mine.py`.
+
 ## Data-source status pages [im-9n4.42]
 
 One Markdown page per source of a build, and an index: where the data came from (URL, release, Last-Modified, fetch

@@ -1522,6 +1522,43 @@ the mine's userprofile database, so a rebuild removes them until `--report-layou
 tool was dropped from the layout of the ut demo; give it the front, `--tools-url http://localhost:15001`. After a rebuild
 that is meant to show JBrowse 2, `trial/front/gen-jbrowse-config.sh` regenerates the JBrowse 2 config from the mine.
 
+## "All data sources": a template in the category Metadata, linked from the home page [im-9n4.60]
+
+The public template `All_data_sources` (title "All data sources") lists every data set of the mine with its data
+source: DataSource name, DataSet name, version, description, url and licence, and the paper the source asks to be cited
+(first author, year, title, PubMed id), sorted by data source then data set. It is in `curation/metadata_templates.sql`,
+which phase `apply_templates` runs on every build (panel and full scope; not with `--skip-templates`), after
+`demo_public_templates.sql` and before the restart.
+
+- The publication is an outer join, so a data set without a citation still shows; licence, version, description and url
+  are DataSet attributes and show empty when unset. DataSet.dataSource is an inner join: the mine refuses a sort on a
+  path outside the root outer join group ("Order by element DataSet.dataSource.name ASC is not in the root outer join
+  group"), and every DataSet has a DataSource (the live test checks one row per DataSet).
+- InterMine needs at least one editable constraint in a template (`CreateTemplateAction`, `TemplatesImportAction`). The
+  template's one is `DataSet.name = *`: every data set by default (`=` with a wildcard runs as a case-insensitive
+  LIKE), and a user can type a name or a pattern.
+- Tags `im:public` and `im:aspect:Metadata`. BlueGenes' Templates page makes a category pill of every `im:aspect:<Name>`
+  tag on a public template; nothing is defined mine-side (`aspects.xml` serves only the old JSP webapp). So the page
+  shows a pill "Metadata" (BlueGenes has no colour for it: a plain pill) beside the others the mine's templates carry,
+  and choosing it shows the one card "All data sources", whose own card lists "Categories: Metadata".
+- Unlike `demo_public_templates.sql` it deletes its own template and tags first, so it can be run again, also on a mine
+  that is already built: `docker exec -i <prefix>-postgres psql -U intermine -d humanmine-userprofile <
+  curation/metadata_templates.sql`, then `docker restart <prefix>-mine <prefix>-bluegenes`. (`--only apply_templates`
+  would run `demo_public_templates.sql` again too, which adds a second copy of its six.)
+
+**The home page.** BlueGenes' default home page has a block "Browse sources" that runs BlueGenes' own four-column DataSet
+query (name, url, data source, publication title) and opens it as the results page "All data sources": that is the link
+on HumanMine's home page. BlueGenes builds the blocks from the mine's web properties when `bluegenes.homepage.cta.<n>.*`
+is set, and a custom list replaces all eight defaults. `curation/rdfc2im.web.properties` gives the eight again with block
+2 changed to "All data sources", `url=/humanmine/templates/All_data_sources`, the template's page (its form, a preview of
+the rows and the button to all of them). `tools/trial-stage.sh` copies the file into the staged webapp as
+`WEB-INF/rdfc2im.web.properties` on every build; the mine loads every `WEB-INF/<word>.web.properties` and then
+`WEB-INF/web.properties`, whose keys win (trial-stage warns if HumanMine's own file ever sets the blocks). What
+configuration cannot do: BlueGenes opens every `url` block in a new tab (a `route` block opens in the same tab but takes
+no parameters, so it cannot name a template), and "What's new" becomes a plain link instead of the three latest
+InterMine blog posts. To change the blocks on a built mine: copy the file into `$RDFC2IM_ARTIFACTS/humanmine/WEB-INF/`
+(the mine mounts that directory) and `docker restart <prefix>-mine <prefix>-bluegenes`.
+
 ## Genomics England gene lists, and where `apply_public_lists` calls them [im-9n4.21]
 
 `tools/panelapp_lists.py` (USAGE.md, "Genomics England gene lists") makes HumanMine's `PL_GenomicsEngland_GenePanel:<Panel_name>`

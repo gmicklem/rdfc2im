@@ -9,7 +9,8 @@
 #               variable, so each stack (tools/full-build.sh --stack-name) stages its own copy
 #
 # Produces, all gitignored:
-#   $RDFC2IM_ARTIFACTS/humanmine/       the webapp, exploded, with its DB host patched
+#   $RDFC2IM_ARTIFACTS/humanmine/       the webapp, exploded, with its DB host patched and
+#                                       WEB-INF/rdfc2im.web.properties (curation/; BlueGenes home page)
 #   $RDFC2IM_ARTIFACTS/bluegenes-lib/   BlueGenes and its 178 runtime jars
 set -eu
 
@@ -57,6 +58,15 @@ for f in WEB-INF/classes/intermine.properties WEB-INF/web.properties; do
         echo "  patched $f project.title"
     fi
 done
+
+# The BlueGenes home page's blocks, with the link to the "All data sources" template [im-9n4.60]: the webapp
+# loads every WEB-INF/<word>.web.properties, then WEB-INF/web.properties, whose keys win. `cat >`, not `cp`
+# (the Makefile's note: plain cp has zeroed files on this workspace mount).
+cat "$HERE/curation/rdfc2im.web.properties" > "$ART/humanmine/WEB-INF/rdfc2im.web.properties"
+echo "  added WEB-INF/rdfc2im.web.properties (BlueGenes home page)"
+if grep -q '^[[:space:]]*bluegenes\.homepage\.cta' "$ART/humanmine/WEB-INF/web.properties" 2>/dev/null; then
+    echo "trial-stage: WARNING the webapp's own WEB-INF/web.properties sets bluegenes.homepage.cta, which hides curation/rdfc2im.web.properties" >&2
+fi
 
 # keyword_search.properties (search) and objectstoresummary.config.properties
 # (autocomplete) - both baked into dbmodel.jar at build time, unlike the DB host and

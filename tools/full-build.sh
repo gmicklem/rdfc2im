@@ -18,7 +18,7 @@
 #   --genes FILE        Gene-panel file for --genes-scoped sources (default: demo panel). `--genes all` is
 #                       --scope full (the plan's name for it, T3.2).
 #   --taxon LIST        Comma-separated NCBI taxon ids, passed to rdfc2im --taxon (default: 9606).
-#   --skip-templates    Don't apply curation/demo_public_templates.sql.
+#   --skip-templates    Don't apply curation/demo_public_templates.sql and curation/metadata_templates.sql.
 #   --report-layout FILE  After the demo templates, in phase apply_templates: load the HumanMine templates the
 #                       mine's model can run (tools/apply_humanmine_templates.py on the sibling file
 #                       humanmine_templates.xml) and set HumanMine's Gene report layout, filtered to what this mine
@@ -2320,6 +2320,8 @@ phase_apply_templates() {
     log "no curation/demo_public_templates.sql - skipping"
   else
     run bash -c "docker exec -i $PG_CONTAINER psql -U intermine -d humanmine-userprofile < curation/demo_public_templates.sql"
+    # "All data sources", category Metadata [im-9n4.60]; replaces its own rows, so it can run again
+    run bash -c "docker exec -i $PG_CONTAINER psql -U intermine -d humanmine-userprofile < curation/metadata_templates.sql"
     run docker restart "$MINE_CONTAINER" "$BG_CONTAINER"
   fi
   [ -z "$REPORT_LAYOUT" ] || apply_report_layout
