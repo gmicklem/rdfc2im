@@ -819,3 +819,182 @@ def test_disease_ids_then_hpoa_cut(tmp_path, capsys):
     assert "OMIM:607108" in text and "ORPHA:77" in text and "OMIM:100000" not in text
     assert text.startswith("#description")             # comment lines stay
     assert res["records_in"] == 4 and res["records_out"] == 2   # the database_id header line counts as a row
+
+
+# ------------------------------------------------------------------ milestone 3 sources [im-9n4.27]
+
+import functools  # noqa: E402
+import http.server  # noqa: E402
+import threading  # noqa: E402
+
+
+def _serve(payload, cut_after=None):
+    """A local HTTP server for one payload with Range support; with cut_after the first full-body response is
+    cut off after that many bytes (the connection drops, as a 13 GB download's can). Returns (url, requests)."""
+    seen = []
+
+    class H(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def do_GET(self):
+            rng = self.headers.get("Range")
+            start = int(rng.split("=")[1].rstrip("-")) if rng else 0
+            seen.append(rng)
+            body = payload[start:]
+            self.send_response(206 if rng else 200)
+            self.send_header("Content-Length", str(len(body)))
+            if rng:
+                self.send_header("Content-Range", f"bytes {start}-{len(payload) - 1}/{len(payload)}")
+            self.end_headers()
+            if cut_after is not None and not rng:
+                self.wfile.write(body[:cut_after])
+                self.wfile.flush()
+                self.connection.shutdown(2)       # the rest never arrives
+                return
+            self.wfile.write(body)
+
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    return f"http://127.0.0.1:{srv.server_port}/protein2ipr.dat.gz", seen, srv
+
+
+P2I = ("P35240\tIPR000798\tERM\tPF00769\t1\t100\n"
+       "A0A000\tIPR004839\tAminotransferase\tPF00155\t41\t381\n"
+       "P35240\tIPR000299\tFERM\tNF00123456\t5\t60\n"          # NCBIFAM: a signature the converter throws on
+       "P35240\tIPR011993\tPH\tG3DSA:2.30.29.30\t200\t300\n"
+       "Q00001\tIPR000001\tKringle\tcd00108\t3\t50\n")
+
+
+def test_a_url_is_read_as_it_arrives_and_cut_to_the_panel_and_to_signatures_the_converter_names(tmp_path):
+    ids = tmp_path / "uniprot.txt"
+    ids.write_text("P35240\n")
+    url, seen, srv = _serve(gzip.compress(P2I.encode()))
+    try:
+        out, res = filt(tmp_path, "tab", url, str(ids), "p.dat", "--column", "1", "--require",
+                        "4=^(PF|SM|SSF|SFLD|PS|PR|PTHR|G3DSA|TIGR|PD|PIRSF|MF_|cd)")
+    finally:
+        srv.shutdown()
+    assert read(out).decode().splitlines() == ["P35240\tIPR000798\tERM\tPF00769\t1\t100",
+                                               "P35240\tIPR011993\tPH\tG3DSA:2.30.29.30\t200\t300"]
+    assert res["records_in"] == 5 and res["records_out"] == 2 and seen == [None]
+
+
+def test_a_dropped_connection_is_resumed_with_a_range_request_not_started_again(tmp_path):
+    rows = "".join(f"P{i:05d}\tIPR{i:06d}\tn\tPF{i:05d}\t1\t9\n" for i in range(4000))
+    payload = gzip.compress(rows.encode())
+    ids = tmp_path / "uniprot.txt"
+    ids.write_text("P00007\nP03999\n")
+    url, seen, srv = _serve(payload, cut_after=len(payload) // 3)
+    try:
+        out, res = filt(tmp_path, "tab", url, str(ids), "p.dat", "--column", "1")
+    finally:
+        srv.shutdown()
+    assert [ln.split("\t")[0] for ln in read(out).decode().splitlines()] == ["P00007", "P03999"]
+    assert seen[0] is None and seen[1].startswith("bytes=") and len(seen) == 2, seen
+    assert res["records_in"] == 4000
+
+
+def test_a_server_that_ignores_range_after_a_drop_is_an_error_not_a_silent_repeat(tmp_path):
+    ids = tmp_path / "uniprot.txt"
+    ids.write_text("P00001\n")
+    payload = gzip.compress("".join(f"P{i:05d}\tx\n" for i in range(4000)).encode())
+
+    class NoRange(http.server.BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def do_GET(self):
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload[: len(payload) // 3])
+            self.wfile.flush()
+            self.connection.shutdown(2)
+
+    srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), NoRange)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    try:
+        p = run_cli("filter", "--format", "tab", "--in", f"http://127.0.0.1:{srv.server_port}/x.gz", "--out",
+                    str(tmp_path / "o"), "--ids", str(ids), "--column", "1")
+    finally:
+        srv.shutdown()
+    assert p.returncode != 0 and not (tmp_path / "o").exists()
+
+
+def test_drop_columns_takes_the_ensembl_column_out_of_mgi_phenotypic_alleles(tmp_path):
+    ids = tmp_path / "mgi.txt"
+    ids.write_text("MGI:97490\n")
+    src = tmp_path / "MGI_PhenotypicAllele.rpt"
+    src.write_text("#\n#Allele symbols are usually of the form xxx<yy>\n#\n"
+                   "MGI:2156820\tPax6<10Neu>\t10, Neuherberg\tChemically induced (ENU)\t\t11779807\tMGI:97490\tPax6\t"
+                   "NM_013627\tENSMUSG00000027168\tMP:0005382,MP:0005391\tENU-6037\tpaired box 6\n"
+                   "MGI:8352285\t0610030E20Rik<em1(IMPC)Mbp>\tem1\tEndonuclease-mediated\tNull/knockout\t\tMGI:1915614\t"
+                   "0610030E20Rik\tXM_006506534\tENSMUSG00000058706\t\t\tRIKEN cDNA\n")
+    out, res = filt(tmp_path, "tab", str(src), str(ids), "o.rpt", "--column", "7", "--drop-columns", "10")
+    lines = read(out).decode().splitlines()
+    assert lines[:3] == ["#", "#Allele symbols are usually of the form xxx<yy>", "#"]
+    row = lines[3].split("\t")
+    assert len(lines) == 4 and len(row) == 12 and row[6] == "MGI:97490" and row[9] == "MP:0005382,MP:0005391"
+    assert res["records_out"] == 1
+
+
+def test_drop_columns_alone_keeps_every_row(tmp_path):
+    src = tmp_path / "in.tsv"
+    src.write_text("a\tb\tc\nd\te\tf\n")
+    out, res = filt(tmp_path, "tab", str(src), None, "o.tsv", "--column", "1", "--drop-columns", "2")
+    assert read(out) == b"a\tc\nd\tf\n" and res["records_out"] == 2
+    p = run_cli("filter", "--format", "tab", "--in", str(src), "--out", str(tmp_path / "x"), "--column", "1")
+    assert p.returncode == 2 and "needs --ids" in p.stderr
+
+
+INTERPRO = '''<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE interprodb SYSTEM "interpro.dtd">
+<interprodb>
+<release>
+  <dbinfo version="111.0" dbname="INTERPRO" entry_count="4" file_date="05-NOV-26"/>
+</release>
+<interpro id="IPR000001" protein_count="2" short_name="Kringle" type="Domain">
+  <name>Kringle</name>
+  <pub_list><publication id="PUB1"><db_xref db="PUBMED" dbkey="3891096"/></publication></pub_list>
+  <parent_list><rel_ref ipr_ref="IPR000002"/></parent_list>
+</interpro>
+<interpro id="IPR000002" protein_count="2" short_name="Parent" type="Family">
+  <name>Parent</name>
+  <child_list><rel_ref ipr_ref="IPR000001"/></child_list>
+</interpro>
+<interpro id="IPR000003" protein_count="2" short_name="Other" type="Domain">
+  <name>Other</name>
+</interpro>
+<interpro id="IPR000004" protein_count="2" short_name="Elsewhere" type="Domain">
+  <name>Elsewhere</name>
+</interpro>
+<deleted_entries>
+  <del_ref id="IPR064623"/>
+</deleted_entries>
+</interprodb>
+'''
+
+
+def test_interpro_xml_keeps_the_panels_entries_and_their_relatives_and_the_header_and_trailer(tmp_path):
+    src = tmp_path / "interpro.xml.gz"
+    src.write_bytes(gzip.compress(INTERPRO.encode()))
+    ids = tmp_path / "ipr.txt"
+    ids.write_text("IPR000001\nIPR000003\nIPR999999\n")
+    out, res = filt(tmp_path, "interpro-xml", str(src), str(ids), "interpro.xml")
+    text = read(out).decode()
+    ET.fromstring(text.split("\n", 2)[2].replace('<!DOCTYPE interprodb SYSTEM "interpro.dtd">\n', ""))   # still well formed
+    for kept in ("IPR000001", "IPR000002", "IPR000003", 'dbname="INTERPRO"', "<deleted_entries>", "</interprodb>"):
+        assert kept in text, kept
+    assert "IPR000004" not in text.replace("IPR064623", "")
+    assert 'dbkey="3891096"' in text         # the kept entry's publication goes with it
+    assert res == {"format": "interpro-xml", "records_in": 4, "records_out": 3, "ids_given": 3, "ids_matched": 2}
+
+
+def test_ipr_ids_lists_the_interpro_entries_of_the_filtered_matches(tmp_path):
+    f = tmp_path / "protein2ipr.dat"
+    f.write_text("P35240\tIPR000798\tERM\tPF00769\t1\t100\nP35240\tIPR011993\tPH\tG3DSA:2.30.29.30\t2\t3\n"
+                 "P1\tIPR000798\tERM\tPF00769\t1\t100\n")
+    p = run_cli("ipr-ids", "--in", str(f), "--out", str(tmp_path / "ids"))
+    assert p.returncode == 0 and json.loads(p.stdout) == {"ipr": 2}
+    assert read(str(tmp_path / "ids" / "ipr.txt")).decode() == "IPR000798\nIPR011993\n"

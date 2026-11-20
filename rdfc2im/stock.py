@@ -38,14 +38,15 @@ JAR_ORIGINS = ("intermine", "humanmine-bio-sources")
 # HumanMine's project.xml carries version="4.3.0", and the dbmodel plugin resolves that version.
 HUMANMINE_BIO_VERSION = "4.3.0"
 # tools/subset_raw.py's interface (plan 50, T0.2)
-FORMATS = ("gaf", "gff3", "uniprot-xml", "fasta", "tab", "gene_info", "psi-xml")
-NEEDS_IDS = ("gaf", "gff3", "uniprot-xml", "fasta", "tab", "psi-xml")
+FORMATS = ("gaf", "gff3", "uniprot-xml", "fasta", "tab", "gene_info", "psi-xml", "interpro-xml")
+NEEDS_IDS = ("gaf", "gff3", "uniprot-xml", "fasta", "tab", "psi-xml", "interpro-xml")
 # formats whose filter reads a zip itself and writes one file per member of a glob (into the work
 # directory, staged under the members' own names): PSI-MI XML, IntAct's human.zip holds dozens [im-9n4.13]
 MULTI_MEMBER_FORMATS = ("psi-xml",)
 # entrez..symbol: the panel id sets; chromosomes: the RefSeq accessions of the GRCh38 chromosomes
 # the ncbi-gff loader maps (not panel-dependent; `subset_raw.py idsets` writes it too)
-ID_KINDS = ("entrez", "ensembl", "uniprot", "symbol", "chromosomes", "mgi", "rgd", "hpo-diseases", "none")
+ID_KINDS = ("entrez", "ensembl", "uniprot", "symbol", "chromosomes", "mgi", "rgd", "hpo-diseases", "ipr", "none")
+# ipr: the InterPro entries of the panel's protein2ipr rows (`subset_raw.py ipr-ids`), for cutting interpro.xml [im-9n4.27]
 # mgi, rgd: the partner genes of the panel's PANTHER rows (`subset_raw.py partner-ids`), "MGI:97490" and "3258", for
 # cutting mgi-identifiers' and rgd-identifiers' whole-genome files down to the genes panther will create [im-9n4.11]
 # NCBI's per-organism gene_info files (the ID resolver reads them whole, one taxon at a time): taxon -> path under
@@ -60,7 +61,9 @@ GENE_INFO_PATHS = {"9606": "Mammalia/Homo_sapiens", "10090": "Mammalia/Mus_muscu
 LENGTHS_FILE = "chromosome_lengths.xml"
 LENGTHS_FORMAT = "chromosome-lengths"
 UNPACK = ("zip", "tar.gz")
-DATA_PROPERTIES = ("src.data.dir", "src.data.file")
+# none: project.xml's own data property stays (the source reads no staged data directory: update-publications and
+# entrez-organism write their file themselves, update-data-sources reads one file named by `dataSourceFile`) [im-9n4.27]
+DATA_PROPERTIES = ("src.data.dir", "src.data.file", "none")
 NAME_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 FILE_ID_RE = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 GLOB_CHARS = set("*?[")
@@ -162,7 +165,8 @@ def validate_table(table: Dict[str, dict]) -> List[str]:
         if prop not in DATA_PROPERTIES:
             out.append(f"{where}: `data_property` must be one of {', '.join(DATA_PROPERTIES)}")
         ddir = e.get("data_dir")
-        if not ddir or str(ddir).startswith("/") or ".." in str(ddir).split("/"):
+        no_data = prop == "none" and e.get("files") == []
+        if not no_data and (not ddir or str(ddir).startswith("/") or ".." in str(ddir).split("/")):
             out.append(f"{where}: `data_dir` must be a relative path under {HUMANMINE_DATA_ROOT}")
         if prop == "src.data.file" and not e.get("data_file"):
             out.append(f"{where}: data_property src.data.file needs `data_file`")
@@ -184,8 +188,10 @@ def validate_table(table: Dict[str, dict]) -> List[str]:
         if not isinstance(e.get("properties", {}) or {}, dict):
             out.append(f"{where}: `properties` must be a mapping")
         files = e.get("files")
+        if no_data:
+            continue
         if not isinstance(files, list) or not files:
-            out.append(f"{where}: `files` must be a non-empty list")
+            out.append(f"{where}: `files` must be a non-empty list (or [] with data_property: none)")
             continue
         seen = set()
         for f in files:
@@ -214,6 +220,10 @@ def validate_table(table: Dict[str, dict]) -> List[str]:
                     out.append(f"{fw}: without a url, `raw_name` (the local file name) is required")
             elif not re.match(r"^https?://", str(url)):
                 out.append(f"{fw}: `url` must be http(s)")
+            if f.get("stream"):
+                # streamed: read from the URL by the filter itself, never stored (protein2ipr.dat.gz is 13.8 GB)
+                if not url or f.get("unpack") or f.get("filter", "none") == "none":
+                    out.append(f"{fw}: `stream` is for a url file that is filtered and not unpacked")
             if not isinstance(f.get("verified", False), bool):
                 out.append(f"{fw}: `verified` must be true or false")
             unpack = f.get("unpack")
@@ -239,8 +249,16 @@ def validate_table(table: Dict[str, dict]) -> List[str]:
                     out.append(f"{fw}: filter format must be one of {', '.join(FORMATS)}")
                 if ids not in ID_KINDS:
                     out.append(f"{fw}: filter ids must be one of {', '.join(ID_KINDS)}")
-                if fmt in NEEDS_IDS and ids == "none":
+                dc, rq = flt.get("drop_columns"), flt.get("require")
+                if fmt in NEEDS_IDS and ids == "none" and not (fmt == "tab" and (dc or rq)):
                     out.append(f"{fw}: format {fmt} filters by ids, so `ids` cannot be none")
+                if (dc or rq) and fmt != "tab":
+                    out.append(f"{fw}: `drop_columns` and `require` are for format tab only")
+                if dc is not None and not re.match(r"^\d+(,\d+)*$", str(dc)):
+                    out.append(f"{fw}: `drop_columns` is 1-based numbers, comma separated")
+                if rq is not None and not (isinstance(rq, list) and all(
+                        isinstance(x, str) and re.match(r"^\d+=.+", x) for x in rq)):
+                    out.append(f"{fw}: `require` must be a list of 'COLUMN=REGEX' strings")
                 if fmt == "tab" and not flt.get("column"):
                     out.append(f"{fw}: format tab needs `column`")
                 if flt.get("column") and not re.match(r"^\d+(,\d+)*$", str(flt["column"])):
@@ -427,10 +445,11 @@ def apply_to_project(sources_el: etree._Element, table: Dict[str, dict], names: 
             problems.append(f"stock source {n}: jar origin {e['jar']} needs version={want_version!r} in "
                             f"project.xml, which has {s.get('version')!r}")
         prop = e.get("data_property", "src.data.dir")
-        loc = f"{HUMANMINE_DATA_ROOT}/{e['data_dir'].strip('/')}"
-        if prop == "src.data.file":
-            loc = f"{loc}/{e['data_file']}"
-        _set_property(s, prop, location=loc)
+        if prop != "none":
+            loc = f"{HUMANMINE_DATA_ROOT}/{e['data_dir'].strip('/')}"
+            if prop == "src.data.file":
+                loc = f"{loc}/{e['data_file']}"
+            _set_property(s, prop, location=loc)
         for k, v in (e.get("properties") or {}).items():
             _set_property(s, k, value=str(v).replace("{data_root}", HUMANMINE_DATA_ROOT))
     return problems
@@ -494,6 +513,10 @@ def filter_spec(f: dict) -> str:
         parts.append("keep_types=" + "+".join(flt["keep_types"]))
     if flt.get("xref_db"):
         parts.append("xref_db=" + "+".join(flt["xref_db"]))
+    if flt.get("drop_columns"):
+        parts.append(f"drop_columns={flt['drop_columns']}")
+    if flt.get("require"):
+        parts.append("require=" + "+".join(flt["require"]))
     return ",".join(parts)
 
 
@@ -512,19 +535,23 @@ def lengths_sources(table: Dict[str, dict], names: List[str]) -> List[Tuple[str,
 # The id sets subset_stock_data derives from the gene panel (subset_raw.py idsets, partner-ids, disease-ids). A
 # filter on one of them is a panel cut; `chromosomes` (the GRCh38 assembly's 24 RefSeq chromosomes, which cut the
 # genome FASTA to what the ncbi-gff loader maps) is not, and stays in a full-scope build [im-9n4.26].
-PANEL_ID_SETS = frozenset({"entrez", "ensembl", "uniprot", "symbol", "mgi", "rgd", "hpo-diseases"})
+PANEL_ID_SETS = frozenset({"entrez", "ensembl", "uniprot", "symbol", "mgi", "rgd", "hpo-diseases", "ipr"})
 
 
 def file_rows(table: Dict[str, dict], names: List[str], stock_dir: str, raw_cache: str,
               local_dir: Optional[str] = None, full: bool = False) -> List[str]:
-    """One row per upstream file, 18 fields:
+    """One row per upstream file, 20 fields:
 
       source, file id, origin (download|local|derived), url, raw path, unpack, member,
       format, ids, column, taxon, keep_header (the number of leading lines kept, 0 for none),
       work dir (where filtering/unpacking writes; '-' when the raw file is staged as it is),
       kind (filtered|whole|asis|derived), stage dir (relative to the data root),
       stage name ('-' = member names), keep_types (gff3: comma-separated feature types),
-      xref_db (psi-xml: comma-separated xref db names; '-' for any db)
+      xref_db (psi-xml: comma-separated xref db names; '-' for any db),
+      drop_columns (tab: 1-based columns taken out of every kept row), require (tab: ';'-separated COLUMN=REGEX)
+
+    origin `stream` (a file with `stream: true`, panel scope only): the raw field is the URL, which the filter
+    reads and cuts as it arrives; nothing is stored in the raw cache [im-9n4.27].
 
     `filtered` work dirs are what the source's filtered cache group holds; `whole` ones are files
     used complete but decompressed or unpacked (derived from the raw group again on every build,
@@ -534,7 +561,8 @@ def file_rows(table: Dict[str, dict], names: List[str], stock_dir: str, raw_cach
     restored with it [im-9n4.9].
 
     full (full-build.sh --scope full): no panel cut - a file filtered on a PANEL_ID_SETS id set is used whole
-    instead (unpacked or decompressed, else staged as it is), as HumanMine's own build reads it [im-9n4.26]."""
+    instead (unpacked or decompressed, else staged as it is), as HumanMine's own build reads it [im-9n4.26]; a
+    tab filter that also drops columns or requires values keeps doing that, on every row (ids none) [im-9n4.27]."""
     rows = []
     for n in names:
         e = table[n]
@@ -543,10 +571,14 @@ def file_rows(table: Dict[str, dict], names: List[str], stock_dir: str, raw_cach
             lp = local_path(local_dir, n, f)
             origin = "local" if lp else "download"
             raw = lp or os.path.join(raw_cache, f"stock-raw-{n}", "data", raw_name(f))
+            if f.get("stream") and not lp and not full:
+                origin, raw = "stream", f["url"]
             flt = f.get("filter", "none")
             if full and isinstance(flt, dict) and flt.get("ids") in PANEL_ID_SETS:
-                flt = "none"
+                flt = dict(flt, ids="none") if (flt.get("drop_columns") or flt.get("require")) else "none"
             packed = bool(f.get("unpack")) or raw.endswith(".gz")
+            if origin == "stream":
+                packed = False
             if flt != "none":
                 kind, work = "filtered", os.path.join(stock_dir, "subset", n, f["id"])
             elif packed:
@@ -559,14 +591,15 @@ def file_rows(table: Dict[str, dict], names: List[str], stock_dir: str, raw_cach
                              fl.get("format"), fl.get("ids"), fl.get("column"), fl.get("taxon"),
                              header_lines(fl), work, kind, e["data_dir"].strip("/"),
                              f.get("stage_as"), ",".join(fl.get("keep_types") or []),
-                             ",".join(fl.get("xref_db") or [])))
+                             ",".join(fl.get("xref_db") or []), fl.get("drop_columns"),
+                             ";".join(fl.get("require") or [])))
         cl = e.get("chromosome_lengths")
         if cl:
             work, sname = works[cl["from"]]
             rows.append(_row(n, "chromosome-lengths", "derived", None, os.path.join(work, sname), None, None,
                              LENGTHS_FORMAT, None, None, "9606", 0,
                              os.path.join(stock_dir, "subset", n, "chromosome-lengths"), "derived",
-                             cl["data_dir"].strip("/"), LENGTHS_FILE, None, None))
+                             cl["data_dir"].strip("/"), LENGTHS_FILE, None, None, None, None))
     return rows
 
 
@@ -615,6 +648,7 @@ def cache_meta(table: Dict[str, dict], name: str) -> List[str]:
     spec = [{"id": f["id"], "url": f.get("url"), "raw": raw_name(f), "filter": filter_spec(f),
              "unpack": f.get("unpack"), "member": f.get("member"), "stage_as": f.get("stage_as")}
             for f in e["files"] if f.get("filter", "none") != "none"]
+    # (a file's `stream` flag does not enter the key: it changes how the cut is read, not what it holds)
     if e.get("chromosome_lengths"):
         spec.append({"chromosome_lengths": e["chromosome_lengths"]["from"], "file": LENGTHS_FILE})
     spec_md5 =hashlib.md5(json.dumps(spec, sort_keys=True).encode()).hexdigest()
@@ -627,6 +661,8 @@ def has_filtered(table: Dict[str, dict], name: str) -> bool:
 
 
 def download_bytes(table: Dict[str, dict], names: List[str], local_dir: Optional[str] = None) -> int:
-    """What the selection downloads, from the table's recorded sizes (0 for an unknown size)."""
+    """What the selection downloads and stores, from the table's recorded sizes (0 for an unknown size). A
+    streamed file (`stream: true`) is cut as it arrives and stores only its panel rows: not counted (a
+    --scope full build downloads it whole, which this count does not know) [im-9n4.27]."""
     return sum(int(f.get("size") or 0) for n in names for f in table[n]["files"]
-               if f.get("url") and not local_path(local_dir, n, f))
+               if f.get("url") and not f.get("stream") and not local_path(local_dir, n, f))

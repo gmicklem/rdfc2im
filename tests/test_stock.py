@@ -62,6 +62,9 @@ def test_every_entry_matches_humanmines_own_project_xml():
         assert s.get("type") == e["type"], n
         assert (s.get("version") == "4.3.0") == (e["jar"] == "humanmine-bio-sources"), n
         prop = e.get("data_property", "src.data.dir")
+        if prop == "none":      # update-publications and the like: project.xml's own file name stays
+            assert not any(p.get("name") == "src.data.dir" for p in s.iter("property")), n
+            continue
         loc = next(p.get("location") for p in s.iter("property") if p.get("name") == prop)
         want = f"/micklem/data/{e['data_dir']}" + (f"/{e['data_file']}" if prop == "src.data.file" else "")
         assert loc.rstrip("/") == want, (n, loc, want)
@@ -223,7 +226,7 @@ def test_file_rows_say_how_each_file_is_made_and_staged(tmp_path):
     t = stock.load_table()
     rows = [r.split("\t") for r in stock.file_rows(t, ["uniprot", "panther", "psi-mi-ontology", "biogrid"],
                                                     "/S", "/S/cache")]
-    assert all(len(r) == 18 for r in rows)
+    assert all(len(r) == 20 for r in rows)
     assert all(r[16] == "-" for r in rows)                    # keep_types: gff3 only
     by = {(r[0], r[1]): r for r in rows}
     u = by[("uniprot", "sprot")]
@@ -448,7 +451,7 @@ def test_every_source_has_a_complete_licence_record():
     t = stock.load_table()
     for n, e in t.items():
         assert e["licence_status"] in stock.LICENCE_STATUSES, n
-        assert e["licence_checked"] == "2026-11-18" or e["licence_status"] == "not-checked", n
+        assert e["licence_checked"] in ("2026-11-18", "2026-11-20") or e["licence_status"] == "not-checked", n
         assert e.get("licence_conditions"), n
         assert e.get("redistributable_reason"), n
         if e["licence_status"] in ("verified", "partial"):
@@ -495,3 +498,25 @@ def test_disease_name_priority_ranks_orphanet_above_hpo_annotation():
     line = next(l for l in open(path, encoding="utf-8") if l.startswith("Disease.name"))
     order = [w.strip() for w in line.split("=", 1)[1].split(",")]
     assert order.index("orphanet") < order.index("hpo-annotation"), order
+
+
+# ------------------------------------------------------------------ milestone 3 sources [im-9n4.27]
+
+
+def test_validation_of_stream_drop_columns_and_require():
+    bad = {
+        "a": _entry(files=[{"id": "x", "url": "https://e/x.gz", "stage_as": "x", "stream": True}]),
+        "b": _entry(files=[{"id": "x", "url": "https://e/x.zip", "unpack": "zip", "member": "m", "stage_as": "x",
+                            "stream": True, "filter": {"format": "gaf", "ids": "uniprot"}}]),
+        "c": _entry(files=[{"id": "x", "url": "https://e/x", "stage_as": "x",
+                            "filter": {"format": "gaf", "ids": "uniprot", "drop_columns": "2"}}]),
+        "d": _entry(files=[{"id": "x", "url": "https://e/x", "stage_as": "x",
+                            "filter": {"format": "tab", "ids": "mgi", "column": "1", "require": ["nope"]}}]),
+    }
+    probs = " | ".join(stock.validate_table(bad))
+    for needle in ("a/x: `stream` is for", "b/x: `stream` is for", "c/x: `drop_columns` and `require` are for format tab",
+                   "d/x: `require` must be a list"):
+        assert needle in probs, (needle, probs)
+    ok = _entry(files=[{"id": "x", "url": "https://e/x.gz", "stage_as": "x", "stream": True,
+                        "filter": {"format": "tab", "ids": "none", "column": "1", "drop_columns": "10"}}])
+    assert stock.validate_table({"ok": ok}) == []

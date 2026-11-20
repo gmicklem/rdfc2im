@@ -748,6 +748,15 @@ phase_publish_intermine() {
     --exclude .git --exclude build --exclude .gradle --exclude .gate-logs --exclude __pycache__
   log "intermine-src: $(git -C "$INTERMINE_SRC" log -1 --format='%h %s' 2>/dev/null || echo 'not a git checkout')$(
     git -C "$INTERMINE_SRC" diff --quiet HEAD 2>/dev/null || echo ' (with uncommitted changes)')"
+  # update-data-sources writes a Publication for the paper of each database it describes, and its keys file keys only
+  # DataSource: every run made unkeyed duplicates of the papers the mine already had (146 duplicate pubMedIds on the
+  # first panel build). The copy of the checkout gets the key every other source has; the checkout itself is not touched
+  # [im-9n4.27]
+  case " $STOCK_SOURCES " in *" update-data-sources "*)
+    deployer_edit "$src/bio/sources/update-data-sources/src/main/resources/update-data-sources_keys.properties" \
+      "Publication keyed on pubMedId (the converter writes a Publication per data source and keys none)" \
+      -e '/^Publication\.key_pubmed=/b' -e '$a Publication.key_pubmed=pubMedId' ;;
+  esac
   run mkdir -p "$IM_M2"
   # PSQL_*: install_intermine.py requires them; they only go into the test properties.
   run_in "$src" env PSQL_HOST="${PSQL_HOST:-localhost}" PSQL_USER="${PSQL_USER:-test}" PSQL_PWD="${PSQL_PWD:-test}" \
@@ -1196,14 +1205,15 @@ _last_modified() {
 phase_fetch_stock_data() {
   [ -n "$STOCK_SOURCES" ] || { log "no --stock-sources: nothing to fetch"; return 0; }
   activate_venv
-  local rows src fid origin url raw unpack member fmt ids col taxon keep work kind sdir sname ktypes xdb
+  local rows src fid origin url raw unpack member fmt ids col taxon keep work kind sdir sname ktypes xdb drop req
   _fetch_resolver_data
   rows=$(_stock_files)
   for src in $STOCK_SOURCES; do
     local group="stock-raw-$src" urls=() fids=() raws=() whole=0
-    while IFS=$'\t' read -r -u 3 s fid origin url raw unpack member fmt ids col taxon keep work kind sdir sname ktypes xdb; do
+    while IFS=$'\t' read -r -u 3 s fid origin url raw unpack member fmt ids col taxon keep work kind sdir sname ktypes xdb drop req; do
       [ "$s" = "$src" ] || continue
       [ "$origin" = derived ] && continue     # made from another file of the source by subset_stock_data
+      [ "$origin" = stream ] && { log "$src/$fid: streamed through the panel filter by subset_stock_data (not stored): $url"; continue; }
       [ "$origin" = download ] || { log "$src/$fid: local copy $raw"; continue; }
       urls+=("$url"); fids+=("$fid"); raws+=("$(basename "$raw")")
       [ "$kind" = filtered ] || whole=1
@@ -1308,7 +1318,7 @@ _stock_filtered_cache() {
 # or a whole file unpacked from its archive or .gz, or a derived file (the Chromosome lengths read from
 # a filtered GFF, tools/subset_raw.py chromosome-lengths). Arguments are the row's fields.
 _stock_produce() {
-  local src=$1 fid=$2 raw=$3 unpack=$4 member=$5 fmt=$6 ids=$7 col=$8 taxon=$9 keep=${10} work=${11} kind=${12} sname=${13} ktypes=${14:-} xdb=${15:-}
+  local src=$1 fid=$2 raw=$3 unpack=$4 member=$5 fmt=$6 ids=$7 col=$8 taxon=$9 keep=${10} work=${11} kind=${12} sname=${13} ktypes=${14:-} xdb=${15:-} drop=${16:-} req=${17:-}
   local in=$raw tmp="$STOCK_DIR/unpacked/$src/$fid"
   run rm -rf "$work"
   run mkdir -p "$work"
@@ -1353,6 +1363,11 @@ _stock_produce() {
     [ -z "$taxon" ] || args+=(--taxon "$taxon")
     [ "${keep:-0}" = 0 ] || args+=(--keep-lines "$keep")   # keep_header: the number of leading lines kept [im-9n4.14]
     [ -z "$ktypes" ] || args+=(--keep-types "$ktypes")
+    [ -z "$drop" ] || args+=(--drop-columns "$drop")
+    if [ -n "$req" ]; then   # COLUMN=REGEX words, ';'-separated (a regex has no ';')
+      local reqs r; IFS=';' read -ra reqs <<< "$req"
+      for r in "${reqs[@]}"; do args+=(--require "$r"); done
+    fi
     run python3 tools/subset_raw.py filter "${args[@]}"
     [ -z "$unpack" ] || run rm -rf "$tmp"
   fi
@@ -1368,7 +1383,7 @@ phase_subset_stock_data() {
   [ -n "$STOCK_SOURCES" ] || { log "no --stock-sources: nothing to subset"; return 0; }
   activate_venv
   [ "$DRY_RUN" -eq 1 ] || [ -f tools/subset_raw.py ] || die "tools/subset_raw.py (task T0.2) is missing"
-  local rows s fid origin url raw unpack member fmt ids col taxon keep work kind sdir sname ktypes xdb
+  local rows s fid origin url raw unpack member fmt ids col taxon keep work kind sdir sname ktypes xdb drop req
   rows=$(_stock_files)
   if [ "$SCOPE" = full ]; then
     # --scope full: no panel, so no id sets; every stock file is unpacked or used as it is [im-9n4.26]
@@ -1427,6 +1442,8 @@ phase_subset_stock_data() {
     [ "$SCOPE" = full ] || case "$src" in   # these two are cut to panther's partner genes: a new PANTHER release changes the cut
       mgi-identifiers) need+=(--meta "partners_md5=$(md5sum "$STOCK_DIR/idsets/mgi.txt" 2>/dev/null | cut -d' ' -f1 || true)") ;;
       rgd-identifiers) need+=(--meta "partners_md5=$(md5sum "$STOCK_DIR/idsets/rgd.txt" 2>/dev/null | cut -d' ' -f1 || true)") ;;
+      mgi-alleles) need+=(--meta "partners_md5=$(md5sum "$STOCK_DIR/idsets/mgi.txt" 2>/dev/null | cut -d' ' -f1 || true)") ;;
+      interpro) need+=(--meta "ipr_md5=$(md5sum "$STOCK_DIR/idsets/ipr.txt" 2>/dev/null | cut -d' ' -f1 || true)") ;;   # cut to protein2ipr's entries
     esac
     # a source with no filtered file has no filtered group, so its derived file (ncbi-gff's chromosome
     # lengths, read from the whole GFF under --scope full) is made on every build, never restored
@@ -1444,8 +1461,23 @@ phase_subset_stock_data() {
         restore=0
       fi
     fi
-    while IFS=$'\t' read -r -u 3 s fid origin url raw unpack member fmt ids col taxon keep work kind sdir sname ktypes xdb; do
+    # A streamed file (protein2ipr.dat.gz, 13.8 GB: `stream: true`) has no raw group to cut again, so its filtered
+    # group is reused whenever the key matches, with or without --use-cached-data; with no match it is streamed
+    # again (an hour or more) unless --offline, which has no network [im-9n4.27]
+    local streamed=0 stream_meta=""
+    if awk -F'\t' -v s="$src" '$1 == s && $3 == "stream" { f = 1 } END { exit !f }' <<< "$rows"; then
+      streamed=1
+      if [ -f "$cdir/$group/META.json" ] && python3 -m rdfc2im cache verify "$group" --cache-dir "$cdir" "${need[@]}" >/dev/null 2>&1; then
+        restore=1
+      else
+        [ "$OFFLINE" -eq 0 ] || [ "$DRY_RUN" -eq 1 ] || die "$src: no filtered group for this panel in $cdir and --offline cannot stream it (run once with --use-cached-data)"
+        log "$src: no filtered group for this panel in $cdir; streaming it from upstream through the panel filter"
+        restore=0
+      fi
+    fi
+    while IFS=$'\t' read -r -u 3 s fid origin url raw unpack member fmt ids col taxon keep work kind sdir sname ktypes xdb drop req; do
       [ "$s" = "$src" ] || continue
+      [ "$origin" != stream ] || [ "$restore" -eq 1 ] || stream_meta+=" --meta release.$fid=$(_last_modified "$url")"
       case "$kind" in
         filtered) filtered=1
                   [ "$restore" -eq 1 ] && continue ;;
@@ -1453,7 +1485,7 @@ phase_subset_stock_data() {
         asis) continue ;;
       esac
       _stock_produce "$src" "$fid" "$raw" "$(_dash "$unpack")" "$(_dash "$member")" "$(_dash "$fmt")" "$(_dash "$ids")" \
-        "$(_dash "$col")" "$(_dash "$taxon")" "$keep" "$work" "$kind" "$(_dash "$sname")" "$(_dash "$ktypes")" "$(_dash "$xdb")"
+        "$(_dash "$col")" "$(_dash "$taxon")" "$keep" "$work" "$kind" "$(_dash "$sname")" "$(_dash "$ktypes")" "$(_dash "$xdb")" "$(_dash "$drop")" "$(_dash "$req")"
       # phenotype.hpoa is disease-keyed: cut to the diseases of the genes_to_phenotype.txt just filtered (listed
       # before it in the table), as mgi-identifiers is cut to panther's partners [im-9n4.15]
       if [ "$SCOPE" != full ] && [ "$src" = hpo-annotation ] && [ "$fid" = genes-to-phenotype ]; then
@@ -1466,7 +1498,10 @@ phase_subset_stock_data() {
     else
       # shellcheck disable=SC2086  # --meta k=v words without whitespace
       run python3 -m rdfc2im cache save "$group" "$STOCK_DIR/subset/$src" --cache-dir "$cdir" "${need[@]}" \
-        $more $(_stock_releases "$src")
+        $more $(_stock_releases "$src") $stream_meta
+    fi
+    if [ "$SCOPE" != full ] && [ "$src" = protein2ipr ]; then   # interpro.xml is cut to the entries of these rows
+      run python3 tools/subset_raw.py ipr-ids --in "$STOCK_DIR/subset/protein2ipr/matches/protein2ipr.dat" --out "$STOCK_DIR/idsets"
     fi
     if [ "$src" = panther ]; then
       run python3 tools/subset_raw.py partner-ids --in "$STOCK_DIR/subset/panther/orthologs/RefGenomeOrthologs" \
@@ -1890,9 +1925,9 @@ phase_stage_src_data() {
 # file (a deployment's own HumanMine data under /micklem/data) is never replaced.
 _stage_stock_data() {
   activate_venv
-  local rows s fid origin url raw unpack member fmt ids col taxon keep work kind sdir sname ktypes xdb dirs=""
+  local rows s fid origin url raw unpack member fmt ids col taxon keep work kind sdir sname ktypes xdb drop req dirs=""
   rows=$(_stock_files)
-  while IFS=$'\t' read -r -u 3 s fid origin url raw unpack member fmt ids col taxon keep work kind sdir sname ktypes xdb; do
+  while IFS=$'\t' read -r -u 3 s fid origin url raw unpack member fmt ids col taxon keep work kind sdir sname ktypes xdb drop req; do
     [ -n "$s" ] || continue
     case " $dirs " in *" $sdir "*) ;; *) dirs="$dirs $sdir" ;; esac
   done 3<<< "$rows"
@@ -1901,7 +1936,7 @@ _stage_stock_data() {
     run mkdir -p "$DATA_ROOT/$d"
     run find "$DATA_ROOT/$d" -maxdepth 1 -type l \( -lname "$STOCK_DIR/*" ${STOCK_LOCAL:+-o -lname "${STOCK_LOCAL%/}/*"} \) -delete
   done
-  while IFS=$'\t' read -r -u 3 s fid origin url raw unpack member fmt ids col taxon keep work kind sdir sname ktypes xdb; do
+  while IFS=$'\t' read -r -u 3 s fid origin url raw unpack member fmt ids col taxon keep work kind sdir sname ktypes xdb drop req; do
     [ -n "$s" ] || continue
     local dest="$DATA_ROOT/$sdir" from
     if [ "$kind" = asis ]; then from=$raw; else from="$work/$sname"; fi
