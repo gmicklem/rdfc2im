@@ -2240,6 +2240,101 @@ Not in the list, and a question of their own: 84 bare Publications (a `pubMedId`
 cites, on the same demo. 80 are bibrefs of psi-intact experiments whose interactions the panel filter dropped, 4 are
 references of go-annotation rows that loaded no annotation. The live test holds them to a bound (150).
 
+## The milestone 3 sources: interpro, protein2ipr, pubmed-gene, mgi-alleles, humanmine-static, update-data-sources, update-publications, entrez-organism [im-9n4.27, T3.3]
+
+Eight more stock sources are in `rdfc2im/data/stock_sources.yaml` (licences read on 20 Nov 2026, `docs/LICENCES.md`).
+The `drive-ut-NAME.sh` stock list adds them after `orphanet`. DepMap is not in this list (below).
+
+| Source | Loads | Panel cut | Full scope | Size |
+|---|---|---|---|---|
+| `protein2ipr` | `ProteinDomainRegion` (database, start, end) of each loaded human protein | read while it downloads and cut to the panel's UniProt accessions, and to the member signatures the converter names (`stream: true`) | downloaded and unpacked whole | 13.75 GB gzipped (4 Nov 2026), about 70 min at 3 MB/s, nothing stored |
+| `interpro` | `ProteinDomain` name, short name, type, description, relatives, `Publication`s | the entries of the panel's matches and the entries those relate to (`ipr-ids`, `interpro-xml`) | whole | 45 MB gzipped, 72,944 entries |
+| `pubmed-gene` | `Gene.publications` (a `Publication` with a `pubMedId` per row) | rows of the panel's Entrez ids (column 2) | whole | 291 MB gzipped, every taxon |
+| `mgi-alleles` | mouse `Allele`, `Genotype`, `Gene.alleles`, `MammalianPhenotypeTerm` links | rows whose marker is a mouse gene on the panel's PANTHER rows (`idsets/mgi.txt`) | whole, but column 10 of the alleles file is still dropped | 32 + 1.3 + 54 MB |
+| `humanmine-static` | `DataSet` and `DataSource` descriptions, versions, urls (an Items XML file, no converter) | none | none | 28 KB, pinned to commit e7a86ea of 11 Feb 2022 |
+| `update-data-sources` | `DataSource.url`, `description` and a `Publication` for each DataSource named like a UniProt database | none (UniProt's `dbxref.txt`, 56 KB) | none | |
+| `update-publications` | `Publication` title, authors, year, journal, abstract, from E-utilities | none (it reads the mine) | none | needs `eutils.ncbi.nlm.nih.gov` |
+| `entrez-organism` | `Organism` name, genus, species, short name, from E-utilities | none (it reads the mine) | none | needs `eutils.ncbi.nlm.nih.gov` |
+
+**The panel build of 20 Nov 2026** (`drive-ut-9n427.sh`, every phase from `publish_intermine`, 1,882 s, peak 14.2 GB of
+16 GB in use; the first batch without protein2ipr and interpro had run before it). Before and after, objects in the
+mine and what these sources and the Protein.organism ranking [im-9n4.49] changed:
+
+| | before | after |
+|---|---|---|
+| all objects | 1,122,718 | 1,222,869 |
+| `Gene` (every human gene as an identifier) | 65,471 | 65,471 |
+| `Protein` | 23,062 | 23,062 |
+| `Protein` with no organism | 1,404 | 436 (135 isoform accessions, 301 non-human; none a protein another source knows by its accession) |
+| `ProteinDomainRegion` | 0 | 15,128 (protein2ipr: every row of the cut loaded) |
+| `ProteinDomain` | 14,776 | 15,261 (945 with a name, short name and type from interpro: all that have a region) |
+| `Allele` | 59,031 | 61,167 (1,657 of the mouse genes', Pax6 61), `Genotype` 0 to 1,387 |
+| `Publication` | 32,794 (6,895 titled) | 120,042 (4,067 titled) |
+| `DataSet` | 30 | 67 (of which 30 or so empty: humanmine-static, below) |
+| `DataSource` with a url | 30 of 147 | 149 of 165 (138 with a description) |
+
+protein2ipr's cut, read in 60 minutes at 3 to 5 MB/s, is 15,128 rows (1,040,394 bytes) of the 1,547 panel accessions
+and 403 InterPro entries; interpro.xml is cut from 72,944 entries to 945 (the 403 and their relatives, 19 MB).
+Publications fell from 6,895 titled to 4,067 because the pubmed source now loads the 3,930 cited PMIDs [im-9n4.48]
+and not 6,758; pubmed-gene added 87,000 with a pubMedId and no title.
+
+**Streaming protein2ipr.** A file with `stream: true` is never put in the raw cache: `subset_stock_data` runs
+`subset_raw.py filter --in <URL>`, which reads the URL (resuming with a Range request when the connection drops; a
+server that ignores Range stops the cut rather than repeat the start), unzips as it reads and writes only the kept
+rows. The cut is the cache group `stock-protein2ipr` in the stock filtered cache, reused with or without
+`--use-cached-data` while its key (panel, filter spec) matches; `--offline` cannot stream and says so. The first run is
+an hour or more: start it on its own, `DRIVE_OFFLINE=0 drive-ut-NAME.sh subset_stock_data subset_stock_data`, from a
+second checkout of the branch if the first is being edited.
+
+**What the converters needed from rdfc2im** (pre-processing of the cut, so the converters stay as they are):
+
+* protein2ipr: `Protein2iprConverter.getSource()` throws `Unknown DB found` for a member signature it has no name
+  for. NCBIFAM (`NF00...`) matches are new since 2022 (1,070 of 323,843 rows in the first 5 MB of the file): the cut
+  keeps only rows whose signature starts with a prefix the converter names (`require: ["4=^(PF|SM|...)"]`). T3.4:
+  add `NF` to getSource() and the NCBIFAM matches load.
+* mgi-alleles: `MGI_PhenotypicAllele.rpt` gained a `Marker Ensembl ID` column (10) where the converter reads the
+  high-level phenotype ids (line[9]); the cut drops it (`drop_columns: "10"`), and without it every allele would have
+  had an `ENSMUSG...` Mammalian Phenotype term. T3.4, two more drifts that stay: `MGI_PhenoGenoMP.rpt` has PubMed ids
+  in the column the converter reads as the markers (line[4]), so `complex: > 1 genome feature` is never set;
+  `MGI_QTLAllele.rpt`'s phenotype ids moved from column 9 to 14.
+* update-data-sources: its keys file keys only `DataSource`, so the `Publication` it writes for each database's paper
+  duplicated the paper where the mine already had it (146 duplicate pubMedIds on the first panel build). A deployer
+  edit of the copy of the checkout in `publish_intermine` adds `Publication.key_pubmed=pubMedId` (T3.4: one line in
+  `update-data-sources_keys.properties`).
+* `DataSource.url` and `DataSource.description` rank `humanmine-static, update-data-sources, *` in
+  `curation/priorities_override.properties`: ranked last, `update-data-sources` never filled a field that another
+  source had written as empty (the tracker records the empty field's source), and unranked it stopped the load with
+  `Conflicting values for field DataSource.url between humanmine-ensembl and update-data-sources`.
+
+**The two E-utilities sources** run as the last two sources of `integrate_sources`: each is a pre-retrieve step (a Java
+class that reads `os.production` and writes `publications.xml` or `organisms.xml` through E-utilities) and a load of
+that file, which `:dbmodel:integrate -Psource=NAME` runs as one. They need the build to reach
+`eutils.ncbi.nlm.nih.gov`, which the sandbox blocks until `sbx policy allow network eutils.ncbi.nlm.nih.gov` (HTTP 403,
+"Approval required", 20 Nov 2026). Without it leave both out of `DRIVE_STOCK`; after allowing the host they can be added
+to a built mine, last, with `:dbmodel:integrate -Psource=update-publications` and then `-Psource=entrez-organism` in the
+mine's directory, followed by the `postprocess` phase for the search index. With pubmed-gene the mine has some 117,000
+`Publication`s, 4,000 of them with a title (those the RDF pubmed source loaded): update-publications asks for about
+115,000 in batches of 500, 3 requests a second at most without an API key.
+
+**humanmine-static** names HumanMine's own sources (`interpro`, `panther`, `ncbi-gff`, `omim`, ...), not the data set titles
+the converters write here (`InterPro data set`, `Panther orthologue and paralogue predictions`, ...). Of its 41
+`DataSet`s only the ones whose name is the title of a loaded one (ncbi-gff, mgi-alleles, atlas-express, uniprot-fasta,
+hpo-annotation, orphanet) describe loaded data; the other 30 or so become `DataSet`s with no data, versions of 2021 and
+2022 included. The file is HumanMine's, last changed on 11 Feb 2022; whether this mine should carry those 30 is for the
+maintainers (a filter to the loaded data sets cannot be written before the load).
+
+**DepMap** (`depmap-sample-info`, `depmap-expression`) is not wired; its licence is being read elsewhere. What it
+needs: `sample_info.csv` and `CCLE_expression.csv` from the DepMap portal (no stable URL: a release is picked by
+name, and a person has to fetch the files, or `--stock-local DIR` supplies them as for OMIM, with `local_copy:
+required` if the licence forbids redistribution). Both converters read a fixed file name and fixed column offsets (the
+sample file's `line[22]` for the lineage); DepMap renamed its release files after 2022 (`Model.csv`,
+`OmicsExpressionProteinCodingGenesTPMLogp1.csv`), so the converters need T3.4 changes first. The expression file is a
+matrix of about 1,400 cell lines by 19,000 genes ("SYMBOL (EntrezID)" as the header cells): the panel cut is a new
+`subset_raw.py` format that keeps the header cells of the panel's genes (column filter, not row filter), and
+`DepmapExpressionConverter.GENE_LIST_FILE` is empty, so the ID-resolver gate (the all-human `entrez` file) is what
+drops the rest. Table entries, the two project.xml data directories (`/micklem/data/human/depmap`) and a live test
+(`DepMapExpression` of a panel gene in a named cell line) are the rest.
+
 ## Persistence, and what does not survive
 
 **The loaded mine lives in Docker volumes** - `rdfc2im-pgdata` and `rdfc2im-solrdata` (named
