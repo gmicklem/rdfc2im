@@ -442,13 +442,23 @@ def test_expression_and_disease_files_are_redistributable_and_hpa_says_share_ali
     assert t["omim"]["redistributable"] is False
 
 
+def test_ensembl_record_is_the_disclaimer_read_at_source():
+    """im-9n4.45: Ensembl's disclaimer was read on 2026-11-20 (the archive host RDF Portal's link lands on)."""
+    e = _sources_cfg()["ensembl"]
+    assert e["licence_status"] == "verified" and e["licence_checked"] == "2026-11-20"
+    assert e["licence_url"].endswith("/info/about/legal/disclaimer.html")
+    assert "imposes no restrictions" in e["licence_quote"] and e["redistributable"] is True
+    assert e["data_set_licence"].endswith("/info/about/legal/disclaimer.html")
+    assert any("third-party" in c for c in e["licence_conditions"])
+
+
 def test_every_source_has_a_complete_licence_record():
     """im-9n4.45: the licence is what the source states, with the page, the date and a status; an unread licence
     says so (`not verified`) instead of carrying a guess."""
     t = stock.load_table()
     for n, e in t.items():
         assert e["licence_status"] in stock.LICENCE_STATUSES, n
-        assert e["licence_checked"] == "2026-11-18" or e["licence_status"] == "not-checked", n
+        assert e["licence_checked"] in ("2026-11-18", "2026-11-20") or e["licence_status"] == "not-checked", n
         assert e.get("licence_conditions"), n
         assert e.get("redistributable_reason"), n
         if e["licence_status"] in ("verified", "partial"):
@@ -458,7 +468,7 @@ def test_every_source_has_a_complete_licence_record():
     rdf = _sources_cfg()
     for n in ("go", "ncbigene", "reactome", "hgnc", "ensembl", "uniprot", "clinvar", "gwascatalog", "pubmed", "hpo"):
         assert not stock.licence_problems(n, rdf[n]) and rdf[n]["licence_status"], n
-        assert rdf[n]["licence_checked"] == "2026-11-18" and rdf[n]["redistributable_reason"], n
+        assert rdf[n]["licence_checked"] in ("2026-11-18", "2026-11-20") and rdf[n]["redistributable_reason"], n
         assert "rdfportal_licence_note" in rdf[n], n
     other = stock.other_licences()
     assert set(other) == {"reactome", "ncbi-gene-info", "bluegenes-tools", "imjs"}

@@ -52,7 +52,7 @@ verified licence from an unverified one; this file and `licence_status` do.
 | RDF `ncbigene` | No restrictions by NCBI (no licence named) | verified | <https://www.ncbi.nlm.nih.gov/home/about/policies/> | 2026-11-18 | yes | as ncbi-gff |
 | RDF `reactome` | CC0-1.0 | verified | <https://reactome.org/license> | 2026-11-18 | yes | attribution encouraged, not required |
 | RDF `hgnc` | CC0-1.0 | verified | <https://www.genenames.org/about/license/> | 2026-11-18 | yes | none; attribution recommended (Seal et al., NAR; RRID:SCR_002827) |
-| RDF `ensembl` | not verified | not verified | <https://rdfportal.org/dataset/ensembl/> | 2026-11-18 | yes (flag only) | unknown: the disclaimer redirects to jun2026.archive.ensembl.org, not allowed |
+| RDF `ensembl` | No restrictions by Ensembl (disclaimer); code Apache-2.0 | verified | <https://jun2026.archive.ensembl.org/info/about/legal/disclaimer.html> (the page RDF Portal names, after redirect) | 2026-11-20 | yes | none stated; third-party data in the distribution may carry their own constraints and the user must check them; no warranty |
 | RDF `uniprot` | CC-BY-4.0 | verified | <https://ftp.ebi.ac.uk/pub/databases/uniprot/current_release/knowledgebase/complete/README> | 2026-11-18 | yes | attribution; say the data were changed |
 | RDF `clinvar` | No restrictions by NCBI (general policy); ClinVar's own page unread | partial | <https://www.ncbi.nlm.nih.gov/home/about/policies/> | 2026-11-18 | yes | as ncbi-gff; ClinVar's data-use page is behind NCBI's bot check |
 | RDF `gwascatalog` | EMBL-EBI terms of use (summary statistics CC0) | partial | <https://www.ebi.ac.uk/gwas/docs/about> | 2026-11-18 | yes (flag only) | EMBL-EBI terms; TogoVar's terms are behind a Cloudflare bot check |
@@ -93,7 +93,7 @@ load through `humanmine-items`, and rdfc2im's items carried no `DataSet.licence`
 | RDF `ncbigene` | not recorded | none: the rdfc2im items carry no DataSet.licence | NCBI Gene (RDF Portal): empty |
 | RDF `reactome` | not recorded | none: the rdfc2im items carry no DataSet.licence | shares "Reactome pathways data set" with stock reactome: empty |
 | RDF `hgnc` | not recorded | none: the rdfc2im items carry no DataSet.licence | HGNC identifiers (RDF Portal): empty |
-| RDF `ensembl` | not recorded | none: the rdfc2im items carry no DataSet.licence | Ensembl genes (RDF Portal): empty |
+| RDF `ensembl` | not recorded | `https://www.ensembl.org/info/about/legal/disclaimer.html` (the items write `data_set_licence` since 2026-11-20) | Ensembl genes (RDF Portal): empty until the next build |
 | RDF `uniprot` | not recorded | none: the rdfc2im items carry no DataSet.licence | UniProtKB, Swiss-Prot and TrEMBL (RDF Portal): empty |
 | RDF `clinvar` | not recorded | none: the rdfc2im items carry no DataSet.licence | ClinVar (RDF Portal): empty |
 | RDF `gwascatalog` | not recorded | none: the rdfc2im items carry no DataSet.licence | GWAS Catalog (TogoVar): empty |
@@ -137,8 +137,8 @@ source of the information by including the phrase "Courtesy of the National Libr
 Library of Medicine." for government works on its sites; the PubMed data terms are the ones above).
 
 No `redistributable` flag was changed in either pass: nothing read forbids a copy. What the second pass changed is the
-conditions: GTEx and HPO now carry conditions a copy must meet (see the notices), and PANTHER and Ensembl remain
-without any stated term.
+conditions: GTEx and HPO now carry conditions a copy must meet (see the notices), and PANTHER and Ensembl remained
+without any stated term (Ensembl was settled in the third pass, below).
 
 ## Converter mismatches (for a follow-up in the intermine and humanmine-bio-sources checkouts)
 
@@ -176,17 +176,22 @@ rdfc2im's `emit_items` (`rdfc2im/items.py`, the DataSource/DataSet block near th
 DataSet item for every RDF source. It now reads the optional key `data_set_licence` of the source in
 `rdfc2im/data/sources.yaml` and writes it as `DataSet.licence` (added after the DataSet is made, so the DataSet's key
 stays its name; `tests/test_items.py::test_data_set_gets_the_upstream_licence_when_the_source_config_declares_one`).
-Set for eight sources: ncbigene and clinvar (NCBI policy page), hgnc and reactome (CC0), uniprot and go (CC BY 4.0),
-hpo (`https://hpo.jax.org/license`), pubmed (NLM's download page). Not set for ensembl (not verified) and gwascatalog
+Set for nine sources: ensembl (added 2026-11-20, third pass), ncbigene and clinvar (NCBI policy page), hgnc and reactome (CC0), uniprot and go (CC BY 4.0),
+hpo (`https://hpo.jax.org/license`), pubmed (NLM's download page). Not set for gwascatalog
 (partial; TogoVar's terms unread). Effect: the demo mine shows these only after the next build with this code; the
 reactome data set is shared with stock reactome, which stamps the same CC0 URL.
+
+Third pass (20 Nov, after the project owner allowed the Ensembl archive host):
+
+| Source | Second pass | Now | Read at |
+|---|---|---|---|
+| RDF ensembl | not verified | **verified: "Ensembl imposes no restrictions on access to, or use of, the data provided and the software used to analyse and present it. Ensembl data generated by members of the project are available without restriction."** Third-party data may carry constraints; code is Apache 2.0 | https://jun2026.archive.ensembl.org/info/about/legal/disclaimer.html (www.ensembl.org redirects there); the legal index and RDF Portal's data set page (Ensembl version 115, issued 2026-02-27, licence given as `http://ensembl.org/info/about/legal/disclaimer.html`) |
 
 ## Sources not verified, and what would settle them
 
 | Source | Why not | What would settle it |
 |---|---|---|
 | stock `panther` | www.pantherdb.org answers curl with Cloudflare's "Just a moment" page and a headless browser times out; pantherdb.org (no www) fails the certificate check through the proxy; no LICENSE or README with terms in the data.pantherdb.org/ftp tree (about 14 directories listed) | a person reads https://www.pantherdb.org/tou.jsp in an ordinary browser and pastes the wording (no sbx rule helps) |
-| RDF `ensembl` | the disclaimer page redirects to https://jun2026.archive.ensembl.org/info/about/legal/disclaimer.html, HTTP 403 "Approval required for jun2026.archive.ensembl.org" (useast., asia. and ftp.ensembl.org likewise) | `sbx policy allow network jun2026.archive.ensembl.org` (the archive host name will change with each Ensembl release; `ftp.ensembl.org` would also give the README beside the data) |
 | RDF `gwascatalog` (TogoVar's terms) | togovar.org answers with a Cloudflare bot check, plain client and headless browser alike | a person reads https://togovar.org/doc/terms in a browser; the GWAS Catalog's own EMBL-EBI terms are read |
 | RDF `clinvar` (ClinVar's own page) | www.ncbi.nlm.nih.gov/clinvar/docs/maintenance_use/ answers with a reCAPTCHA page ("Checking your browser before accessing www.ncbi.nlm.nih.gov") | a person reads the page in a browser; NCBI's general policy (read) already says no restrictions |
 
@@ -239,6 +244,9 @@ source, licence and link.
   most current data from NLM; some abstracts may be copyrighted.
 * NCBI (ncbi-gff, ncbi-fasta, gene_info, RDF ncbigene, clinvar): no restrictions by NCBI; acknowledge NCBI/NLM as
   the source; some records may carry rights claimed by their submitters, which NCBI cannot waive.
+* Ensembl (RDF ensembl): the disclaimer imposes no restriction and asks for no attribution wording. Name Ensembl (via
+  RDF Portal, Ensembl release 115) as the source; the disclaimer says some data in the distribution may be subject to
+  third-party constraints, which the user must establish.
 * Reactome: CC0, no attribution required (given as courtesy). GWAS Catalog: cite the GWAS Catalog; EMBL-EBI terms apply.
 * Software shown to users: imjs (LGPL-3.0) and the two LGPL BlueGenes tools (cytoscape-interaction-network-viewer
   LGPL-3.0, protvista LGPL-2.1) need their licence text and a pointer to the source available.
@@ -261,8 +269,7 @@ The three archives, on the terms as now read. The notices are `docs/LICENCES-sto
   attribution recommended); the text is the ncbigene and hgnc entries of `docs/LICENCES-panel-cache.txt`.
 * release `demo-data-2026-11-18` on gmicklem/rdfc2im (the 16-group panel cache): **may stay published**, and it has
   had no notice file so far: add `docs/LICENCES-panel-cache.txt` to it. Two things for the project owner: the
-  `ensembl` group has no stated terms (the disclaimer page is behind a host the sandbox does not allow, and nothing
-  read forbids a copy), and `hpo` is the whole ontology as tables (HPO's no-alteration condition: nothing left out
+  `ensembl` group's terms are now read (third pass, 2026-11-20: no restrictions, see the table), and `hpo` is the whole ontology as tables (HPO's no-alteration condition: nothing left out
   or changed, a reading to accept). `clinvar` and `gwascatalog` are partial (the owner's pages are behind bot checks;
   the general NCBI policy and the EMBL-EBI terms say no further restriction). If any of these three is not
   acceptable, withdraw that group and re-upload the asset without it.
