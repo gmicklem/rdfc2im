@@ -871,3 +871,36 @@ sources:
         last_modified: "2026-11-16"
         stage_as: MGI_PhenoGenoMP.rpt
         filter: {format: tab, ids: mgi, column: "6"}
+
+  pubmed-gene:
+    type: pubmed-gene
+    jar: intermine
+    licence: "No restrictions by NCBI (NCBI data-use policy; no licence named)"
+    licence_status: verified
+    licence_url: "https://www.ncbi.nlm.nih.gov/home/about/policies/"
+    licence_checked: "2026-11-20"
+    licence_quote: "NCBI itself places no restrictions on the use or distribution of the data contained therein."
+    licence_conditions:
+      - "No licence is named and NCBI asks for no attribution for the data. The policy adds: \"some submitters of the original data (or the country of origin of such data) may claim patent, copyright, or other intellectual property rights in all or a portion of the data\"."
+      - "gene2pubmed is NCBI's own derived table (\"the logical equivalent of what is reported as Gene/PubMed Links\", README of ftp.ncbi.nlm.nih.gov/gene/DATA/, read 2026-11-20); it holds identifiers only, no abstract or title."
+      - "For NCBI's own web pages (public domain): \"it is requested that in any subsequent use of this work, NLM be given appropriate acknowledgment\"."
+    redistributable: true
+    redistributable_reason: "NCBI places no restrictions on use or distribution of its data; the file is identifiers only."
+    data_dir: pubmed/current
+    properties:
+      pubmed.organisms: "9606"
+    notes: >-
+      gene2pubmed (291 MB gzipped, every NCBI taxon, updated daily: Last-Modified 19 Nov 2026) is cut to the rows of
+      the panel's Entrez gene ids (column 2); the taxon column is not needed, an Entrez id belongs to one taxon.
+      The loader resolves each gene through the ID resolver (the all-human gene_info), creates a Publication per
+      PubMed id (pubMedId only) and adds it to Gene.publications. The titles, authors and abstracts of those
+      Publications come from update-publications (E-utilities) or, where the rdfc2im pubmed source loaded the
+      same id, from RDF Portal. HumanMine's own value is "9606 10090"; mouse genes are not resolved here, so 9606.
+    files:
+      - id: gene2pubmed
+        url: https://ftp.ncbi.nlm.nih.gov/gene/DATA/gene2pubmed.gz
+        verified: true
+        size: 290749084
+        last_modified: "2026-11-19"
+        stage_as: gene2pubmed
+        filter: {format: tab, ids: entrez, column: "2"}

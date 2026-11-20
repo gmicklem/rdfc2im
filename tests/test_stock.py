@@ -518,6 +518,19 @@ def test_protein2ipr_is_cut_while_it_downloads_and_interpro_is_cut_to_its_entrie
     assert stock.download_bytes(t, ["interpro"]) == 45100722
 
 
+def test_a_full_scope_build_downloads_protein2ipr_whole_but_still_drops_what_the_converter_throws_on():
+    t = stock.load_table()
+    p = [r.split("\t") for r in stock.file_rows(t, ["protein2ipr", "interpro", "mgi-alleles", "pubmed-gene"],
+                                                 "/S", "/S/cache", full=True)]
+    by = {(r[0], r[1]): r for r in p}
+    r = by[("protein2ipr", "matches")]
+    assert r[2] == "download" and r[8] == "none" and r[19].startswith("4=")      # kept on every row, none cut by gene
+    assert by[("interpro", "entries")][13] == "whole"
+    r = by[("mgi-alleles", "phenotypic-alleles")]
+    assert r[13] == "filtered" and r[8] == "none" and r[18] == "10"             # the column drop applies at full scope too
+    assert by[("mgi-alleles", "qtl-alleles")][13] == "asis" and by[("pubmed-gene", "gene2pubmed")][13] == "whole"
+
+
 def test_the_filter_spec_and_cache_key_carry_the_column_drop_and_the_required_values():
     t = stock.load_table()
     assert "drop_columns=10" in stock.filter_spec(t["mgi-alleles"]["files"][0])
