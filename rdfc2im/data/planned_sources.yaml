@@ -1,0 +1,23 @@
+# Sources that are known but NOT built [im-9n4.45]. Nothing in rdfc2im reads this file (stock.py, the pipeline and the
+# tools read stock_sources.yaml, sources.yaml and other_licences.yaml only); tests/test_stock.py only checks that it
+# parses and carries no entry that also sits in stock_sources.yaml. Same licence keys as the other records.
+depmap:
+  stock_sources_in_humanmine: [depmap-sample-info, depmap-expression]   # two, not three: humanmine-bio-sources has no third depmap-* source
+  data_source_name: depmap
+  data_source_url: https://depmap.org/portal/
+  licence: "not verified"
+  licence_status: not-verified
+  licence_url: "https://depmap.org/portal/terms/"
+  licence_checked: "2026-11-20"
+  licence_quote: ""
+  licence_conditions:
+    - "Read 2026-11-20 (UTC): https://depmap.org/portal/ (the home page) answers plain curl with the real page: current release 26Q3 (\"The 26Q3 release is now available!\"), \"DepMap releases data bi-annually\". Its deeper pages (/portal/terms/, /portal/data_page/, /portal/api/download/files, /portal/download/all/, the release-notes resource) answer HTTP 200 with a Cloudflare Turnstile page (\"Quick check before you enter: We're verifying you're a person, not a bot ... Need DepMap data in bulk? You're always welcome to grab everything from the downloads section - please don't scrape the portal.\"). The check was not worked around, so no licence wording was read."
+    - "Not reachable from the sandbox: forum.depmap.org (the 26Q3 announcement) and api.figshare.com / figshare.com answer 403 \"Approval required\"."
+    - "Earlier secondary sources said CC BY 4.0; that is NOT recorded as the licence because it was not read at source."
+  redistributable: false
+  redistributable_reason: "Unverified: terms unread, so false (nothing read allows a copy) and the portal asks automated readers to use the downloads section; settle by reading the terms and the release README in a browser."
+  converters:
+    depmap-expression: {reads: CCLE_expression.csv, items: DepMapExpression (gene, cellLine, DepmapExpressionValue)}
+    depmap-sample-info: {reads: sample_info.csv, items: CellLine}
+  written_for: "commits of 2021-10-06 and 2021-11-11 (DepMap 2021 releases); sample_info.csv columns DepMap_ID ... Sanger_Model_ID, lineage_molecular_subtype in the test fixture. Release name not stated in the repository."
+  humanmine_project_xml: "repos/humanmine project.xml lines 189-193: both sources have src.data.dir /micklem/data/human/depmap, version 4.3.0"
