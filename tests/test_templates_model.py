@@ -185,6 +185,12 @@ def rule_problems(tpl):
         parts = p.split(".")
         if any(".".join(parts[:i]) in joins for i in range(2, len(parts) + 1)):
             problems.append("sort path %s is outside the root outer join group" % p)
+    # the query service: "Outer join status path DataSet.publication is not relevant to the query" (seen live
+    # 20 Nov 2026) when no view or constraint path goes through a join's path
+    used = (q.get("view") or "").split() + [c.get("path") or "" for c in cons]
+    for j in sorted(joins):
+        if not any(u == j or u.startswith(j + ".") for u in used):
+            problems.append("join %s is not relevant to the query" % j)
     return problems
 
 
@@ -196,6 +202,7 @@ def test_rule_problems_catches_what_intermine_refuses():
     assert any("name" in p for p in got)
     assert "no editable constraint" in got and "non-editable LOOKUP" in got
     assert any("root outer join group" in p for p in got)
+    assert "join DataSet.dataSource is not relevant to the query" in got
 
 
 def test_every_template_the_build_applies_parses_and_follows_intermines_rules():
@@ -222,10 +229,12 @@ def test_all_data_sources_lists_every_data_set_with_its_source_version_licence_a
     assert tpl.get("title") == "All data sources"
     assert q.get("longDescription"), "the description BlueGenes shows under the title"
     assert q.get("view").split() == DATA_SOURCES_VIEW
-    assert q.get("sortOrder").split() == ["DataSet.dataSource.name", "asc", "DataSet.name", "asc"]
-    # a data set without a citation still shows; the data source is an inner join (every DataSet has one, and
-    # the sort on its name must be in the root outer join group)
-    assert outer_joins(q) == {"DataSet.publication"}
+    # Both references are outer joins, so every DataSet shows: one without a citation, and one without a DataSource
+    # (the rebuilt ut mine of 20 Nov 2026 has "modMine gene flanking regions", made by InterMine's flanking-regions
+    # postprocess with no DataSource: an inner join left it out, 32 rows for 33 DataSets). A sort path must be in
+    # the root outer join group, so the sort is on DataSet.name alone (the mine refuses DataSet.dataSource.name).
+    assert q.get("sortOrder").split() == ["DataSet.name", "asc"]
+    assert outer_joins(q) == {"DataSet.publication", "DataSet.dataSource"}
     # licence, version, description and url are attributes of DataSet itself: no join, a missing one is empty
 
 
