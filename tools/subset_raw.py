@@ -1191,11 +1191,17 @@ def _read_lookup(lookup_dir, symbols, taxon):
     <resolver>-<taxon>-<md5 of sorted symbols joined by newline>.txt, in lookup_dir or lookup_dir/data)."""
     key = hashlib.md5("\n".join(sorted(symbols)).encode("utf-8")).hexdigest()
     found = {}
-    for resolver, kind in (("resolve_ncbigene_symbols", "entrez"), ("resolve_ensembl_symbols", "ensembl")):
+    # resolve_ensembl_xref: ensembl's panel genes by cross-reference [im-9n4.59]; gwascatalog still asks
+    # resolve_ensembl_symbols. Both answers go into the ensembl set (the paths joined by ", ").
+    for resolver, kind in (("resolve_ncbigene_symbols", "entrez"), ("resolve_ensembl_symbols", "ensembl"),
+                           ("resolve_ensembl_xref", "ensembl")):
         for d in (lookup_dir, os.path.join(lookup_dir, "data")):
             p = os.path.join(d, f"{resolver}-{taxon}-{key}.txt")
             if os.path.exists(p):
-                found[kind] = (p, read_id_file(p))
+                if kind in found:
+                    found[kind] = (found[kind][0] + ", " + p, found[kind][1] | read_id_file(p))
+                else:
+                    found[kind] = (p, read_id_file(p))
                 break
     return found
 

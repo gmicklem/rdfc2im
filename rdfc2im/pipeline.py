@@ -12,7 +12,7 @@ from .sparql import (QueryBuilder, table_names, query_rows, const_rows, write_sp
                      yaml_block, block_name)
 from .tsv import clean_table
 from .fetch import fetch_query, fetch_values_batched
-from .scope import apply_taxon_scope, apply_gene_scope, apply_full_scope_filter, DEFAULT_TAXA
+from .scope import apply_taxon_scope, apply_gene_scope, apply_full_scope_filter, widen_organisms, DEFAULT_TAXA
 
 COL_COLUMNS = ["table", "position", "column", "variable", "im_class", "im_field", "transform",
                "filter", "value", "kind", "via", "status", "required", "root"]
@@ -41,6 +41,9 @@ def run_source(model, config_dir: str, out_dir: str, knowledge: Knowledge, sourc
         rows, skip_reason = apply_taxon_scope(rows, list(taxa))
     if not skip_reason and gene_ids:
         rows, skip_reason = apply_gene_scope(rows, gene_field, list(gene_ids))
+        # genes asked for by id may carry the source's own organism tag too (ensembl's
+        # alternative-haplotype genes: sources.yaml gene_scope_organism_also) [im-9n4.59]
+        rows = widen_organisms(rows, source_cfg.get("gene_scope_organism_also") or [])
     elif not skip_reason and source_cfg.get("full_scope_filter"):
         rows, notes = apply_full_scope_filter(rows, source_cfg["full_scope_filter"])
         for n in notes:

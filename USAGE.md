@@ -287,9 +287,17 @@ it; an RDF source's SPARQL extract date) and the url/description of the DataSour
 (`data_source_url`, `data_source_description`) [im-9n4.52]; `--data-set-links URL` makes the same source also set
 `DataSet.url` (the page) and `DataSet.description`. The pages phase is off without `--source-pages`.
 
+Notes with a data set [im-9n4.59]: a source's `data_set_note` (sources.yaml for an RDF source, its stock mapping file
+for a stock one; `note` is an internal remark and is never shown), then `data_set_note_counts` with `{not_joined}` and
+`{total}` filled from the build's `out/<source>/items/<source>_xref_join.tsv` (ensembl), then the gene-panel cut where
+the build applied one (an RDF extract cached with `scope=panel`; a stock file with a panel-id `filter`; only when
+`data-set-links --genes PANEL` is given, which full-build.sh does unless `--scope full`). `data-set-links` writes them
+into `DataSet.description` after the status-page sentence (alone without `--data-set-links URL`); the status page shows
+them as its `Notes` row (`source_manifest.py --genes` records them per source). `rdfc2im/data_set_notes.py`.
+
 Tests: `tests/test_source_pages.py` (counters, manifest, a golden page, the link items and project wiring),
-`tests/test_data_set_versions.py` (DataSet.version and the DataSource records), `tests/test_full_build_source_pages.py`
-(dry-run).
+`tests/test_data_set_versions.py` (DataSet.version and the DataSource records), `tests/test_data_set_notes.py` (the
+notes), `tests/test_full_build_source_pages.py` (dry-run).
 
 ## Not yet exercised
 

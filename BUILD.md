@@ -1093,8 +1093,46 @@ items of the 20 Nov rebuild, HGNC's and NCBI's raw groups of 18 Nov, NCBI's `gen
 **The panel** (the 113 Ensembl genes of the 20 Nov rebuild, re-emitted with the new rule): 112 pairs unchanged, all 113
 joined by HGNC. The one change is the old wrong join: ENSG00000242366 moves from UGT1A1 (54658) to UGT1A8 (54576). UGT1A1
 keeps its Ensembl id from HGNC but gets no Ensembl-source data, because the panel's Ensembl ids are still chosen by
-symbol (`scope.resolve_ensembl_symbols`, first match per label), which picked ENSG00000242366 for "UGT1A1". Choosing the
-panel's Ensembl ids by cross-reference too is a follow-up; it changes the cached ensembl group.
+symbol (`scope.resolve_ensembl_symbols`, first match per label), which picked ENSG00000242366 for "UGT1A1". Done in
+im-9n4.59, next section.
+
+#### The panel's Ensembl genes by cross-reference [im-9n4.59]
+
+A gene-panel build (`--genes`) now fetches the Ensembl genes the join above will put on the panel's NCBI genes, by the
+same rule, never by label: sources.yaml `ensembl: gene_scope_resolver: xref_join` makes `cli.source_gene_ids` resolve
+the panel's Entrez ids (`resolve_ncbigene_symbols`, as for ncbigene) and then run `scope.ensembl_xref_resolver`:
+`items.xref_ids_for` over hgnc's and ncbigene's written items (`out/{hgnc,ncbigene}/items`, so ensembl must come after
+them in `--sources`, as the join needs anyway) and Ensembl's own ncbigene cross-references of those genes (one live
+query, `scope.ensembl_ncbigene_xrefs`, every ncbigene xref of the Ensembl genes that name a panel gene, so a gene naming
+two is seen to). `xref_ids_for` and `join_on_xref` share `items.xref_pairing`: every gene fetched joins a panel gene and
+every gene that would join one is fetched (tested on random data). The answer goes into the lookup cache as
+`resolve_ensembl_xref-<taxon>-<md5>.txt` (a new name: the old label answers are never reused), the cached ensembl group
+of a panel build records `gene_select=xref` (full-build.sh `GENE_SELECT`, `cache_meta_for`), so a group fetched for the
+label-chosen ids is refused, and `subset_raw.py idsets` adds the new answer to the ensembl id set. **gwascatalog**,
+whose `snp_gene_ids` are Ensembl gene ids, takes the same selection (`gene_scope_resolver: xref_join`,
+`gene_scope_xref_sources: [hgnc, ncbigene]`; the same `resolve_ensembl_xref` answer; `GENE_SELECT[gwascatalog]=xref`).
+Refetched from TogoVar (125 s): 39,333 rows to 38,640; ENSG00000242366 (UGT1A8) 833 rows to 0, ENSG00000241635
+(UGT1A1) 0 to 140.
+
+**Alternative-haplotype genes.** Ensembl's RDF gives every primary-assembly human gene both `obo:RO_0002162
+taxonomy:9606` and `<http://ensembl.org/Homo_sapiens>`, but alternative-haplotype and patch genes only the second.
+sources.yaml `ensembl: gene_scope_organism_also: ["<http://ensembl.org/Homo_sapiens>"]` makes a run restricted to gene
+ids accept either tag (`scope.widen_organisms`, applied right after `apply_gene_scope`); the source's constant
+Organism.taxonId still gives each gene taxon 9606 (one Organism item). An unscoped (`--scope full`) fetch is not widened:
+it would add up to **34,057** human Ensembl genes that carry only Ensembl's tag (one COUNT query on rdfportal.org/ebi,
+20 Nov 2026; the im-9n4.55 extract cannot say, it was fetched with `taxonomy:9606`), before the join leaves out those
+with no NCBI counterpart. On the panel every row now comes twice, once per tag (main 230 to 461 rows); the items are
+unchanged but for GSTT1, which joins (via HGNC): "0 of 114 Ensembl genes not joined".
+
+The panel, old (label) against new (cross-reference), 20 Nov 2026 (`scratch/im-9n4.59/bin/compare_panel_ids.py`): 113
+ids against 114; 112 the same. Out: ENSG00000242366 (UGT1A8, 54576, the label "UGT1A1"). In: ENSG00000241635 (UGT1A1,
+54658, via HGNC) and ENSG00000277656 (GSTT1, 2952, via HGNC). All 114 panel NCBI genes have an Ensembl gene by
+cross-reference (all via HGNC) and all 114 are asked for. GSTT1's ENSG00000277656 lies on an alternative haplotype (GSTT1
+is not on the GRCh38 primary assembly) and Ensembl's RDF gives it `obo:RO_0002162 <http://ensembl.org/Homo_sapiens>`, not
+`taxonomy:9606`, so the taxon filter first returned no row for it (113 genes); see "Alternative-haplotype genes" below
+for the fix (114). The refetched groups (ensembl: 4 tables, 461 / 579 / 679 / 5,335 rows; gwascatalog; the new
+gene-id-lookup) are in `scratch/im-9n4.59/cached_raw_data.9n459/` beside links to every other group of
+`cached_raw_data.remaining-2026-11-20` (not written).
 
 **Open decision (Gos): the 12,300 Ensembl genes with no NCBI counterpart.** Left out (now): a user of the mine sees one
 gene per NCBI gene, as in HumanMine; the Ensembl-only genes (mostly Y_RNA, snoRNA and other small RNA copies, novel
@@ -1648,6 +1686,45 @@ come from the stock mapping files (`data_sets`, read from each converter) and `s
 Since [im-9n4.52] the source is added to every build, with or without the option: it also carries `DataSet.version`
 from the build's caches (`DataSet.version = data-set-links, *`) and some DataSource urls, and took humanmine-static's
 place ("DataSet versions; humanmine-static retired", in the milestone 3 section).
+
+### Notes with the data set [im-9n4.59]
+
+Gos Micklem, 20 Nov 2026: the data-source listing should say that Ensembl genes are loaded only where an NCBI gene
+corresponds ("maybe a new column Notes", after HumanMine's "All data sources" listing: DataSet name, version, url,
+licence, description, its DataSource). No model change: the note goes where that listing already shows text,
+`DataSet.description`, after the status-page sentence (alone without `--data-set-links URL`), and onto the status page as
+its `Notes` row. Per source, in order (`rdfc2im/data_set_notes.py`):
+
+1. `data_set_note` (sources.yaml, or the stock mapping file): a plain fact. Set for **ensembl** ("Ensembl genes are
+   loaded only where HGNC, NCBI or Ensembl gives a one-to-one cross-reference to an NCBI gene in this mine; the others
+   are left out.") and **pubmed** ("Only the PubMed records that other data in this mine cite are loaded, not the whole of
+   PubMed.": full-build.sh always fetches it by the cited PMIDs).
+2. `data_set_note_counts`: ensembl's "{not_joined} of {total} Ensembl genes in this build's scope were not loaded for that
+   reason.", filled from this build's `out/ensembl/items/ensembl_xref_join.tsv` (left out when the build wrote none; no
+   number is in the file). Panel: "0 of 114"; at full scope it would be the 12,300 of 53,636 above.
+3. The gene-panel cut, on a panel build only (`--genes PANEL` to data-set-links and source_manifest.py; full-build.sh
+   passes it unless `--scope full`): an RDF source whose cached extract says `scope=panel` (ensembl, uniprot, clinvar,
+   gwascatalog: "This build loads this data set only for the 114 genes of its gene panel."), and a stock source with a
+   file cut by panel ids (the table's `filter.ids`: entrez, ensembl, uniprot: "only the records ... that involve one of
+   the 114 genes of its gene panel or their proteins"; mgi, rgd: the genes on a PANTHER row with a panel gene; ipr: the
+   InterPro entries of the panel proteins; the InterPro data set, fed by protein2ipr and interpro, gets one sentence for
+   both, `merge_panel_cuts`). A file used whole, or one cut to chromosomes, gets none; a data set no file
+   of the build feeds (`data_set_files`) gets none.
+
+Considered and left out: human only (every source; HumanMine is a human mine and the Organism says so); ncbigene's
+`full_scope_filter` (the gene types the stock loader keeps too: no change from HumanMine, and it applies only to an
+unscoped fetch); symbols shared by several genes dropped (`key_ambiguity`: a value rule, not a scope one, and its counts
+are not written to a file the notes could read); hgnc yielding to ncbigene where they disagree (`defer_to`: precedence,
+not scope); the psi-intact/biogrid partner rule (an interaction with a panel participant keeps its non-panel partner:
+covered by "involve one of").
+
+The template: neither this build's template sets (curation/humanmine_templates.xml, 73; curation/demo_public_templates.sql;
+the mine's default-template-queries.xml, 3) nor public HumanMine's 73 public templates (read 20 Nov 2026) has an "All data
+sources" template or any template rooted on DataSet or DataSource; decision 0010 calls it a page listing the 64 DataSet
+records with name, version, URL and licence. The note reaches any such listing through `DataSet.description`. A real
+column would be a new DataSet attribute (`notes`, a String) in the model additions every source shares, which changes the
+mine's model and needs a full rebuild of every mine using it; data-set-links would write it instead of appending to
+description, and the listing (a template or the page) would add the column. That is Gos's decision; nothing here needs it.
 
 ## Watching a build
 
@@ -2607,6 +2684,56 @@ with a version, 23 with a cited paper (16 PubMed ids), 8 data sources`. All 23 c
 every one of the 16 has its title from update-publications; Publication 119,966 (9 cited papers no other source had),
 119,920 with a title. `make test` 595 passed, 75 skipped; `make test-live` 75 passed, 0 skipped, 0 failed; the mine's
 version endpoint and the front answer 200.
+
+## The rebuild of 20 Nov 2026, panel Ensembl genes by cross-reference [im-9n4.59]
+
+rdfc2im `maint/im-9n4.59-ensembl-panel-notes` (the im-9n4.55 merge plus this task), InterMine and humanmine-bio-sources
+(1d36e19) as in the im-9n4.56 rebuild, `$TRIAL_HOME/humanmine-bio-sources` removed first; `drive-ut-9n459.sh`, every phase,
+`--offline`, with `DRIVE_CACHE_DIR` = `scratch/im-9n4.59/cached_raw_data.9n459` (the refetched ensembl, gwascatalog,
+pubmed and gene-id-lookup groups; links to every other group of `cached_raw_data.remaining-2026-11-20`). The production
+database was dumped first (`pg_dump -Fc`, 264 MB, in that scratch directory). Nothing was done by hand.
+
+**Stopped once**, at `rdfc2im_pipeline` (119 s): the cached pubmed group was refused, `pmids_md5` changed. gwascatalog's
+new cut (UGT1A1's associations instead of UGT1A8's) cites a different PMID set: 3,926 papers against 3,930 (4 out,
+none in). The cause is the intended change, so pubmed was refetched for the new set (`scratch/im-9n4.59/bin/refetch_pubmed.sh`,
+RDF Portal, under a minute) into the same cache directory and the driver resumed at `rdfc2im_pipeline`.
+
+**Phases** (`phases.tsv`, the resumed run 15:05 to 15:42, every rc 0; 2,468 s with the first three phases):
+
+| Phase | s | Phase | s |
+|---|---|---|---|
+| check_prereqs / fetch_inputs | 1 / 7 | build_dbmodel | 31 |
+| publish_intermine | 227 | **integrate_sources** | **1,051** |
+| rdfc2im_pipeline | 118 (119, rc 1, before) | **postprocess** | **748** |
+| rdfc2im_project / build_humanmine_items | 8 / 12 | build_webapp / resolve_bluegenes_deps | 15 / 2 |
+| build_stock_sources / fetch_stock_data | 25 / 10 | stage_artifacts / start_mine_stack | 5 / 3 |
+| subset_stock_data | 21 | apply_templates / apply_public_lists | 15 / 150 |
+| prepare_mine_checkout / stage_src_data / start_databases | 2 / 2 / 1 | verify / write_source_manifest | 7 / 7 |
+
+**Memory** (`memlog.tsv`): peak 12.6 GB used, 3.6 GB available (15:30:47, postprocess).
+
+**Checks.** The items step: "Gene: 0 of 114 Ensembl genes not joined ... joined 114 by hgnc". UGT1A1 (54658) shows
+ENSG00000241635 and is in the Ensembl and the GWAS Catalog data sets; UGT1A8 (54576) shows its own ENSG00000242366 and,
+not being a panel gene, has no Ensembl-source data (before, it had UGT1A1's); GSTT1 (2952) shows ENSG00000277656 and is in
+the Ensembl data set (it was in none). The prepare line: `32 data sets, 31 with a version, 23 with a cited paper (16
+PubMed ids), 22 with a note, 8 data sources`. The DataSet descriptions as loaded (SQL):
+
+* Ensembl genes (RDF Portal): the status-page sentence, then "Ensembl genes are loaded only where HGNC, NCBI or Ensembl
+  gives a one-to-one cross-reference to an NCBI gene in this mine; the others are left out. 0 of 114 Ensembl genes in
+  this build's scope were not loaded for that reason. This build loads this data set only for the 114 genes of its gene
+  panel."
+* PubMed (RDF Portal): "... Only the PubMed records that other data in this mine cite are loaded, not the whole of PubMed."
+* IntAct molecular interactions: "... This build loads only the records of this data set that involve one of the 114
+  genes of its gene panel or their proteins; the rest of the file is cut before loading."
+* InterPro data set: "... This build loads only the InterPro matches of the proteins of the 114 genes of its gene panel
+  and the InterPro entries they name, with the entries related to them; the rest is cut before loading."
+
+**Objects** against the mine before (the running ut demo, 1,727,345; the 1,727,148 of im-9n4.56 run 2 plus the
+im-9n4.55 change): 1,727,171. No class moved by 1% or more: SNP 3,082 to 3,054 (-0.9%), GWASResult 30,832 to 30,793,
+GWAS 6,175 to 6,167 (gwascatalog's cut: UGT1A1's associations for UGT1A8's), Author -111, Publication -2, MeshTerm -1
+(the 4 papers no longer cited), CrossReference +15 (GSTT1's Ensembl gene). `make test` 640 passed, 78 skipped; `make
+test-live` 78 passed, 0 skipped, 0 failed (the three Ensembl tests among them); the version endpoint and the front
+answer 200.
 
 ## Persistence, and what does not survive
 

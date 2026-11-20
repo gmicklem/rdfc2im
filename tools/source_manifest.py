@@ -54,6 +54,7 @@ import yaml  # noqa: E402
 
 import field_counts as fc  # noqa: E402
 from rdfc2im import stock as st  # noqa: E402
+from rdfc2im import data_set_notes as dsn  # noqa: E402
 
 MANIFEST_VERSION = 1
 MAPPINGS_DIR = os.path.join(HERE, "rdfc2im", "data", "stock_mappings")
@@ -514,7 +515,8 @@ def stock_entry(name, table, args, idcounts, flogs, mine, model):
            "redistributable": bool(e.get("redistributable")), "data_dir": e.get("data_dir"), "properties": e.get("properties") or {},
            "mapping": _mapping_summary(mp, name), "files": files,
            "raw_group": {"path": raw_group, "saved_at": (group or {}).get("saved_at")},
-           "filtered_group": ({"saved_at": filtered.get("saved_at"), "meta": filtered.get("meta")} if filtered else None)}
+           "filtered_group": ({"saved_at": filtered.get("saved_at"), "meta": filtered.get("meta")} if filtered else None),
+           "notes": dsn.stock_notes(mp, e, getattr(args, "panel_genes", None))}   # the Notes row [im-9n4.59]
     if mine is not None and mp.get("data_sets"):
         out["loaded"] = loaded_counts(mine, model, mp["data_sets"], mp.get("writes") or [])
         out["loaded_unlinked"] = unlinked_counts(model, mp.get("writes") or [])
@@ -563,7 +565,7 @@ def reactome_entry(args, mine, model):
            "redistributable": bool(rlic.get("redistributable")), "data_dir": "reactome/current",
            "properties": {"reactome.organisms": "9606"}, "mapping": _mapping_summary(mp, "reactome"), "files": [rec],
            "raw_group": {"path": gdir, "saved_at": group.get("saved_at")}, "filtered_group": None,
-           "levels": group.get("meta", {}).get("levels")}
+           "levels": group.get("meta", {}).get("levels"), "notes": dsn.stock_notes(mp)}
     if mine is not None and mp.get("data_sets"):
         out["loaded"] = loaded_counts(mine, model, mp["data_sets"], mp.get("writes") or [])
         out["loaded_unlinked"] = unlinked_counts(model, mp.get("writes") or [])
@@ -697,6 +699,8 @@ def rdf_entry(src, args, scfg, mine, model):
                        for c in cols],
            "items": items_per_class(items) if os.path.exists(items) else None,
            "items_path": os.path.relpath(items, args.out_root) if os.path.exists(items) else None}
+    # the sentences data-set-links writes into its DataSet.description, for the Notes row [im-9n4.59]
+    ent["notes"] = dsn.rdf_notes(src, scfg, args.out_root, (group or {}).get("meta"), getattr(args, "panel_genes", None))
     if src in (args.endpoint_counts or []):
         ent["endpoint_counts"] = endpoint_counts(ent, qmeta, args.sleep)
     if mine is not None and scfg.get("data_set_title"):
@@ -816,7 +820,9 @@ def main(argv=None):
     ap.add_argument("--intermine-src")
     ap.add_argument("--trial-home")
     ap.add_argument("--gene-identifiers", default="panel", choices=("panel", "all"))
+    ap.add_argument("--genes", help="the build's gene panel file (the panel-cut notes); none for a --scope full build")
     a = ap.parse_args(argv)
+    a.panel_genes = dsn.panel_size(a.genes)
     stock_names = a.stock_sources.replace(",", " ").split()
     rdf_names = a.sources.replace(",", " ").split()
     if stock_names and not a.stock_dir:

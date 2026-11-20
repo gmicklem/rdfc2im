@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -1371,6 +1372,38 @@ def test_no_gene_holds_two_ensembl_ids_and_no_ensembl_id_sits_on_two_genes():
     wrong = [(pid, ens, joined.get(pid)) for pid, ens in rows if joined.get(pid) != ens]
     assert not wrong, f"{len(wrong)} Genes whose Ensembl id is not the one ensembl joined: {wrong[:10]}"
     assert len(rows) == len({r[0] for r in rows}) == len(joined), (len(rows), len(joined))
+
+
+def test_ugt1a1_carries_its_own_ensembl_gene_and_its_data():
+    """im-9n4.59: the panel fetched the Ensembl gene labelled UGT1A1 (ENSG00000242366, UGT1A8) and not
+    UGT1A1's own (ENSG00000241635); with the cross-reference join that left UGT1A1 with no Ensembl
+    data.  The panel's Ensembl genes are now chosen by the same cross-reference."""
+    if not mine_up():
+        return _skip(f"live checks off or no mine at {MINE_BASE} (make test-live)")
+    rows = query_rows_q('<query model="genomic" view="Gene.primaryIdentifier Gene.secondaryIdentifier">'
+                        f'<constraint path="Gene.dataSets.name" op="=" value="{ENSEMBL_DATA_SET}"/></query>')
+    if not rows:
+        return _skip("no ensembl source in this mine")
+    got = dict(rows)
+    if "54658" not in got and "54576" not in got:
+        return _skip("UGT1A1 and UGT1A8 are not in this mine's Ensembl data (not the demo panel)")
+    assert got.get("54658") == "ENSG00000241635", f"UGT1A1 (54658): {got.get('54658')}"
+    if "54576" in got:
+        assert got["54576"] == "ENSG00000242366", f"UGT1A8 (54576): {got['54576']}"
+
+
+def test_the_ensembl_data_set_says_it_loads_only_genes_with_an_ncbi_counterpart():
+    """im-9n4.59, Gos 20 Nov 2026: the data-source listing says that Ensembl genes are loaded only where
+    an NCBI gene corresponds (sources.yaml data_set_note, written into DataSet.description by
+    data-set-links, the numbers from the build's join report)."""
+    if not mine_up():
+        return _skip(f"live checks off or no mine at {MINE_BASE} (make test-live)")
+    rows = query_rows("DataSet.name DataSet.description", "DataSet.name", "=", ENSEMBL_DATA_SET)
+    if not rows:
+        return _skip("no ensembl source in this mine")
+    desc = rows[0][1] or ""
+    assert "loaded only where HGNC, NCBI or Ensembl gives a one-to-one cross-reference to an NCBI gene" in desc, desc
+    assert re.search(r"\b[\d,]+ of [\d,]+ Ensembl genes in this build's scope were not loaded", desc), desc
 
 
 def test_most_human_genes_have_a_symbol_and_an_ensembl_id():

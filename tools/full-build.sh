@@ -294,6 +294,10 @@ declare -A SCOPE_MODE=(
   [hgnc]=panel [ensembl]=panel [uniprot]=panel [clinvar]=panel [gwascatalog]=panel
   [pubmed]=pmid
 )
+# How a panel source's genes were chosen, where it is not by symbol: ensembl's and gwascatalog's by the cross-reference
+# join (sources.yaml gene_scope_resolver: xref_join, im-9n4.59). Recorded in the cache key (cache_meta_for), so a
+# group fetched for the label-chosen ids is never restored under the new rule.
+declare -A GENE_SELECT=( [ensembl]=xref [gwascatalog]=xref )
 
 # In the repository (gitignored), not under $TRIAL_HOME: TRIAL_HOME is usually inside a sandbox's or
 # build machine's private home, and the repository is the one directory a person watching from
@@ -812,7 +816,8 @@ cache_meta_for() {
   fi
   printf -- '--meta scope=%s --meta taxon=%s --meta limit=0' "${SCOPE_MODE[$src]:-none}" "$TAXON"
   case "${SCOPE_MODE[$src]:-none}" in
-    panel) printf -- ' --meta genes_md5=%s' "$(md5sum "$GENE_PANEL" | cut -d' ' -f1)" ;;
+    panel) printf -- ' --meta genes_md5=%s' "$(md5sum "$GENE_PANEL" | cut -d' ' -f1)"
+           [ -z "${GENE_SELECT[$src]:-}" ] || printf -- ' --meta gene_select=%s' "${GENE_SELECT[$src]}" ;;
     pmid)  [ -f "$TRIAL_HOME/cited_pmids.txt" ] &&
              printf -- ' --meta pmids_md5=%s' "$(md5sum "$TRIAL_HOME/cited_pmids.txt" | cut -d' ' -f1)" ;;
   esac
@@ -2353,11 +2358,14 @@ phase_apply_public_lists() {
 # source's status page; no loader sets either in this build), and the DataSource url/description of the stock mapping
 # files (ranked by curation/priorities_override.properties). On every build: it replaced humanmine-static.
 _add_data_set_links() {
-  local mine=$1 items="$DATA_ROOT/rdfc2im/_data-set-links/data_set_links.xml"
+  local mine=$1 items="$DATA_ROOT/rdfc2im/_data-set-links/data_set_links.xml" panel=()
+  # the data-set notes [im-9n4.59]: sources.yaml / mapping-file data_set_note, the numbers of out/<src>/items/*_xref_join.tsv,
+  # and the gene-panel cut (a panel build only)
+  [ "$SCOPE" = full ] || panel=(--genes "$GENE_PANEL")
   run mkdir -p "$(dirname "$items")"
   run python3 tools/source_pages.py data-set-links ${DATA_SET_LINKS:+--base-url "$DATA_SET_LINKS"} --sources "$SOURCES" \
       --stock-sources "$STOCK_SOURCES" --stock-dir "$STOCK_DIR" ${STOCK_FILTERED_CACHE:+--filtered-cache "$STOCK_FILTERED_CACHE"} \
-      --cache-dir "$RAW_CACHE_DIR" --out "$items"
+      --cache-dir "$RAW_CACHE_DIR" --out-root "$HERE/out" "${panel[@]}" --out "$items"
   run python3 tools/source_pages.py add-links-source --project "$mine/project.xml" \
       --priorities "$mine/dbmodel/resources/genomic_priorities.properties" --items "$items" --name data-set-links
 }
@@ -2366,8 +2374,9 @@ _add_data_set_links() {
 # the running mine (read-only queries). Field counts are cached under $RDFC2IM_STOCK_DIR/field-counts by sha256.
 phase_write_source_manifest() {
   activate_venv   # source_manifest.py reads the YAML tables
-  local mine="http://localhost:$MINE_PORT/humanmine" man="out/_mine/source_manifest.json"
-  run python3 tools/source_manifest.py --out "$man" --sources "$SOURCES" --stock-sources "$STOCK_SOURCES" \
+  local mine="http://localhost:$MINE_PORT/humanmine" man="out/_mine/source_manifest.json" panel=()
+  [ "$SCOPE" = full ] || panel=(--genes "$GENE_PANEL")   # the panel-cut notes, as data-set-links [im-9n4.59]
+  run python3 tools/source_manifest.py --out "$man" --sources "$SOURCES" --stock-sources "$STOCK_SOURCES" "${panel[@]}" \
       --cache-dir "$RAW_CACHE_DIR" --stock-dir "$STOCK_DIR" ${STOCK_FILTERED_CACHE:+--filtered-cache "$STOCK_FILTERED_CACHE"} \
       --logs "$LOG_DIR" --mine "$mine" --gene-identifiers "$GENE_IDENTIFIERS" --build-name "${STACK_NAME:-default} $(basename "$LOG_DIR")" \
       ${INTERMINE_SRC:+--intermine-src "$INTERMINE_SRC"} --trial-home "$TRIAL_HOME" \
