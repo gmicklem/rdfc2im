@@ -434,7 +434,10 @@ def test_every_mapping_file_is_well_formed():
         with open(os.path.join(sp.MAPPINGS_DIR, n), encoding="utf-8") as fh:
             mp = yaml.safe_load(fh)
         assert mp["source"] == n[:-5], n
-        assert mp.get("data_sets") and mp.get("loader", {}).get("commit"), n
+        # data_sets may be empty: humanmine-static and update-data-sources write no DataSet of their own [im-9n4.27]
+        assert isinstance(mp.get("data_sets"), list) and mp.get("loader", {}).get("commit"), n
+        if not mp["data_sets"]:
+            assert n in ("humanmine-static.yaml", "update-data-sources.yaml"), n
         for f in mp["files"]:
             assert f["format"] in fc.FORMATS, (n, f["id"])
             if f["format"] == "xml":

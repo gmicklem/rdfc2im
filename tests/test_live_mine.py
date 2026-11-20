@@ -1034,9 +1034,11 @@ def test_publications_terms_and_genes_are_not_duplicated_by_the_interaction_load
         ids = [r[0] for r in query_rows(view, path, "IS NOT NULL", "")]
         # Three papers are in the mine twice because an Items XML source lists them twice in the one file it loads:
         # datasets.xml of humanmine-static names 27899635 and 10802651 for two data sets each, and
-        # update-data-sources writes 28138153 for two databases; the loader does not merge two objects of one load
-        # [im-9n4.27]. The interaction loaders' duplicates were hundreds.
-        allowed = 5 if view == "Publication.pubMedId" else 0
+        # update-data-sources writes 28138153 for two databases (the converter now keys Publication, which merges
+        # the papers the mine already had, but the loader does not merge two objects of the one load) [im-9n4.27].
+        # The bound was 5 while the keys file lacked the Publication key; the rebuild of 20 Nov shows 3 [im-9n4.28].
+        # The interaction loaders' duplicates were hundreds.
+        allowed = 3 if view == "Publication.pubMedId" else 0
         assert len(ids) - len(set(ids)) <= allowed, f"duplicate {view}: {len(ids) - len(set(ids))}"
     named = query_rows("InteractionTerm.identifier InteractionTerm.name", "InteractionTerm.identifier", "=", "MI:0018")
     assert named and named[0][1] == "two hybrid", named        # the term merged with psi-mi-ontology's
@@ -1470,7 +1472,8 @@ def test_pax6_has_protein_domain_regions_named_by_interpro():
 
 def test_every_domain_a_panel_protein_has_is_an_interpro_entry_with_a_name():
     """interpro.xml is cut to the entries of the loaded matches: none may be left a bare stub the protein2ipr
-    loader made, and no signature the converter throws on (NCBIFAM NF...) may have got in."""
+    loader made. (NCBIfam `NF...` matches load since the converter names them [im-9n4.28], but the cached protein2ipr cut
+    holds none until its next fetch: no check either way.)"""
     if (s := _m3_skip("InterPro data set", "protein2ipr interpro")) is not None:
         return s
     rows = query_rows_q('<query model="genomic" view="ProteinDomain.primaryIdentifier ProteinDomain.name">'
@@ -1479,14 +1482,12 @@ def test_every_domain_a_panel_protein_has_is_an_interpro_entry_with_a_name():
     assert rows, "no ProteinDomain with a domain region"
     nameless = sorted({r[0] for r in rows if not r[1]})
     assert len(nameless) <= 0.02 * len({r[0] for r in rows}), nameless[:10]
-    ids = query_rows("ProteinDomainRegion.identifier", "ProteinDomainRegion.identifier", "CONTAINS", "NF0")
-    assert ids == [], ids[:3]
 
 
 def test_the_mouse_orthologue_of_pax6_has_its_mgi_alleles_and_genotypes():
     """mgi-alleles, cut to the mouse genes on the panel's PANTHER rows: Pax6 (MGI:97490) has 61 alleles in the
-    report file of 16 Nov 2026. The phenotype terms are Mammalian Phenotype ids (the file's Ensembl id column,
-    which the converter reads as them, is taken out)."""
+    report file of 16 Nov 2026. The phenotype terms are Mammalian Phenotype ids: the converter reads MGI's file as it is
+    published (the Marker Ensembl ID column is not mistaken for them) [im-9n4.28]."""
     if (s := _m3_skip("mgi-alleles", "mgi-alleles")) is not None:
         return s
     rows = query_rows("Gene.alleles.symbol Gene.alleles.primaryIdentifier", "Gene.primaryIdentifier", "=", "MGI:97490")

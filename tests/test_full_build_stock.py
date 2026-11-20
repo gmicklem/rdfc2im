@@ -413,34 +413,58 @@ def test_protein2ipr_is_streamed_through_the_panel_filter_and_interpro_is_cut_to
     assert "streaming it from upstream through the panel filter" in plan
     p2i = next(i for i, c in enumerate(cmds) if "subset_raw.py filter --format tab --in https://ftp.ebi.ac.uk/" in c
                and "protein2ipr.dat.gz" in c)
-    assert f"--ids {stock}/idsets/uniprot.txt --column 1" in cmds[p2i] and "--require 4=^(PF|SM|SSF" in cmds[p2i]
+    assert f"--ids {stock}/idsets/uniprot.txt --column 1" in cmds[p2i] and "--require" not in cmds[p2i] and "--drop-columns" not in cmds[p2i]
     assert f"--out {stock}/subset/protein2ipr/matches/protein2ipr.dat" in cmds[p2i], cmds[p2i]
     saved = next(i for i, c in enumerate(cmds) if "cache save stock-protein2ipr " in c)
     ipr = next(i for i, c in enumerate(cmds) if "subset_raw.py ipr-ids" in c)
     inter = next(i for i, c in enumerate(cmds) if "subset_raw.py filter --format interpro-xml" in c)
     assert p2i < saved < ipr < inter, cmds
     assert f"--ids {stock}/idsets/ipr.txt" in cmds[inter]
-    # the alleles file is cut by the mouse genes of panther's rows and loses its Ensembl column
+    # the alleles file is cut by the mouse genes of panther's rows and keeps every column (the converter reads MGI's layout)
     pan = next(i for i, c in enumerate(cmds) if "cache save stock-panther " in c)
     part = next(i for i, c in enumerate(cmds) if "subset_raw.py partner-ids" in c)
     al = next(i for i, c in enumerate(cmds) if "--format tab" in c and "MGI_PhenotypicAllele.rpt" in c)
-    assert pan < part < al and "--column 7 --drop-columns 10" in cmds[al] and f"--ids {stock}/idsets/mgi.txt" in cmds[al]
+    assert pan < part < al and "--column 7" in cmds[al] and "--drop-columns" not in cmds[al] and f"--ids {stock}/idsets/mgi.txt" in cmds[al]
     # offline cannot stream: with no filtered group it says so rather than reaching for the network
     rc, out = _run(tmp_path, "--only", "subset_stock_data", "--offline", *args)
     assert rc == 0, out      # a dry run logs the plan; the check is the die() that --offline takes in a real run
 
 
-def test_update_data_sources_gets_the_publication_key_in_the_copy_of_the_checkout(tmp_path):
-    """[im-9n4.27] DataSourceUpdater writes a Publication per data source and its keys file keys only DataSource, so
-    every run duplicated the papers the mine already had. The copy of the checkout (not the checkout) is edited.
-    (The stand-in checkout has no module list, so the phase stops after the edit: only the log up to there is read.)"""
+def test_update_data_sources_is_built_from_the_checkout_unedited(tmp_path):
+    """[im-9n4.28] The converter keys Publication itself now: the copy of the checkout gets no keys-file edit."""
     src = _fake_intermine_60(tmp_path)
     rc, plan = _run(tmp_path, "--only", "publish_intermine", "--intermine-src", src, "--stock-sources", "update-data-sources")
     if "[check_prereqs] FATAL" in plan and "stock" not in plan.split("FATAL", 1)[1][:200]:
         return
-    edit = [ln for ln in plan.splitlines() if "deployer edit:" in ln and "update-data-sources_keys.properties" in ln]
-    assert edit and "Publication keyed on pubMedId" in edit[0], plan
-    sed = [c for c in _cmds(plan, "publish_intermine") if c.startswith("sed -i") and "Publication.key_pubmed" in c]
-    assert sed and "/trial_home/intermine-src/bio/sources/update-data-sources/" in sed[0] and src not in sed[0], sed
-    rc, plan = _run(tmp_path, "--only", "publish_intermine", "--intermine-src", src, "--stock-sources", "go-annotation uniprot")
-    assert "update-data-sources_keys" not in plan
+    assert "update-data-sources_keys" not in plan and "Publication.key_pubmed" not in plan, plan
+
+
+def test_a_protein2ipr_group_cut_with_the_signature_filter_is_restored_not_streamed_again(tmp_path):
+    """[im-9n4.28] The stream took 60 minutes: the group made with the old filter is accepted by name (the table's
+    accept_cuts), and a group of any other key is not."""
+    import hashlib
+    from rdfc2im import rawcache
+    panel_md5 = hashlib.md5(open(PANEL, "rb").read()).hexdigest()
+    fcache = tmp_path / "filtered-cache"
+    data = tmp_path / "cut"
+    data.mkdir()
+    (data / "protein2ipr.dat").write_text("A0A024\tIPR000\tName\tPF00001\t1\t10\n")
+    args = ("--only", "subset_stock_data", "--use-cached-data", "--intermine-src", _fake_intermine_60(tmp_path),
+            "--stock-sources", "uniprot protein2ipr")
+    env = {"RDFC2IM_STOCK_FILTERED_CACHE": str(fcache)}
+    plan = _plan(tmp_path, *args, env_extra=env)
+    if plan is None:
+        return
+    assert "streaming it from upstream through the panel filter" in plan          # nothing cached yet
+    legacy = {"genes_md5": panel_md5, "taxon": "9606", "spec_md5": "cda8bcff0055ac0d0b6080a937113cd5"}
+    rawcache.save("stock-protein2ipr", str(data), str(fcache), legacy)
+    plan = _plan(tmp_path, *args, env_extra=env)
+    cmds = _cmds(plan, "subset_stock_data")
+    assert "streaming it from upstream" not in plan, plan
+    assert "restoring the group cut with an earlier filter" in plan and "NCBIfam" in plan
+    restore = next(c for c in cmds if "cache restore stock-protein2ipr " in c)
+    assert "spec_md5=cda8bcff0055ac0d0b6080a937113cd5" in restore, restore
+    assert not any("protein2ipr.dat.gz" in c and "subset_raw.py" in c for c in cmds), cmds
+    rawcache.save("stock-protein2ipr", str(data), str(fcache), dict(legacy, spec_md5="0" * 32))   # some other cut
+    plan = _plan(tmp_path, *args, env_extra=env)
+    assert "streaming it from upstream through the panel filter" in plan

@@ -240,6 +240,9 @@ def _add_stock_parser(sub):
     g = c.add_mutually_exclusive_group()
     g.add_argument("--restore", action="store_true", help="only what a restore must match (spec_md5)")
     g.add_argument("--record", action="store_true", help="only what save records besides (redistributable, licence)")
+    g.add_argument("--accepted", action="store_true",
+                   help="one line per earlier cut a cached group may still have been made with (accept_cuts), "
+                        "each `--meta spec_md5=...`")
 
 
 def run_stock(a, ws) -> int:
@@ -254,6 +257,10 @@ def run_stock(a, ws) -> int:
         if a.stock_cmd == "meta":
             if a.name not in table:
                 raise stock.StockError(f"unknown stock source {a.name!r}")
+            if a.accepted:
+                for w in stock.accepted_specs(table, a.name):
+                    print(f"--meta {w}")
+                return 0
             words = stock.cache_meta(table, a.name)
             if a.restore:
                 words = [w for w in words if w.startswith("spec_md5=")]

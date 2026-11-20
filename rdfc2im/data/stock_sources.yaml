@@ -29,7 +29,11 @@
 #                    the filtered files are staged there under RDFC2IM_DATA_ROOT
 #   data_property    src.data.dir (default) or src.data.file (then data_file is the file name)
 #   properties       project.xml property values to set (organisms cut to human, ...);
-#                    "{data_root}" stands for /micklem/data
+#                    "{data_root}" stands for /micklem/data. The three loaders that stamp DataSet.licence from a
+#                    property (uniprot-fasta and ncbi-fasta `fasta.licence`, ncbi-gff `gff3.licence`) get the URL docs/LICENCES.md records for the source, licence_status verified
+#                    only. go-annotation has a `licence` setter too, but its converter makes the DataSet in the constructor, before
+#                    the property is set, so the stamp never reaches it; the other stock loaders read no such property
+#                    (see docs/LICENCES.md) [im-9n4.45]
 #   after            integrate-order constraints (plan 50 row 11): HumanMine source names this one
 #                    must load after; a name replaced by an rdfc2im source stands for its replacement
 #   needs            other stock sources that must be selected with this one
@@ -139,6 +143,7 @@ sources:
     redistributable_reason: "CC BY 4.0 allows redistribution of changed copies with attribution."
     data_dir: uniprot/current
     properties:
+      fasta.licence: "https://creativecommons.org/licenses/by/4.0/"
       fasta.taxonId: "9606"
     after: [uniprot]
     notes: >-
@@ -203,6 +208,8 @@ sources:
     redistributable: true
     redistributable_reason: "NCBI places no restrictions on use or distribution of its molecular data; third-party claims on single records are the submitters' (NCBI cannot grant them)."
     data_dir: human/gff/current
+    properties:
+      gff3.licence: "https://www.ncbi.nlm.nih.gov/home/about/policies/"
     after: [ncbi-gene]
     postprocess: [create-chromosome-locations-and-lengths, create-gene-flanking-features,
                   create-location-overlap-index, create-overlap-view]
@@ -251,6 +258,7 @@ sources:
     redistributable_reason: "NCBI places no restrictions on use or distribution of its molecular data; third-party claims on single records are the submitters' (NCBI cannot grant them)."
     data_dir: human/fasta/current
     properties:
+      fasta.licence: "https://www.ncbi.nlm.nih.gov/home/about/policies/"
       fasta.taxonId: "9606"
     after: [ncbi-gene]
     needs: [ncbi-gff]
@@ -744,7 +752,10 @@ sources:
   #                  cache; the filtered group stock-protein2ipr is reused while its key matches. A --scope full
   #                  build downloads and unpacks it whole.
   # data_property: none, files: []   the source reads no staged directory (update-publications, entrez-organism)
-  # filter drop_columns / require    tab filters that repair a layout the loader was not written for (below)
+  # filter drop_columns / require    tab filters kept in the tooling for a layout a loader was not written for (none of
+  #                  the sources below uses either since the converters were fixed, im-9n4.28)
+  # accept_cuts      on a file: earlier `filter` mappings that a cached group may still have been made with; the group
+  #                  is then restored under its old key (a temporary acceptance, see protein2ipr)
 
   protein2ipr:
     type: protein2ipr
@@ -770,12 +781,15 @@ sources:
       the 13,754,882,460-byte protein2ipr.dat.gz (4 Nov 2026) is read as it downloads and cut to the panel's
       UniProt accessions (`stream: true`, about 70 minutes at the sandbox's 3 MB/s, nothing stored), which keeps a
       few thousand rows. Columns: protein accession, InterPro entry, entry name, member-database signature,
-      start, end. Today's file has member signatures the converter's getSource() throws on ("Unknown DB found"):
-      NCBIFAM `NF00...` (new since 2022; 1,070 of the 323,843 rows in the first 5 MB of the file), so the cut keeps only rows whose
-      signature starts with a prefix the converter names (PF SM SSF SFLD PS PR PTHR G3DSA TIGR PD PIRSF MF_ cd) and
-      the NCBIFAM matches are not loaded: T3.4 would add `NF` -> NCBIFAM (and AntiFam) to getSource().
+      start, end. The converter's getSource() names NCBIfam (`NF`) and AntiFam (`ANF`) as well as the older member
+      databases and skips a prefix it does not know, so the cut keeps every row of the panel's proteins (1,070 of the
+      323,843 rows in the first 5 MB of the file are NCBIfam).
+      The group cached on 20 Nov 2026 was streamed while the converter still threw on `NF`, with a `require` filter
+      that dropped those rows; the stream took 60 minutes, so `accept_cuts` below lets a build restore that group
+      under its old key. It holds no NCBIfam rows: they appear only after the next fetch of protein2ipr (remove the
+      `accept_cuts` entry and the group stock-protein2ipr from the filtered cache, then build).
       Full scope: the converter reads the whole file (13.8 GB gzipped, about 100 GB decompressed) and keeps the
-      rows of the proteins in the mine; the `require` filter still removes the unknown signatures.
+      rows of the proteins in the mine.
     files:
       - id: matches
         url: https://ftp.ebi.ac.uk/pub/databases/interpro/current_release/protein2ipr.dat.gz
@@ -788,7 +802,15 @@ sources:
           format: tab
           ids: uniprot
           column: "1"
-          require: ["4=^(PF|SM|SSF|SFLD|PS|PR|PTHR|G3DSA|TIGR|PD|PIRSF|MF_|cd)"]
+        accept_cuts:
+          - reason: >-
+              Streamed on 20 Nov 2026 (60 minutes) with the NCBIfam filter the old converter needed; temporary: delete
+              this entry and the group stock-protein2ipr to fetch the NCBIfam and AntiFam matches
+            filter:
+              format: tab
+              ids: uniprot
+              column: "1"
+              require: ["4=^(PF|SM|SSF|SFLD|PS|PR|PTHR|G3DSA|TIGR|PD|PIRSF|MF_|cd)"]
 
   interpro:
     type: interpro
@@ -841,14 +863,10 @@ sources:
       MGI_QTLAllele.rpt; MGI_PhenoGenoMP.rpt, 54 MB). Every file is cut to the rows of the mouse genes on the
       panel's PANTHER rows (`subset_raw.py partner-ids`, idsets/mgi.txt: the marker is column 7, 6 and 6). The
       loader makes a Gene `MGI:<n>` for each allele's marker, the key panther gives its mouse genes, so the two
-      merge. Two drifts since the 2020 converter: MGI_PhenotypicAllele.rpt gained a Marker Ensembl ID as column 10
-      where the converter reads the high-level phenotype ids (line[9]); the cut drops column 10 (`drop_columns`),
-      which restores the converter's layout. MGI_PhenoGenoMP.rpt now has the PubMed ids in column 5 where the
-      converter reads the marker ids (line[4]) to decide `complex: > 1 genome feature`: a genotype of two alleles of
-      different genes is called heterozygote instead (T3.4). MGI_QTLAllele.rpt's phenotype ids moved from column 9
-      to column 14, and column 9 now holds the marker's Ensembl id, which the converter reads as a phenotype term
-      (T3.4; no QTL marker is a panel gene's mouse orthologue, so the cut keeps none of its rows). The Mammalian Phenotype terms get names only from
-      the mammalian-phenotype-ontology source (MPheno_OBO.obo), which is not in this build.
+      merge. The converter reads MGI's current layouts (PhenotypicAllele 13 columns, phenotype ids in column 11; QTLAllele
+      14 columns, phenotype ids in column 14; PhenoGenoMP 7 columns, marker ids in column 6) and stops on any other, so
+      the cut only chooses rows: every column of a kept row is passed through unchanged. The Mammalian Phenotype terms
+      get names only from the mammalian-phenotype-ontology source (MPheno_OBO.obo), which is not in this build.
     files:
       - id: phenotypic-alleles
         url: https://www.informatics.jax.org/downloads/reports/MGI_PhenotypicAllele.rpt
@@ -856,7 +874,7 @@ sources:
         size: 32391594
         last_modified: "2026-11-16"
         stage_as: MGI_PhenotypicAllele.rpt
-        filter: {format: tab, ids: mgi, column: "7", drop_columns: "10"}
+        filter: {format: tab, ids: mgi, column: "7"}
       - id: qtl-alleles
         url: https://www.informatics.jax.org/downloads/reports/MGI_QTLAllele.rpt
         verified: true

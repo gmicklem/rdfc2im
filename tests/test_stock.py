@@ -545,7 +545,7 @@ def test_protein2ipr_is_cut_while_it_downloads_and_interpro_is_cut_to_its_entrie
     p = [r.split("\t") for r in stock.file_rows(t, ["protein2ipr"], "/S", "/S/cache")][0]
     assert p[2] == "stream" and p[3] == p[4] == t["protein2ipr"]["files"][0]["url"]      # the raw field is the URL
     assert p[7:10] == ["tab", "uniprot", "1"] and p[13] == "filtered" and p[15] == "protein2ipr.dat"
-    assert p[19].startswith("4=^(PF|SM|SSF|SFLD|PS|PR|PTHR|G3DSA|TIGR|PD|PIRSF|MF_|cd)")
+    assert p[19] == "-" and p[18] == "-"        # no row is dropped for its signature: NCBIfam (NF) and AntiFam rows load [im-9n4.28]
     i = [r.split("\t") for r in stock.file_rows(t, ["interpro"], "/S", "/S/cache")][0]
     assert i[2] == "download" and i[7:9] == ["interpro-xml", "ipr"] and i[15] == "interpro.xml"
     order, probs = stock.select(t, ["interpro"])
@@ -555,27 +555,78 @@ def test_protein2ipr_is_cut_while_it_downloads_and_interpro_is_cut_to_its_entrie
     assert stock.download_bytes(t, ["interpro"]) == 45100722
 
 
-def test_a_full_scope_build_downloads_protein2ipr_whole_but_still_drops_what_the_converter_throws_on():
+def test_a_full_scope_build_downloads_protein2ipr_whole_and_cuts_nothing_but_by_gene():
     t = stock.load_table()
     p = [r.split("\t") for r in stock.file_rows(t, ["protein2ipr", "interpro", "mgi-alleles", "pubmed-gene"],
                                                  "/S", "/S/cache", full=True)]
     by = {(r[0], r[1]): r for r in p}
     r = by[("protein2ipr", "matches")]
-    assert r[2] == "download" and r[8] == "none" and r[19].startswith("4=")      # kept on every row, none cut by gene
+    assert r[2] == "download" and r[13] == "whole" and r[19] == "-" and r[18] == "-"   # the converter reads the file as it is
     assert by[("interpro", "entries")][13] == "whole"
     r = by[("mgi-alleles", "phenotypic-alleles")]
-    assert r[13] == "filtered" and r[8] == "none" and r[18] == "10"             # the column drop applies at full scope too
+    assert r[13] == "asis" and r[18] == "-" and r[19] == "-", r                  # no column is dropped, so nothing is cut
     assert by[("mgi-alleles", "qtl-alleles")][13] == "asis" and by[("pubmed-gene", "gene2pubmed")][13] == "whole"
 
 
-def test_the_filter_spec_and_cache_key_carry_the_column_drop_and_the_required_values():
+def test_mgi_alleles_files_are_cut_by_marker_only_so_the_rows_stay_as_mgi_publishes_them():
+    """[im-9n4.28] The converter reads the current MGI layouts and stops on any other: no column is dropped."""
     t = stock.load_table()
-    assert "drop_columns=10" in stock.filter_spec(t["mgi-alleles"]["files"][0])
-    assert "require=4=^(PF|SM" in stock.filter_spec(t["protein2ipr"]["files"][0])
+    cols = {f["id"]: f["filter"] for f in t["mgi-alleles"]["files"]}
+    assert cols == {"phenotypic-alleles": {"format": "tab", "ids": "mgi", "column": "7"},
+                    "qtl-alleles": {"format": "tab", "ids": "mgi", "column": "6"},
+                    "genotypes": {"format": "tab", "ids": "mgi", "column": "6"}}, cols
+    for r in stock.file_rows(t, ["mgi-alleles"], "/S", "/S/cache"):
+        f = r.split("\t")
+        assert f[18] == "-" and f[19] == "-", f                      # no drop_columns, no require
+    assert "drop_columns" not in stock.filter_spec(t["mgi-alleles"]["files"][0])
+
+
+def test_the_filter_spec_and_cache_key_still_carry_a_column_drop_and_required_values():
+    """The tab filter keeps both options (the tool is generic); a table that uses one changes its cache key."""
+    t = stock.load_table()
     a = stock.cache_meta(t, "mgi-alleles")
     t2 = copy.deepcopy(t)
     t2["mgi-alleles"]["files"][0]["filter"]["drop_columns"] = "9"
+    assert "drop_columns=9" in stock.filter_spec(t2["mgi-alleles"]["files"][0])
     assert stock.cache_meta(t2, "mgi-alleles")[0] != a[0]
+    t3 = copy.deepcopy(t)
+    t3["protein2ipr"]["files"][0]["filter"]["require"] = ["4=^PF"]
+    assert "require=4=^PF" in stock.filter_spec(t3["protein2ipr"]["files"][0])
+
+
+# The group stock-protein2ipr in the stock cache was streamed (60 minutes) on 20 Nov 2026 WITH the NCBIfam filter and
+# is keyed by this spec_md5 (see its META.json). Dropping the filter changes the key, so the table accepts that one
+# group by name until the next fetch [im-9n4.28].
+LEGACY_PROTEIN2IPR_SPEC_MD5 = "cda8bcff0055ac0d0b6080a937113cd5"
+
+
+def test_protein2ipr_has_no_signature_filter_and_accepts_the_group_cut_with_it():
+    t = stock.load_table()
+    assert "require" not in t["protein2ipr"]["files"][0]["filter"]
+    now = stock.cache_meta(t, "protein2ipr")[0]
+    assert now != "spec_md5=" + LEGACY_PROTEIN2IPR_SPEC_MD5
+    assert stock.accepted_specs(t, "protein2ipr") == ["spec_md5=" + LEGACY_PROTEIN2IPR_SPEC_MD5]
+    assert stock.accepted_specs(t, "interpro") == []                     # no other source accepts an old cut
+    t2 = copy.deepcopy(t)                                                # the accepted key follows the rest of the spec
+    t2["protein2ipr"]["files"][0]["url"] = "https://example.org/other.gz"
+    assert stock.accepted_specs(t2, "protein2ipr") != stock.accepted_specs(t, "protein2ipr")
+
+
+def test_the_stock_meta_command_prints_the_accepted_specs_one_per_line(capsys):
+    assert main(["stock", "meta", "protein2ipr", "--accepted"]) == 0
+    assert capsys.readouterr().out.split() == ["--meta", "spec_md5=" + LEGACY_PROTEIN2IPR_SPEC_MD5]
+    assert main(["stock", "meta", "uniprot", "--accepted"]) == 0
+    assert capsys.readouterr().out.strip() == ""
+
+
+def test_validation_of_accept_cuts():
+    t = {"a": _entry()}
+    t["a"]["files"][0]["accept_cuts"] = [{"reason": "x", "filter": {"format": "gaf", "ids": "uniprot"}}]
+    assert stock.validate_table(t) == []
+    t["a"]["files"][0]["accept_cuts"] = [{"filter": {"format": "gaf", "ids": "uniprot"}}]
+    assert any("accept_cuts" in x and "reason" in x for x in stock.validate_table(t))
+    t["a"]["files"][0]["accept_cuts"] = [{"reason": "x"}]
+    assert any("accept_cuts" in x and "filter" in x for x in stock.validate_table(t))
 
 
 def test_sources_without_upstream_files_leave_project_xmls_data_property_alone():
@@ -608,3 +659,50 @@ def test_validation_of_stream_drop_columns_and_require():
     ok = _entry(files=[{"id": "x", "url": "https://e/x.gz", "stage_as": "x", "stream": True,
                         "filter": {"format": "tab", "ids": "none", "column": "1", "drop_columns": "10"}}])
     assert stock.validate_table({"ok": ok}) == []
+
+
+# ------------------------------------------------------------------ DataSet.licence from project.xml [im-9n4.45]
+
+LICENCE_PROPERTY = {
+    "uniprot-fasta": ("fasta.licence", "https://creativecommons.org/licenses/by/4.0/"),   # FastaLoaderTask.setLicence
+    "ncbi-fasta": ("fasta.licence", "https://www.ncbi.nlm.nih.gov/home/about/policies/"),
+    "ncbi-gff": ("gff3.licence", "https://www.ncbi.nlm.nih.gov/home/about/policies/"),    # GFF3ConverterTask.setLicence
+}
+
+
+def test_the_three_loaders_that_read_a_licence_property_get_the_url_docs_licences_records():
+    t = stock.load_table()
+    for n, (prop, url) in LICENCE_PROPERTY.items():
+        assert t[n]["licence_status"] == "verified", n          # only a licence read at source is stamped
+        assert t[n]["properties"][prop] == url, (n, t[n]["properties"])
+    # go-annotation's converter makes its DataSet in the constructor, before setLicence runs: a property would do nothing
+    assert "licence" not in (t["go-annotation"].get("properties") or {})
+    # and it reaches project.xml's <source> as a property of that name
+    root = etree.fromstring('<sources><source name="ncbi-gff" type="ncbi-gff"/></sources>')
+    assert stock.apply_to_project(root, t, ["ncbi-gff"]) == []
+    props = {p.get("name"): p.get("value") for p in root[0].iter("property")}
+    assert props["gff3.licence"] == LICENCE_PROPERTY["ncbi-gff"][1], props
+
+
+def test_no_other_stock_source_sets_a_licence_property_and_none_sets_an_unverified_one():
+    t = stock.load_table()
+    for n, e in t.items():
+        for k in (e.get("properties") or {}):
+            if k.split(".")[-1] == "licence":
+                assert n in LICENCE_PROPERTY and e["licence_status"] == "verified", (n, k)
+
+
+# ------------------------------------------------------------------ mapping files of the milestone 3 sources [im-9n4.27]
+
+def test_the_six_milestone_3_sources_that_load_a_file_have_a_mapping_file_with_the_sources_own_file_ids():
+    t = stock.load_table()
+    for n in ("protein2ipr", "interpro", "mgi-alleles", "pubmed-gene", "humanmine-static", "update-data-sources"):
+        path = os.path.join(ROOT, "rdfc2im", "data", "stock_mappings", n + ".yaml")
+        assert os.path.exists(path), n
+        with open(path, encoding="utf-8") as fh:
+            mp = yaml.safe_load(fh)
+        assert [f["id"] for f in mp["files"]] == [f["id"] for f in t[n]["files"]], n
+        for f in mp["files"]:
+            assert f["fields"], (n, f["id"])
+    # the two E-utilities sources read no upstream file and have nothing to map
+    assert t["update-publications"]["files"] == [] and t["entrez-organism"]["files"] == []

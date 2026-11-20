@@ -1,0 +1,48 @@
+# UniProt's list of cross-referenced databases (dbxref.txt): name, server and the paper of each. InterMine's
+# update-data-sources source is two steps: DataSourceUpdater (run before the load) takes every DataSource of the mine whose
+# name is an `Abbrev:` of the file and writes datasources.xml with the database's name, url and the paper; the load
+# of that file gives the DataSource its description and url and links a Publication.
+source: update-data-sources
+loader:
+  repository: intermine
+  path: bio/sources/update-data-sources
+  classes: [org.intermine.bio.dataconversion.DataSourceUpdater]
+  commit: b81dbfd8e5
+basis: read from the code of the demo's InterMine source (DataSourceUpdater.java, update-data-sources_keys.properties)
+data_source: UniProt
+data_sets: []
+home: https://ftp.ebi.ac.uk/pub/databases/uniprot/current_release/knowledgebase/complete/docs/dbxref.txt
+writes: [DataSource, Publication]
+# `data_sets` is empty: the source writes no DataSet. The DataSources it describes are those other sources made, matched
+# on name; DataSource and Publication are keyed on name and pubMedId (the keys file has both since the Publication key
+# was added to the converter).
+files:
+  - id: dbxref
+    format: tab
+    release: [{"from": "line", "pattern": "^Release:\\s+(.+)$", "label": "UniProt"}]
+    comment: "//"
+    skip_lines: 0
+    header_line: null
+    record: >-
+      one line of the file (a record is a block of lines AC, Abbrev, Name, Ref, LinkTp, Server, Db_URL, Note, Cat; the
+      counts here are of lines, since the file has no tabs and so a single column)
+    record_key: null
+    unlisted: not loaded
+    unlisted_reason: >-
+      the file is parsed line by line by its label (Abbrev, Name, Ref, Server); the table has one column because the lines
+      have no tab, so the labels are described below.
+    fields:
+      - key: "col:1"
+        name: "line (label: value)"
+        description: "the file's lines: AC, Abbrev, Name, Ref, LinkTp, Server, Db_URL, Note, Cat"
+        maps_to: [DataSource.name, DataSource.description, DataSource.url, Publication.pubMedId, DataSource.publications]
+        status: loaded
+        reason: "only for a database that is a DataSource of the mine"
+        code: DataSourceUpdater.java:157-190
+        note: >-
+          `Abbrev:` is compared with the name of every DataSource already in the mine (os.production); a database that is
+          not one of them is dropped with the lines that follow it. For a database that is one: `Name:` becomes
+          DataSource.description, `Server:` DataSource.url, and the PubMed id in `Ref:` (`PubMed=17099233`) a Publication
+          (pubMedId) added to DataSource.publications. `AC:`, `LinkTp:`, `Db_URL:`, `Note:` and `Cat:` are not read.
+          The source must integrate after the sources that make the DataSources, and humanmine-static ranks above it
+          for DataSource.url and description (curation/priorities_override.properties).
