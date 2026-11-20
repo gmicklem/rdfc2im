@@ -350,8 +350,9 @@ def source_keys(type_lines: List[str], own: Dict[str, List[str]], name: str, typ
     ncbigene and hgnc, whose genes all carry their Entrez id, the symbol and Ensembl keys can only
     merge two Entrez genes: with the whole genome loaded, the RDF hgnc snapshot still gives
     KCNIP4-AS2 to Entrez 105374516 while NCBI's gives it to 143433685, and 109 Ensembl ids sit on
-    two Entrez genes across the two sources.  Sources without Entrez ids (ensembl, uniprot,
-    gwascatalog) keep the full keys: symbol and Ensembl id are how they find their gene.
+    two Entrez genes across the two sources.  Sources without Entrez ids (uniprot, gwascatalog)
+    keep the full keys: symbol and Ensembl id are how they find their gene.  ensembl gets its
+    Entrez id by cross-reference (items.join_on_xref) and has own keys too [im-9n4.55].
 
     A class in `own` that keeps no key from the type's file (none declares one: Sequence) gets the
     key `own` names, for this source only.  uniprot [im-9n4.32] keys Sequence on md5checksum, so its

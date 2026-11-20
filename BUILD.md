@@ -897,8 +897,9 @@ What has to stay panel-scoped, and how:
   1. `own_keys: {Gene: [primaryIdentifier]}` for ncbigene and hgnc: `rdfc2im project` writes
      `humanmine-ncbigene_keys.properties` and `humanmine-hgnc_keys.properties` (the type file without Gene's symbol and
      Ensembl keys; InterMine reads `<source name>_keys.properties` before `<type>_keys.properties`), and `make fork-sync`
-     puts them in the humanmine-items jar. Their genes all carry the Entrez id, so nothing is lost; ensembl, uniprot and
+     puts them in the humanmine-items jar. Their genes all carry the Entrez id, so nothing is lost; uniprot and
      gwascatalog, which have no Entrez id, keep the full keys and still find their (panel) gene by symbol or Ensembl id.
+     ensembl did too until im-9n4.55; it now gets the Entrez id by cross-reference and has `own_keys` of its own.
   2. hgnc `defer_to: ncbigene` for `symbol` and `secondaryIdentifier`: where ncbigene gives the value to another Entrez
      gene, hgnc's copy is dropped (9 symbols, 106 Ensembl ids); ncbigene ranks first for both fields anyway. It reads
      `out/ncbigene/items`, so ncbigene must come before hgnc in `--sources` (it does by default).
@@ -943,10 +944,11 @@ CYP2C9, 1528, 5447, 51374).
   49 s), `rdfc2im_pipeline` from the cache 110 s. Postgres 2.2 GB (`pg_database_size`; the volume 3.3 GB), Solr 275 MB.
   Lowest available memory during the build 2.6 GB (0.66 GB in the panel build, whose integrate shares one daemon). Root
   disk unchanged (3.0 GB free; the worktree's `out/` grew by about 200 MB of items).
-* **ensembl=full is not cheap**: RDF Portal holds 53,636 human Ensembl genes, and 845 labels are each shared by several of
-  them (4,678 genes: haplotype and patch copies, Y_RNA, U6, ...). ensembl has no Entrez id, so it merges on symbol and
-  Ensembl id: it would need its own `key_ambiguity` on the symbol and a rule against NCBI/HGNC's Ensembl ids before it
-  could load, for no gain the two sources do not already give (45,051 genes carry an Ensembl id from them). Left `panel`.
+* **ensembl=full** (corrected by im-9n4.55): RDF Portal holds 53,636 human Ensembl genes, and 845 labels are each shared
+  by several of them (Y_RNA alone 792 genes, U3, U6, snoRNAs, haplotype and patch copies). Until im-9n4.55 ensembl had no
+  Entrez id and merged on symbol and Ensembl id; it now joins NCBI genes by cross-reference and is keyed on the Entrez id
+  alone (see "Ensembl genes by cross-reference" below), so the shared labels no longer matter. Still `panel` in a
+  `--gene-identifiers all` build (that option widens ncbigene and hgnc only).
 
 **The CI data asset should stay panel-scoped.** The panel cache is what CI and the 5.1.1 baseline build from; `all`
 changes neither (default `panel`, dry-run tests). Everything the gene panel exercises is exercised there, while the
@@ -968,7 +970,7 @@ otherwise takes a file).
 
 ```sh
 tools/full-build.sh --scope full --intermine-src DIR --stack-name NAME --stock-sources "uniprot uniprot-fasta ..." \
-  --sources "go ncbigene reactome hgnc uniprot clinvar gwascatalog pubmed hpo" --cache-dir /big/disk/cached_raw_data.full
+  --sources "go ncbigene reactome hgnc ensembl uniprot clinvar gwascatalog pubmed hpo" --cache-dir /big/disk/cached_raw_data.full
 ```
 
 | Keyed on the panel in a panel or `--gene-identifiers all` build | `--scope full` |
@@ -1001,10 +1003,12 @@ time stamps and the per-phase seconds are taken out.
 
 **Not settled before a full build:**
 
-* **ensembl.** With `--scope full` it is fetched for every human gene, and the note above ("ensembl=full is not cheap")
-  holds: 845 labels shared by several of RDF Portal's 53,636 human Ensembl genes, merged on symbol and Ensembl id. Leave it
-  out of `--sources` (as the command above does) until it has its own `key_ambiguity` and a rule against NCBI/HGNC's
-  Ensembl ids; ncbigene and hgnc already give 45,051 genes an Ensembl id.
+* **ensembl** (settled for the merge by im-9n4.55, not yet by a full build). It used to merge on symbol and Ensembl id, and
+  845 labels are shared by several of RDF Portal's 53,636 human Ensembl genes, so it was left out of `--sources`. It now
+  joins by cross-reference and merges on the Entrez id alone ("Ensembl genes by cross-reference" below): no symbol can
+  fuse two genes, and on the cached full data the join gives no Gene two Ensembl genes and no Ensembl gene two Genes. It
+  is back in the command above. What no full build has checked yet: the fetch (about 0.2 GB, see the sizes below) and
+  the live test `test_no_gene_holds_two_ensembl_ids_and_no_ensembl_id_sits_on_two_genes` at that scale.
 * **The stock list.** `--scope full` does not choose the stock sources; HumanMine's project.xml lists 46 sources, the
   stock table 20 (`rdfc2im stock list`). With fewer than all of them `reduce_mine.py` still trims the rest, as now.
 * **Proteins without an organism** (im-9n4.46 follow-up): go-annotation's evidence "with" proteins outrank hgnc's
@@ -1033,6 +1037,71 @@ times the RDF raw size) and Postgres and Solr (`RDFC2IM_PGDATA`, `RDFC2IM_SOLRDA
 above the 4 GB default for integrate (the all-genes build already needed a fresh JVM per source, which `--scope full`
 keeps: `--no-daemon`), and for the IntAct and BioGRID loaders, which read 20 GB and 5.8 GB of PSI-MI XML; network to RDF
 Portal for some hours (the all-genes ncbigene and hgnc fetches alone took 28 min at 1 s between pages).
+
+#### Ensembl genes by cross-reference [im-9n4.55]
+
+**The fault.** ensembl's Gene items carried an Ensembl gene id (`secondaryIdentifier`) and a label (`symbol`) and no
+Entrez id, under the type's Gene keys (`primaryIdentifier`, `(symbol, organism)`, `(secondaryIdentifier, organism)`). So
+an Ensembl gene merged into every gene either key found: the gene with its symbol and the gene with its Ensembl id, by
+symbol alone where NCBI and HGNC had no Ensembl id for it. Even in the panel ENSG00000242366 (labelled UGT1A1 in Ensembl's
+RDF, "UDP glucuronosyltransferase family 1 member A8" by its own description, UGT1A8 by HGNC) went onto UGT1A1, whose
+Ensembl id is ENSG00000241635: one Gene with the identifiers of one Ensembl gene and the data of another. The finding of
+20 Nov 2026 ("at full scope, Ensembl still merges genes on symbol") was right, and the Ensembl-id key merged as well.
+Gos Micklem's decision (20 Nov 2026): "Match on a stable cross-reference instead".
+
+**The rule** (`items.join_on_xref`, sources.yaml `ensembl: xref_join`, run in `rdfc2im items` before `key_ambiguity`):
+
+1. Candidate pairs (Ensembl gene, Entrez gene), in precedence order: **HGNC** (hgnc's written items), **NCBI** (ncbigene's
+   written items: the Ensembl links of NCBI's own gene record), **Ensembl's own** `rdfs:seeAlso
+   <http://identifiers.org/ncbigene/N>` (the raw `main_ensg_xref` table). The written items are read, after their own
+   `key_ambiguity` and `defer_to`, so the pairs are the Ensembl ids the mine will show. The order is that of
+   `Gene.secondaryIdentifier` in `curation/priorities_override.properties`: the Entrez gene that shows an Ensembl id is
+   the one that Ensembl gene's data joins, so no Gene holds the id of one Ensembl gene and the data of another.
+2. **Disagreement**: the higher source stands. A source pairs an Ensembl gene and an Entrez gene only if neither is
+   paired already by a higher one.
+3. **One-to-many and many-to-one** within the source that decides: not paired (no principled winner; the same rule as
+   `key_ambiguity`). A lower source may still pair them if it is one-to-one there.
+4. Only Entrez genes in the build (ncbigene's or hgnc's items) are targets.
+5. **No NCBI counterpart**: the Ensembl gene, and the items that hang only off it (its synonyms), are left out of the
+   build (`unmatched: drop`, the default). Every Ensembl gene has a row in `out/ensembl/items/ensembl_xref_join.tsv`
+   (`ensembl_id symbol status entrez via reason disagree`, sorted), which full-build.sh copies to
+   `$LOG_DIR/ensembl_xref_join-<run>.tsv`; the counts are a WARNING line of the items step.
+6. Then ensembl is keyed on the Entrez id alone (`own_keys`, so `humanmine-ensembl_keys.properties`), a label several
+   joined genes share is dropped (`key_ambiguity` on symbol), and a symbol or Ensembl id ncbigene or hgnc gives to another
+   Entrez gene is dropped (`defer_to`). Sorted throughout: the same input gives the same items and report.
+
+**The numbers** (cached data, read-only: RDF Portal's Ensembl genes fetched 20 Nov 2026, the all-genes ncbigene and hgnc
+items of the 20 Nov rebuild, HGNC's and NCBI's raw groups of 18 Nov, NCBI's `gene2ensembl` of 20 Nov; scripts in
+`repos/.sandbox-disk/scratch/im-9n4.55/bin/`):
+
+| Full scope | count |
+|---|---|
+| human Ensembl genes in RDF Portal | 53,636 (2,220 not on a GRCh38 chromosome 1-22, X, Y, MT) |
+| labels shared by more than one Ensembl gene (the size of the fault) | 845 labels, 4,372 genes (Y_RNA 792, U3 50, U6 46) |
+| Ensembl genes with an Entrez id: Ensembl's own xref / HGNC (raw) / NCBI gene record (raw) / NCBI gene2ensembl | 25,915 / 39,333 / 33,844 / 34,148 |
+| one Ensembl gene to several Entrez genes, same four | 484 / 3 / 237 / 235 |
+| one Entrez gene to several Ensembl genes, same four | 634 / 0 / 1 / 0 |
+| Ensembl genes two sources both link, with different Entrez sets: HGNC-NCBI / HGNC-Ensembl / NCBI-Ensembl | 313 of 31,831 / 515 of 23,617 / 352 of 24,478 |
+| NCBI gene record against gene2ensembl | 6 of 33,776 differ: gene2ensembl adds nothing, so it is not used |
+| **old rule** (symbol or Ensembl id against the merged genes): no gene found / one / two or more fused | 10,064 / 43,045 / 527 |
+| old rule: Entrez genes given two or more Ensembl genes; joins by symbol alone | 691; 2,280 |
+| **new rule**: joined via HGNC / NCBI / Ensembl's xref | 39,234 / 2,058 / 44 (41,336) |
+| new rule: not joined, no cross-reference / its Entrez gene has another Ensembl gene / ambiguous | 10,960 / 1,263 / 77 (12,300, left out) |
+| new rule: a joined gene whose Entrez gene shows another Ensembl id | 0 |
+| old against new: same pair / new picks one of an old fusion / old joined by symbol, new leaves out / other | 40,784 / 509 / 2,274 / 38 new, 5 moved |
+
+**The panel** (the 113 Ensembl genes of the 20 Nov rebuild, re-emitted with the new rule): 112 pairs unchanged, all 113
+joined by HGNC. The one change is the old wrong join: ENSG00000242366 moves from UGT1A1 (54658) to UGT1A8 (54576). UGT1A1
+keeps its Ensembl id from HGNC but gets no Ensembl-source data, because the panel's Ensembl ids are still chosen by
+symbol (`scope.resolve_ensembl_symbols`, first match per label), which picked ENSG00000242366 for "UGT1A1". Choosing the
+panel's Ensembl ids by cross-reference too is a follow-up; it changes the cached ensembl group.
+
+**Open decision (Gos): the 12,300 Ensembl genes with no NCBI counterpart.** Left out (now): a user of the mine sees one
+gene per NCBI gene, as in HumanMine; the Ensembl-only genes (mostly Y_RNA, snoRNA and other small RNA copies, novel
+transcripts and the copies on haplotype and patch sequences) are not searchable, and an Ensembl id list with them in it
+reports them as not found. Loaded (`unmatched: keep` in sources.yaml, implemented and tested): each becomes a Gene of its
+own with its Ensembl id as primary identifier, so they can be found and listed, but the mine then holds two kinds of gene
+(Entrez-keyed and Ensembl-keyed) side by side, gene counts no longer match NCBI's, and lists mixing both kinds need care.
 
 ### The ID-resolver gate [im-9n4.4]
 
