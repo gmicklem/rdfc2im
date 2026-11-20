@@ -748,15 +748,6 @@ phase_publish_intermine() {
     --exclude .git --exclude build --exclude .gradle --exclude .gate-logs --exclude __pycache__
   log "intermine-src: $(git -C "$INTERMINE_SRC" log -1 --format='%h %s' 2>/dev/null || echo 'not a git checkout')$(
     git -C "$INTERMINE_SRC" diff --quiet HEAD 2>/dev/null || echo ' (with uncommitted changes)')"
-  # update-data-sources writes a Publication for the paper of each database it describes, and its keys file keys only
-  # DataSource: every run made unkeyed duplicates of the papers the mine already had (146 duplicate pubMedIds on the
-  # first panel build). The copy of the checkout gets the key every other source has; the checkout itself is not touched
-  # [im-9n4.27]
-  case " $STOCK_SOURCES " in *" update-data-sources "*)
-    deployer_edit "$src/bio/sources/update-data-sources/src/main/resources/update-data-sources_keys.properties" \
-      "Publication keyed on pubMedId (the converter writes a Publication per data source and keys none)" \
-      -e '/^Publication\.key_pubmed=/b' -e '$a Publication.key_pubmed=pubMedId' ;;
-  esac
   run mkdir -p "$IM_M2"
   # PSQL_*: install_intermine.py requires them; they only go into the test properties.
   run_in "$src" env PSQL_HOST="${PSQL_HOST:-localhost}" PSQL_USER="${PSQL_USER:-test}" PSQL_PWD="${PSQL_PWD:-test}" \
@@ -1430,7 +1421,7 @@ phase_subset_stock_data() {
   local src ordered=""
   for src in $STOCK_SOURCES; do [ "$src" = panther ] && ordered="panther $ordered" || ordered="$ordered $src"; done
   for src in $ordered; do
-    local cdir group="stock-$src" filtered=0 spec more restore=0
+    local cdir group="stock-$src" filtered=0 spec more restore=0 alt
     cdir=$(_stock_filtered_cache "$src")
     spec=$(python3 -m rdfc2im stock meta "$src" --restore) || die "rdfc2im stock meta $src failed"
     more=$(python3 -m rdfc2im stock meta "$src" --record) || die "rdfc2im stock meta $src failed"
@@ -1469,6 +1460,13 @@ phase_subset_stock_data() {
       streamed=1
       if [ -f "$cdir/$group/META.json" ] && python3 -m rdfc2im cache verify "$group" --cache-dir "$cdir" "${need[@]}" >/dev/null 2>&1; then
         restore=1
+      elif [ "$SCOPE" != full ] && [ -f "$cdir/$group/META.json" ] && alt=$(_accepted_cut "$src" "$cdir" "$group" "$genes_md5") && [ -n "$alt" ]; then
+        # the group was cut with a filter the table has since dropped and lists under accept_cuts: restore it under
+        # its old key rather than stream it again (protein2ipr: 60 minutes) [im-9n4.28]
+        # shellcheck disable=SC2206
+        need=(--meta "genes_md5=$genes_md5" --meta "taxon=$TAXON" $alt)
+        restore=1
+        log "$src: restoring the group cut with an earlier filter (accept_cuts in the stock table, $alt); it lacks the rows that filter dropped (protein2ipr: the NCBIfam matches) until the entry is removed and the source fetched again"
       else
         [ "$OFFLINE" -eq 0 ] || [ "$DRY_RUN" -eq 1 ] || die "$src: no filtered group for this panel in $cdir and --offline cannot stream it (run once with --use-cached-data)"
         log "$src: no filtered group for this panel in $cdir; streaming it from upstream through the panel filter"
@@ -1508,6 +1506,20 @@ phase_subset_stock_data() {
         --ids "$STOCK_DIR/idsets/uniprot.txt" --out "$STOCK_DIR/idsets"
     fi
   done
+}
+
+# The `--meta spec_md5=...` words of the earlier cut (the stock table's accept_cuts) that the cached filtered group $3
+# in cache dir $2 of source $1 was made with, for panel genes $4; nothing printed and status 1 when it matches none.
+_accepted_cut() {
+  local src=$1 cdir=$2 group=$3 gmd5=$4 line
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    # shellcheck disable=SC2086  # --meta k=v words without whitespace
+    if python3 -m rdfc2im cache verify "$group" --cache-dir "$cdir" --meta "genes_md5=$gmd5" --meta "taxon=$TAXON" $line >/dev/null 2>&1; then
+      printf '%s\n' "$line"; return 0
+    fi
+  done < <(python3 -m rdfc2im stock meta "$src" --accepted)
+  return 1
 }
 
 # `--meta release.<id>=<Last-Modified>` words for a source, from its raw group's META (empty when

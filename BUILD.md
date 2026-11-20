@@ -2286,21 +2286,25 @@ rows. The cut is the cache group `stock-protein2ipr` in the stock filtered cache
 an hour or more: start it on its own, `DRIVE_OFFLINE=0 drive-ut-NAME.sh subset_stock_data subset_stock_data`, from a
 second checkout of the branch if the first is being edited.
 
-**What the converters needed from rdfc2im** (pre-processing of the cut, so the converters stay as they are):
+**What the converters needed from rdfc2im, and no longer do** [im-9n4.28]. The first wiring (20 Nov) carried three
+workarounds for faults in the stock converters; the converters are fixed and the workarounds are gone:
 
-* protein2ipr: `Protein2iprConverter.getSource()` throws `Unknown DB found` for a member signature it has no name
-  for. NCBIFAM (`NF00...`) matches are new since 2022 (1,070 of 323,843 rows in the first 5 MB of the file): the cut
-  keeps only rows whose signature starts with a prefix the converter names (`require: ["4=^(PF|SM|...)"]`). T3.4:
-  add `NF` to getSource() and the NCBIFAM matches load.
-* mgi-alleles: `MGI_PhenotypicAllele.rpt` gained a `Marker Ensembl ID` column (10) where the converter reads the
-  high-level phenotype ids (line[9]); the cut drops it (`drop_columns: "10"`), and without it every allele would have
-  had an `ENSMUSG...` Mammalian Phenotype term. T3.4, two more drifts that stay: `MGI_PhenoGenoMP.rpt` has PubMed ids
-  in the column the converter reads as the markers (line[4]), so `complex: > 1 genome feature` is never set;
-  `MGI_QTLAllele.rpt`'s phenotype ids moved from column 9 to 14.
-* update-data-sources: its keys file keys only `DataSource`, so the `Publication` it writes for each database's paper
-  duplicated the paper where the mine already had it (146 duplicate pubMedIds on the first panel build). A deployer
-  edit of the copy of the checkout in `publish_intermine` adds `Publication.key_pubmed=pubMedId` (T3.4: one line in
-  `update-data-sources_keys.properties`).
+* protein2ipr: `Protein2iprConverter.getSource()` now names NCBIfam (`NF`) and AntiFam (`ANF`) and skips a prefix it
+  does not know, so the `require` filter that dropped the `NF...` rows is removed. **The cached group still has no
+  NCBIfam rows**: the 60-minute stream of 20 Nov was made with the filter, and a new fetch is not made tonight. The
+  table's `accept_cuts` entry on the file lists the old filter, so `subset_stock_data` restores the group
+  `stock-protein2ipr` under its old key (the log says "restoring the group cut with an earlier filter"; `stock meta
+  protein2ipr --accepted` prints the key). NCBIfam matches (the `ProteinDomainRegion`s of `NF...` signatures) appear **only after the next protein2ipr fetch**: delete the `accept_cuts`
+  entry from `stock_sources.yaml` and the group `stock-protein2ipr` from the filtered cache, then
+  `DRIVE_OFFLINE=0 drive-ut-NAME.sh subset_stock_data subset_stock_data` streams the file again (an hour). A
+  `--scope full` build is unaffected: it reads the whole file.
+* mgi-alleles: the converter reads MGI's files as they are published (PhenotypicAllele 13 columns with the phenotype
+  ids in column 11, QTLAllele 14 columns with them in column 14, PhenoGenoMP 7 columns with the marker ids in column
+  6) and stops on any other layout, so the cut no longer drops column 10: it keeps the rows of the panel's mouse genes
+  (marker column 7, 6 and 6) and passes every column through unchanged. The cut group is re-made from the cached
+  report files (its key changed), nothing is downloaded.
+* update-data-sources: the converter's keys file keys `Publication` on `pubMedId`, so `publish_intermine` no longer
+  edits the copy of the checkout.
 * `DataSource.url` and `DataSource.description` rank `humanmine-static, update-data-sources, *` in
   `curation/priorities_override.properties`: ranked last, `update-data-sources` never filled a field that another
   source had written as empty (the tracker records the empty field's source), and unranked it stopped the load with

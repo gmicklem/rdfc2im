@@ -1470,7 +1470,8 @@ def test_pax6_has_protein_domain_regions_named_by_interpro():
 
 def test_every_domain_a_panel_protein_has_is_an_interpro_entry_with_a_name():
     """interpro.xml is cut to the entries of the loaded matches: none may be left a bare stub the protein2ipr
-    loader made, and no signature the converter throws on (NCBIFAM NF...) may have got in."""
+    loader made. (NCBIfam `NF...` matches load since the converter names them [im-9n4.28], but the cached protein2ipr cut
+    holds none until its next fetch: no check either way.)"""
     if (s := _m3_skip("InterPro data set", "protein2ipr interpro")) is not None:
         return s
     rows = query_rows_q('<query model="genomic" view="ProteinDomain.primaryIdentifier ProteinDomain.name">'
@@ -1479,14 +1480,12 @@ def test_every_domain_a_panel_protein_has_is_an_interpro_entry_with_a_name():
     assert rows, "no ProteinDomain with a domain region"
     nameless = sorted({r[0] for r in rows if not r[1]})
     assert len(nameless) <= 0.02 * len({r[0] for r in rows}), nameless[:10]
-    ids = query_rows("ProteinDomainRegion.identifier", "ProteinDomainRegion.identifier", "CONTAINS", "NF0")
-    assert ids == [], ids[:3]
 
 
 def test_the_mouse_orthologue_of_pax6_has_its_mgi_alleles_and_genotypes():
     """mgi-alleles, cut to the mouse genes on the panel's PANTHER rows: Pax6 (MGI:97490) has 61 alleles in the
-    report file of 16 Nov 2026. The phenotype terms are Mammalian Phenotype ids (the file's Ensembl id column,
-    which the converter reads as them, is taken out)."""
+    report file of 16 Nov 2026. The phenotype terms are Mammalian Phenotype ids: the converter reads MGI's file as it is
+    published (the Marker Ensembl ID column is not mistaken for them) [im-9n4.28]."""
     if (s := _m3_skip("mgi-alleles", "mgi-alleles")) is not None:
         return s
     rows = query_rows("Gene.alleles.symbol Gene.alleles.primaryIdentifier", "Gene.primaryIdentifier", "=", "MGI:97490")

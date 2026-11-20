@@ -939,6 +939,35 @@ def test_drop_columns_takes_the_ensembl_column_out_of_mgi_phenotypic_alleles(tmp
     assert res["records_out"] == 1
 
 
+def test_the_three_mgi_allele_reports_are_cut_by_marker_with_every_column_unchanged(tmp_path):
+    """[im-9n4.28] The mgi-alleles converter reads MGI's files as published (13, 14 and 7 columns) and stops on
+    another layout: the cut only picks rows. Rows are the converter's own fixtures (humanmine-bio-sources)."""
+    ids = tmp_path / "mgi.txt"
+    ids.write_text("MGI:3042396\nMGI:97490\nMGI:88180\n")
+    cases = [
+        ("MGI_PhenotypicAllele.rpt", "7",
+         ["MGI:2156820\tPax6<10Neu>\t10, Neuherberg\tChemically induced (ENU)\t\t11779807\tMGI:97490\tPax6\tNM_013627\t"
+          "ENSMUSG00000027168\tMP:0005382,MP:0005391\tENU-6037\tpaired box 6",
+          "MGI:8352285\t0610030E20Rik<em1(IMPC)Mbp>\tem1\tEndonuclease-mediated\tNull/knockout\t\tMGI:1915614\t0610030E20Rik\t"
+          "XM_006506534\tENSMUSG00000058706\t\t\tRIKEN cDNA 0610030E20 gene"], 13),
+        ("MGI_QTLAllele.rpt", "6",
+         ["MGI:3042398\tAabpr<NZB/Slc>\tNZB/Slc\tQTL\t14695357\tMGI:3042396\tAabpr\t\t\t2\t116033229\t122207534\tGRCm39\t"
+          "MP:0005384,MP:0005387", "MGI:3573908\tAaj1<A/J>\tA/J\tQTL\t15371360\tMGI:3573901\tAaj1\t\t\t1\t180832317\t191851043"
+          "\tGRCm39\tMP:0005386"], 14),
+        ("MGI_PhenoGenoMP.rpt", "6",
+         ["Alx4<tm1Rwi>/Alx4<+>,Bmp4<tm1Blh>/Bmp4<+>\tAlx4<tm1Rwi>|Bmp4<tm1Blh>\tinvolves: 129S2\tMP:0000562\t9268572\t"
+          "MGI:108359|MGI:88180\tMGI:2166749",
+          "Gli3<Xt-J>/Gli3<Xt-J>\tGli3<Xt-J>\tinvolves: C3H\tMP:0000562\t8387379|9006072\tMGI:95729\tMGI:2166944"], 7),
+    ]
+    for name, col, rows, ncols in cases:
+        src = tmp_path / name
+        src.write_text("\n".join(rows) + "\n")
+        assert all(len(r.split("\t")) == ncols for r in rows), name
+        out, res = filt(tmp_path, "tab", str(src), str(ids), "o-" + name, "--column", col)
+        kept = read(out).decode().splitlines()
+        assert kept == rows[:1] and res["records_out"] == 1, (name, kept)       # byte for byte, one column count
+
+
 def test_drop_columns_alone_keeps_every_row(tmp_path):
     src = tmp_path / "in.tsv"
     src.write_text("a\tb\tc\nd\te\tf\n")

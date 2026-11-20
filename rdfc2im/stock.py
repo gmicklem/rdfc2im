@@ -226,6 +226,16 @@ def validate_table(table: Dict[str, dict]) -> List[str]:
                     out.append(f"{fw}: `stream` is for a url file that is filtered and not unpacked")
             if not isinstance(f.get("verified", False), bool):
                 out.append(f"{fw}: `verified` must be true or false")
+            ac = f.get("accept_cuts")
+            if ac is not None:
+                if not isinstance(ac, list):
+                    out.append(f"{fw}: `accept_cuts` must be a list")
+                else:
+                    for k, c in enumerate(ac):
+                        if not isinstance(c, dict) or not c.get("reason"):
+                            out.append(f"{fw}: accept_cuts[{k}] needs a `reason` (why the old cut is still accepted)")
+                        elif not isinstance(c.get("filter"), dict):
+                            out.append(f"{fw}: accept_cuts[{k}] needs the old `filter` mapping")
             unpack = f.get("unpack")
             member = f.get("member")
             if unpack is not None and unpack not in UNPACK:
@@ -640,18 +650,43 @@ def postprocess_rows(table: Dict[str, dict], names: List[str],
     return [_row(p, ",".join(want[p])) for p in ranked]
 
 
+def _file_spec(f: dict, flt=None) -> dict:
+    return {"id": f["id"], "url": f.get("url"), "raw": raw_name(f),
+            "filter": filter_spec(f if flt is None else dict(f, filter=flt)),
+            "unpack": f.get("unpack"), "member": f.get("member"), "stage_as": f.get("stage_as")}
+
+
+def _spec_md5(e: dict, spec: list) -> str:
+    # (a file's `stream` flag does not enter the key: it changes how the cut is read, not what it holds)
+    spec = list(spec)
+    if e.get("chromosome_lengths"):
+        spec.append({"chromosome_lengths": e["chromosome_lengths"]["from"], "file": LENGTHS_FILE})
+    return hashlib.md5(json.dumps(spec, sort_keys=True).encode()).hexdigest()
+
+
+def accepted_specs(table: Dict[str, dict], name: str) -> List[str]:
+    """`spec_md5=...` words of earlier cuts of the source's filtered files that a build still accepts as its cache
+    key, one per `accept_cuts` entry of a file: the table lists the filter a cached group was made with after the
+    table dropped it, so a group that took a long time to make (a streamed 13.8 GB file) is not made again for a
+    change that only widens what the next fetch keeps. Temporary: remove the entry (and the group) to fetch afresh
+    [im-9n4.28]."""
+    e = table[name]
+    out: List[str] = []
+    for f in e["files"]:
+        for c in f.get("accept_cuts") or []:
+            spec = [_file_spec(g, c["filter"] if g is f else None) for g in e["files"]
+                    if (c["filter"] if g is f else g.get("filter", "none")) != "none"]
+            out.append("spec_md5=" + _spec_md5(e, spec))
+    return out
+
+
 def cache_meta(table: Dict[str, dict], name: str) -> List[str]:
     """`--meta` words for the filtered cache group of one source. The restore-relevant part is the
     spec (what files, filtered how); genes_md5 and taxon are added by the caller, like the panel
     sources'. `redistributable` and `licence` are recorded for `cache save --for-release` (T0.3)."""
     e = table[name]
-    spec = [{"id": f["id"], "url": f.get("url"), "raw": raw_name(f), "filter": filter_spec(f),
-             "unpack": f.get("unpack"), "member": f.get("member"), "stage_as": f.get("stage_as")}
-            for f in e["files"] if f.get("filter", "none") != "none"]
-    # (a file's `stream` flag does not enter the key: it changes how the cut is read, not what it holds)
-    if e.get("chromosome_lengths"):
-        spec.append({"chromosome_lengths": e["chromosome_lengths"]["from"], "file": LENGTHS_FILE})
-    spec_md5 =hashlib.md5(json.dumps(spec, sort_keys=True).encode()).hexdigest()
+    spec = [_file_spec(f) for f in e["files"] if f.get("filter", "none") != "none"]
+    spec_md5 = _spec_md5(e, spec)
     return [f"spec_md5={spec_md5}", f"redistributable={'true' if e['redistributable'] else 'false'}",
             "licence=" + re.sub(r"[^A-Za-z0-9.-]+", "_", str(e["licence"])).strip("_")]
 
