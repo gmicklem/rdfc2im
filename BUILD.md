@@ -1576,6 +1576,9 @@ change: HumanMine did the same with its `humanmine-static` source and a `dataset
 humanmine-bio-sources is only keys and `have.file.xml.tgt`; the datasets.xml repository is lost). In this build no loader
 sets DataSet.url or description (the demo mine's 30 data sets have neither), so nothing is overwritten. The data set names
 come from the stock mapping files (`data_sets`, read from each converter) and `sources.yaml` (`data_set_title`).
+Since [im-9n4.52] the source is added to every build, with or without the option: it also carries `DataSet.version`
+from the build's caches (`DataSet.version = data-set-links, *`) and some DataSource urls, and took humanmine-static's
+place ("DataSet versions; humanmine-static retired", in the milestone 3 section).
 
 ## Watching a build
 
@@ -2251,7 +2254,7 @@ The `drive-ut-NAME.sh` stock list adds them after `orphanet`. DepMap is not in t
 | `interpro` | `ProteinDomain` name, short name, type, description, relatives, `Publication`s | the entries of the panel's matches and the entries those relate to (`ipr-ids`, `interpro-xml`) | whole | 45 MB gzipped, 72,944 entries |
 | `pubmed-gene` | `Gene.publications` (a `Publication` with a `pubMedId` per row) | rows of the panel's Entrez ids (column 2) | whole | 291 MB gzipped, every taxon |
 | `mgi-alleles` | mouse `Allele`, `Genotype`, `Gene.alleles`, `MammalianPhenotypeTerm` links | rows whose marker is a mouse gene on the panel's PANTHER rows (`idsets/mgi.txt`) | whole, but column 10 of the alleles file is still dropped | 32 + 1.3 + 54 MB |
-| `humanmine-static` | `DataSet` and `DataSource` descriptions, versions, urls (an Items XML file, no converter) | none | none | 28 KB, pinned to commit e7a86ea of 11 Feb 2022 |
+| `humanmine-static` | retired [im-9n4.52]: see "DataSet versions" below | | | |
 | `update-data-sources` | `DataSource.url`, `description` and a `Publication` for each DataSource named like a UniProt database | none (UniProt's `dbxref.txt`, 56 KB) | none | |
 | `update-publications` | `Publication` title, authors, year, journal, abstract, from E-utilities | none (it reads the mine) | none | needs `eutils.ncbi.nlm.nih.gov` |
 | `entrez-organism` | `Organism` name, genus, species, short name, from E-utilities | none (it reads the mine) | none | needs `eutils.ncbi.nlm.nih.gov` |
@@ -2270,7 +2273,7 @@ mine and what these sources and the Protein.organism ranking [im-9n4.49] changed
 | `ProteinDomain` | 14,776 | 15,261 (945 with a name, short name and type from interpro: all that have a region) |
 | `Allele` | 59,031 | 61,167 (1,657 of the mouse genes', Pax6 61), `Genotype` 0 to 1,387 |
 | `Publication` | 32,794 (6,895 titled) | 120,042 (4,067 titled) |
-| `DataSet` | 30 | 67 (of which 30 or so empty: humanmine-static, below) |
+| `DataSet` | 30 | 67 (34 of them empty: humanmine-static's, retired since [im-9n4.52], below) |
 | `DataSource` with a url | 30 of 147 | 149 of 165 (138 with a description) |
 
 protein2ipr's cut, read in 60 minutes at 3 to 5 MB/s, is 15,128 rows (1,040,394 bytes) of the 1,547 panel accessions
@@ -2305,9 +2308,10 @@ workarounds for faults in the stock converters; the converters are fixed and the
   report files (its key changed), nothing is downloaded.
 * update-data-sources: the converter's keys file keys `Publication` on `pubMedId`, so `publish_intermine` no longer
   edits the copy of the checkout.
-* `DataSource.url` and `DataSource.description` rank `humanmine-static, update-data-sources, *` in
-  `curation/priorities_override.properties`: ranked last, `update-data-sources` never filled a field that another
-  source had written as empty (the tracker records the empty field's source), and unranked it stopped the load with
+* `DataSource.url` and `DataSource.description` rank `data-set-links, update-data-sources, *` in
+  `curation/priorities_override.properties` (`humanmine-static` stood first until [im-9n4.52]): ranked last,
+  `update-data-sources` never filled a field that another source had written as empty (the tracker records the empty
+  field's source), and unranked it stopped the load with
   `Conflicting values for field DataSource.url between humanmine-ensembl and update-data-sources`.
 
 **The two E-utilities sources** run as the last two sources of `integrate_sources`: each is a pre-retrieve step (a Java
@@ -2320,12 +2324,56 @@ mine's directory, followed by the `postprocess` phase for the search index. With
 `Publication`s, 4,000 of them with a title (those the RDF pubmed source loaded): update-publications asks for about
 115,000 in batches of 500, 3 requests a second at most without an API key.
 
-**humanmine-static** names HumanMine's own sources (`interpro`, `panther`, `ncbi-gff`, `omim`, ...), not the data set titles
-the converters write here (`InterPro data set`, `Panther orthologue and paralogue predictions`, ...). Of its 41
-`DataSet`s only the ones whose name is the title of a loaded one (ncbi-gff, mgi-alleles, atlas-express, uniprot-fasta,
-hpo-annotation, orphanet) describe loaded data; the other 30 or so become `DataSet`s with no data, versions of 2021 and
-2022 included. The file is HumanMine's, last changed on 11 Feb 2022; whether this mine should carry those 30 is for the
-maintainers (a filter to the loaded data sets cannot be written before the load).
+**DataSet versions; humanmine-static retired** [im-9n4.52]. `humanmine-static` loaded HumanMine's `datasets.xml`
+(intermine/humanmine-datasets, last commit e7a86ea of 11 Feb 2022): 40 `DataSet`s, 26 `DataSource`s and 27
+`Publication`s (two of them twice). Its names are HumanMine's own sources (`interpro`, `panther`, `omim`, ...), not
+the titles the converters write here (`InterPro data set`, ...): only 6 of the 40 (`ncbi-gff`, `uniprot-fasta`,
+`atlas-express`, `hpo-annotation`, `mgi-alleles`, `orphanet`) named a data set with data, the other 34 were records
+with nothing behind them (the list: intermine-planning `baselines/humanmine-static-unmatched-datasets-2026-11-20.tsv`),
+and all 40 carried versions of 2011-22 (most "February 2022" or late 2021) although the data were fetched in November 2026. Gos, 20 Nov 2026: "drop the 34
+non-matching static data-set entries and do rebuild the file (if it is needed) from what the build actually loads with
+real versions and dates". The file is not needed: the converters and the RDF sources make every DataSet with its name,
+so the build now gives those DataSets their version through the source that already set their url and description,
+and `humanmine-static` is out of the stock table (`rdfc2im/stock.py` `RETIRED`: a `--stock-sources` list that names it
+stops with the reason; remove it from `DRIVE_STOCK`).
+
+`prepare_mine_checkout` adds the `data-set-links` source (type `humanmine-items`, loaded last; "Data-source status
+pages" above) to **every** build, `--data-set-links URL` or not. `tools/source_pages.py data-set-links` writes one
+`DataSet` item per data set the selected sources write (the names of the stock mapping files' `data_sets` and
+`sources.yaml`'s `data_set_title`), with `version` made from this build's caches, read by
+`tools/source_manifest.py stock_file_facts` / `rdf_group_facts`, the same readers the status pages use:
+
+| part of the version | from |
+|---|---|
+| the release the file states (`InterPro 111.0`, `GTEx v8`, `releaseDate 2026-10-24+01:00`, ...) | the mapping file's `release:` probes over the cached raw file (header line, zip member name or URL) |
+| else `Last-Modified D` | the server's Last-Modified, recorded when the build downloaded the file (raw group META `last_modified.<id>`; a streamed file: its filtered group's `release.<id>`) |
+| `fetched D` | when the build downloaded it (raw group `saved_at`; a streamed file: its filtered group's `saved_at`) |
+| `SPARQL extract fetched D` (RDF sources) | the RDF cache group's `saved_at`: the SPARQL results state no release |
+
+A data set fed by several files or sources gets every file's part (stated releases first), one list of fetch dates.
+Nothing is written that the caches do not hold: a data set nothing cached feeds gets no version and, without
+`--data-set-links`, no item (GTEx's `Single-Tissue cis-eQTL Data`: `GtexConverter` stores it empty whatever is
+staged, and the gtex mapping's `data_set_files` says no file feeds it). A filtered cut whose group records the
+Last-Modified of an earlier download than the raw group holds (BioGRID's `Latest-Release` file on the ut stack) loaded
+the earlier file's rows: its release is read from the cut's own file names and no fetch date is claimed. The source
+ranks first for `DataSet.version` (with `url` and `description`), so a converter that writes a version too cannot
+stop the load with "Conflicting values". The same items file gives the `DataSource`s that `datasets.xml` described and
+no UniProt abbreviation covers (NCBI, Panther, UniProt, ArrayExpress, The Human Protein Atlas, GTEx portal, Human
+Phenotype Ontology, MGD) their url and description, now kept in the stock mapping files (`data_source_url`,
+`data_source_description`; NCBI's name spelt as NCBI spells it); `update-data-sources` describes the rest. Gone with
+the file: the DataSources that described only its empty data sets (`HumanMine`, `omim`, `depmap`, `Complex Portal`, the
+lower-case `interpro`, ...: up to 12, unless a loaded source writes the same name), its old versions, and
+its `DataSet.publication` links (some wrong: `orphanet` cited the HPO paper).
+
+The versions the next ut rebuild writes, from the caches of 20 Nov 2026 (the stock list of `drive-ut-9n450.sh` without
+`humanmine-static`): `ncbi-gff` "annotation NCBI RefSeq GCF_000001405.40-RS_2024_08; assembly GRCh38.p14; fetched
+2026-11-18", `InterPro data set` "InterPro 111.0; Last-Modified 2026-11-04; fetched 2026-11-20", `BioGRID interaction
+data set` "release 5.0.263", `Swiss-Prot data set` "Last-Modified 2026-11-04; fetched 2026-11-18" (the UniProt XML
+states no release), `GO (RDF Portal)` "SPARQL extract fetched 2026-09-21"; 31 of the 32 data sets have one. Live
+tests `test_every_data_set_has_loaded_objects_behind_it` and `test_every_data_set_has_a_version_from_this_build` hold
+the mine to it; three DataSets have data no object links to, named in the test with the reason (`PubMed (RDF
+Portal)`: Publication has no `dataSets`; `modMine gene flanking regions`: InterMine's postprocess links none of its
+regions; the empty GTEx eQTL set).
 
 **DepMap** (`depmap-sample-info`, `depmap-expression`) is not wired; its licence is being read elsewhere. What it
 needs: `sample_info.csv` and `CCLE_expression.csv` from the DepMap portal (no stable URL: a release is picked by

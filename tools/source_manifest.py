@@ -347,17 +347,113 @@ def _count_spec(mf, unpack, member):
                       mf.get("header_line"), mf.get("record_key"))
 
 
+def _zip_members(raw, member):
+    import zipfile
+    with zipfile.ZipFile(raw) as z:
+        infos = [i for i in z.infolist() if not i.is_dir() and fc._match(i.filename, member)]
+        return sorted(i.filename for i in infos), sum(i.file_size for i in infos)
+
+
+def stock_file_facts(name, e, mp, stock_dir, filtered_cache=None, cache_dir=None):
+    """What the build knows of each upstream file of a stock source, from its cache groups alone (no counting, no
+    sha256): [{id, origin, raw_path, members, uncompressed_bytes, release, last_modified, fetched_at, cached_url, md5}]
+    [im-9n4.52]. The status pages and DataSet.version (source_pages.py data-set-links) both read these.
+
+      release        what the file itself states (the mapping file's `release:` probes over the cached raw file)
+      last_modified  the server's Last-Modified, recorded when the build downloaded the file (raw group META)
+      fetched_at     when the build downloaded it (the raw group's saved_at)
+
+    A streamed file (`stream: true`) has no raw group: its filtered group, saved as the file was read, holds both
+    (release.<id> is the Last-Modified then, saved_at the time of the stream). A filtered cut whose group records the
+    Last-Modified of another download than the raw group's holds the older file's rows: that date is given, and no
+    fetch time (the raw group's is not the cut's)."""
+    mfiles = {f["id"]: f for f in ((mp or {}).get("files") or [])}
+    raw_group = os.path.join(stock_dir or "", "cache", f"stock-raw-{name}")
+    group = read_group(raw_group) if stock_dir else None
+    filtered = fdir = None
+    for root in (filtered_cache, cache_dir, os.path.join(stock_dir, "cache") if stock_dir else None):
+        if root and not filtered:
+            filtered = read_group(os.path.join(root, f"stock-{name}"))
+            fdir = os.path.join(root, f"stock-{name}", "data") if filtered else None
+    out = []
+    for f in e["files"]:
+        fid = f["id"]
+        rec = {"id": fid, "origin": "repository" if f.get("repo_file") else "download", "raw_path": None,
+               "members": None, "release": None, "last_modified": None, "fetched_at": None}
+        older_cut = False
+        if f.get("repo_file"):
+            rec["raw_path"] = os.path.join(HERE, "rdfc2im", "data", f["repo_file"])
+            out.append(rec)
+            continue
+        raw = os.path.join(raw_group, "data", st.raw_name(f))
+        fmeta = (filtered or {}).get("meta", {})
+        if group:
+            m = group.get("meta", {})
+            rec["fetched_at"] = group.get("saved_at")
+            rec["last_modified"] = m.get(f"last_modified.{fid}")
+            rec["cached_url"] = m.get(f"url.{fid}")
+            rec["md5"] = group["md5sums"].get(f"data/{st.raw_name(f)}")
+            cut = fmeta.get(f"release.{fid}")
+            if f.get("filter", "none") != "none" and cut and rec["last_modified"] and cut != rec["last_modified"]:
+                rec["last_modified"], rec["fetched_at"], older_cut = cut, None, True
+        elif f.get("stream") and filtered:
+            rec["fetched_at"] = filtered.get("saved_at")
+            rec["last_modified"] = fmeta.get(f"release.{fid}")
+        spec = (mfiles.get(fid) or {}).get("release")
+        if os.path.exists(raw):
+            rec["raw_path"] = raw
+            if f.get("unpack") == "zip":
+                rec["members"], rec["uncompressed_bytes"] = _zip_members(raw, f.get("member"))
+            if not older_cut:
+                rec["release"] = release_of(spec, raw, f.get("unpack"), f.get("member"), f.get("url"), rec["members"])
+        if older_cut and spec and fdir and os.path.isdir(os.path.join(fdir, fid)):
+            # the release of the rows loaded is what the cut itself states: its file names (a zip's members are cut
+            # one file each) or its first lines, where the cut kept them
+            names = sorted(os.listdir(os.path.join(fdir, fid)))
+            one = os.path.join(fdir, fid, names[0]) if len(names) == 1 else None
+            probes = [p for p in (spec if isinstance(spec, list) else [spec]) if one or p.get("from") != "line"]
+            rec["release"] = release_of(probes, one, None, None, f.get("url"), names) if probes else None
+        out.append(rec)
+    return out
+
+
+def rdf_group_facts(src, cache_dir):
+    """{fetched_at} of an RDF source's extract: its raw-data cache group's saved_at (the SPARQL results carry no
+    release), or None when the group is absent [im-9n4.52]."""
+    group = read_group(os.path.join(cache_dir or "", src)) if cache_dir else None
+    return {"fetched_at": group.get("saved_at")} if group else None
+
+
+def reactome_file_facts(cache_dir, mp):
+    """The facts of stock reactome's UniProt2Reactome.txt (the RDF raw-data cache group reactome-uniprot-map), in the
+    shape of stock_file_facts; [] when the group is absent."""
+    gdir = os.path.join(cache_dir or "", "reactome-uniprot-map")
+    group = read_group(gdir) if cache_dir else None
+    if not group:
+        return []
+    mf = ((mp or {}).get("files") or [{}])[0]
+    raw = os.path.join(gdir, "data", "UniProt2Reactome.txt")
+    url = group.get("meta", {}).get("url")
+    rec = {"id": mf.get("id", "map"), "origin": "download", "raw_path": raw if os.path.exists(raw) else None,
+           "members": None, "release": None, "last_modified": None, "fetched_at": group.get("saved_at"), "url": url}
+    if rec["raw_path"]:
+        rec["release"] = release_of((mp or {}).get("release") or mf.get("release"), raw, None, None, url, None)
+    return [rec]
+
+
 def stock_entry(name, table, args, idcounts, flogs, mine, model):
     e = table[name]
     mp = load_mapping(name, args.mappings) or {}
-    mfiles = {f["id"]: f for f in (mp.get("files") or [])}
     raw_group = os.path.join(args.stock_dir, "cache", f"stock-raw-{name}")
     group = read_group(raw_group)
     filtered = read_group(os.path.join(args.filtered_cache or "", f"stock-{name}")) if args.filtered_cache else None
+    mfiles = {f["id"]: f for f in (mp.get("files") or [])}
+    facts = {r["id"]: r for r in stock_file_facts(name, e, mp, args.stock_dir, args.filtered_cache)}
     files = []
     for f in e["files"]:
         fid = f["id"]
         mf = mfiles.get(fid) or {}
+        fx = facts[fid]
         rec = {"id": fid, "url": f.get("url"), "raw_name": st.raw_name(f) if not f.get("repo_file") else f["repo_file"],
                "unpack": f.get("unpack"), "member": f.get("member"), "stage_as": f.get("stage_as"),
                "table_size": f.get("size"), "table_last_modified": f.get("last_modified"), "verified": f.get("verified")}
@@ -365,17 +461,17 @@ def stock_entry(name, table, args, idcounts, flogs, mine, model):
         rec["filter"] = flt if isinstance(flt, dict) else "none"
         rec["filter_rule"] = filter_rule(flt, idcounts)
         if f.get("repo_file"):
-            raw = os.path.join(HERE, "rdfc2im", "data", f["repo_file"])
+            raw = fx["raw_path"]
             rec["origin"] = "rdfc2im repository file (written by hand)"
         else:
             raw = os.path.join(raw_group, "data", st.raw_name(f))
             rec["origin"] = "download"
-        if group and not f.get("repo_file"):
-            m = group.get("meta", {})
-            rec["fetched_at"] = group.get("saved_at")
-            rec["last_modified"] = m.get(f"last_modified.{fid}")
-            rec["cached_url"] = m.get(f"url.{fid}")
-            rec["md5"] = group["md5sums"].get(f"data/{st.raw_name(f)}")
+        if fx["fetched_at"] or fx["last_modified"] or "cached_url" in fx:
+            rec["fetched_at"] = fx["fetched_at"]
+            rec["last_modified"] = fx["last_modified"]
+        if "cached_url" in fx:
+            rec["cached_url"] = fx["cached_url"]
+            rec["md5"] = fx["md5"]
         if os.path.exists(raw):
             rec["raw_path"] = raw
             rec["size"] = os.path.getsize(raw)
@@ -383,16 +479,13 @@ def stock_entry(name, table, args, idcounts, flogs, mine, model):
         else:
             rec["raw_path"] = None
             log(f"{name}/{fid}: raw file {raw} not found")
-        members = None
-        if rec["raw_path"] and f.get("unpack") == "zip":
-            import zipfile
-            with zipfile.ZipFile(raw) as z:
-                infos = [i for i in z.infolist() if not i.is_dir() and fc._match(i.filename, f.get("member"))]
-                members = sorted(i.filename for i in infos)
-                rec["uncompressed_bytes"] = sum(i.file_size for i in infos)
+        members = fx["members"]
+        if members is not None:
+            rec["uncompressed_bytes"] = fx["uncompressed_bytes"]
             rec["members"] = members if len(members) <= 20 else members[:3] + [f"... {len(members)} members"]
         if rec["raw_path"]:
-            rec["release"] = release_of(mf.get("release"), raw, f.get("unpack"), f.get("member"), f.get("url"), members)
+            rec["release"] = fx["release"] if not f.get("repo_file") else \
+                release_of(mf.get("release"), raw, f.get("unpack"), f.get("member"), f.get("url"), members)
         inp, kind = _input_path(e, f, name, args.stock_dir, args.filtered_cache, raw)
         rec["input_kind"], rec["input_path"] = kind, inp
         if mf.get("format") and rec["raw_path"]:

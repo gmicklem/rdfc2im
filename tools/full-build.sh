@@ -136,10 +136,12 @@
 #                       records read and kept, field counts, objects loaded per class from the mine) and
 #                       tools/source_pages.py writes the data-source status pages (Markdown) into DIR. Off by
 #                       default; BUILD.md, "Data-source status pages" [im-9n4.42].
-#   --data-set-links URL  In prepare_mine_checkout, add a last source, data-set-links (type humanmine-items), that sets
-#                       DataSet.url to the status page URL/<kind>-<source>.md and DataSet.description on every data
-#                       set the selected sources write, with first priority for both fields. URL is where the pages
-#                       are published (e.g. the humanmine repository's docs/data-sources/ on GitHub). Off by default.
+#   --data-set-links URL  prepare_mine_checkout always adds a last source, data-set-links (type humanmine-items), that
+#                       sets DataSet.version on every data set the selected sources write, from this build's caches
+#                       (the release the file states, else its Last-Modified, and the fetch date) [im-9n4.52]; with
+#                       this option it also sets DataSet.url to the status page URL/<kind>-<source>.md and
+#                       DataSet.description, first priority for all three. URL is where the pages are published (e.g.
+#                       the humanmine repository's docs/data-sources/ on GitHub). Off by default.
 #   -h, --help          This text.
 #
 # Every side-effecting external command (gradle, docker, psql, curl) is emitted through `run`,
@@ -1837,7 +1839,8 @@ phase_prepare_mine_checkout() {
   # merge; this just deploys it) - re-syncing after adding a source is required, not optional
   # (confirmed live, LOAD-TRIAL.md's hgnc section, finding 3).
   write_file "$mine/dbmodel/resources/genomic_priorities.properties" "$(cat out/_mine/genomic_priorities.properties)"
-  [ -z "$DATA_SET_LINKS" ] || _add_data_set_links "$mine"
+  # DataSet.version (and, with --data-set-links URL, url and description) from this build's own caches [im-9n4.52]
+  [ -z "$SOURCES$STOCK_SOURCES" ] || _add_data_set_links "$mine"
   local prod_props
   local tree="$INTERMINE_TREE"
   if [ "$DRY_RUN" -eq 1 ] && [ -n "$INTERMINE_SRC" ] && [ ! -d "$tree" ]; then tree="$INTERMINE_SRC"; fi  # as in build_reactome_source
@@ -2334,14 +2337,18 @@ phase_apply_public_lists() {
       --report "$LOG_DIR/public-lists-$RUN_ID.json" --wait 300
 }
 
-# --data-set-links URL [im-9n4.42]: an items file of DataSet records (name, url = the source's status page,
-# description) for every data set the selected sources write, loaded by one more humanmine-items source after all
-# the others, first for DataSet.url and DataSet.description (no loader sets either in this build).
+# The data-set-links source [im-9n4.42, im-9n4.52]: an items file of DataSet records for every data set the selected
+# sources write, loaded by one more humanmine-items source after all the others, first for DataSet.version (the
+# release the file states, else its Last-Modified, and the date this build fetched it: the cache groups' META.json, all
+# written by the fetch phases before this one), DataSet.url and DataSet.description (--data-set-links URL: the
+# source's status page; no loader sets either in this build), and the DataSource url/description of the stock mapping
+# files (ranked by curation/priorities_override.properties). On every build: it replaced humanmine-static.
 _add_data_set_links() {
   local mine=$1 items="$DATA_ROOT/rdfc2im/_data-set-links/data_set_links.xml"
   run mkdir -p "$(dirname "$items")"
-  run python3 tools/source_pages.py data-set-links --base-url "$DATA_SET_LINKS" --sources "$SOURCES" \
-      --stock-sources "$STOCK_SOURCES" --out "$items"
+  run python3 tools/source_pages.py data-set-links ${DATA_SET_LINKS:+--base-url "$DATA_SET_LINKS"} --sources "$SOURCES" \
+      --stock-sources "$STOCK_SOURCES" --stock-dir "$STOCK_DIR" ${STOCK_FILTERED_CACHE:+--filtered-cache "$STOCK_FILTERED_CACHE"} \
+      --cache-dir "$RAW_CACHE_DIR" --out "$items"
   run python3 tools/source_pages.py add-links-source --project "$mine/project.xml" \
       --priorities "$mine/dbmodel/resources/genomic_priorities.properties" --items "$items" --name data-set-links
 }

@@ -281,11 +281,15 @@ short `reason`, and `code` (file:line in the loader). `unlisted` says what a key
 Every file records the loader commit it was read at.
 
 In `tools/full-build.sh`: `--source-pages DIR` adds the last phase `write_source_manifest` (after `verify`);
-`--data-set-links URL` makes `prepare_mine_checkout` add a last source, `data-set-links`, that sets `DataSet.url` (the
-page) and `DataSet.description` on every data set of the build. Both are off without the flag.
+`prepare_mine_checkout` always adds a last source, `data-set-links`, that sets `DataSet.version` on every data set of
+the build from the build's caches (the release the file states, else its Last-Modified, and the date the build fetched
+it; an RDF source's SPARQL extract date) and the url/description of the DataSources the stock mapping files describe
+(`data_source_url`, `data_source_description`) [im-9n4.52]; `--data-set-links URL` makes the same source also set
+`DataSet.url` (the page) and `DataSet.description`. The pages phase is off without `--source-pages`.
 
 Tests: `tests/test_source_pages.py` (counters, manifest, a golden page, the link items and project wiring),
-`tests/test_full_build_source_pages.py` (dry-run).
+`tests/test_data_set_versions.py` (DataSet.version and the DataSource records), `tests/test_full_build_source_pages.py`
+(dry-run).
 
 ## Not yet exercised
 

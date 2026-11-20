@@ -44,5 +44,6 @@ files:
           not one of them is dropped with the lines that follow it. For a database that is one: `Name:` becomes
           DataSource.description, `Server:` DataSource.url, and the PubMed id in `Ref:` (`PubMed=17099233`) a Publication
           (pubMedId) added to DataSource.publications. `AC:`, `LinkTp:`, `Db_URL:`, `Note:` and `Cat:` are not read.
-          The source must integrate after the sources that make the DataSources, and humanmine-static ranks above it
-          for DataSource.url and description (curation/priorities_override.properties).
+          The source must integrate after the sources that make the DataSources, and data-set-links ranks above it
+          for DataSource.url and description (curation/priorities_override.properties; it writes only DataSources
+          that are no UniProt abbreviation, so the two never describe the same one) [im-9n4.52].

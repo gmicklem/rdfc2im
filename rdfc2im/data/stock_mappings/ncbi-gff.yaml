@@ -20,6 +20,9 @@ basis: >-
   from the hybrid build's project.xml (gff3.taxonId 9606, gff3.seqClsName Chromosome,
   gff3.dataSourceName NCBI, gff3.dataSetTitle ncbi-gff)
 data_source: NCBI
+# data_source_url/description: what HumanMine's datasets.xml (humanmine-datasets e7a86ea) gave this DataSource [im-9n4.52] ("Centre" there; NCBI's own spelling here)
+data_source_url: "https://www.ncbi.nlm.nih.gov"
+data_source_description: "National Center for Biotechnology Information"
 data_sets: [ncbi-gff]
 home: https://www.ncbi.nlm.nih.gov
 # The code has no default names: GFF3ConverterTask throws when gff3.dataSourceName or gff3.dataSetTitle

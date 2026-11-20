@@ -6,9 +6,13 @@
       are. The output is deterministic: the same manifest and mapping files give byte-identical pages, and
       the only dates in them are the manifest's.
 
-  source_pages.py data-set-links --base-url URL --out ITEMS.xml [--sources "..."] [--stock-sources "..."]
-      Items XML setting DataSet.url (the source's page) and DataSet.description on every data set the
-      selected sources write, for an items source loaded last (see add-links-source).
+  source_pages.py data-set-links --out ITEMS.xml [--base-url URL] [--sources "..."] [--stock-sources "..."]
+                                 [--stock-dir DIR] [--filtered-cache DIR] [--cache-dir DIR]
+      Items XML for an items source loaded last (see add-links-source), on every data set the selected sources
+      write: DataSet.version from the build's caches (the release the file states, else its Last-Modified, and
+      the date the build fetched it; an RDF source's SPARQL extract date) [im-9n4.52]; with --base-url also
+      DataSet.url (the source's page) and DataSet.description; and the DataSource url/description the stock
+      mapping files give (data_source_url, data_source_description).
 
   source_pages.py add-links-source --project project.xml --priorities genomic_priorities.properties
                                    --items PATH [--name data-set-links]
@@ -30,6 +34,7 @@ from xml.sax.saxutils import quoteattr
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, HERE)
+sys.path.insert(1, os.path.join(HERE, "tools"))    # source_manifest (the cache readers), for data-set-links
 
 import yaml  # noqa: E402
 
@@ -652,27 +657,132 @@ def data_set_pages(stock_names, rdf_names, mappings_dir=None, sources_yaml=SOURC
     return out
 
 
-def data_set_links_xml(pages, base_url):
-    base = base_url.rstrip("/") + "/"
+def version_label(facts):
+    """DataSet.version from the facts of the files that feed a data set (source_manifest.stock_file_facts and
+    rdf_group_facts, in source order) [im-9n4.52]: per file the release it states, else its Last-Modified, then the
+    dates the build fetched the files ("fetched D"), then those of the SPARQL extracts ("SPARQL extract fetched D").
+    Nothing is written that the caches do not hold: None when they hold nothing."""
+    releases, dates, fetched, extracted = [], [], [], []
+    for f in facts:
+        if f.get("kind") == "rdf":
+            d = day(f.get("fetched_at"))
+            if d and d not in extracted:
+                extracted.append(d)
+            continue
+        lm = f.get("last_modified")
+        if f.get("release"):
+            if f["release"] not in releases:
+                releases.append(f["release"])
+        elif lm and lm != "unknown" and day(lm) and "Last-Modified " + day(lm) not in dates:
+            dates.append("Last-Modified " + day(lm))
+        d = day(f.get("fetched_at"))
+        if d and d not in fetched:
+            fetched.append(d)
+    parts = releases + dates
+    if fetched:
+        parts.append("fetched " + ", ".join(sorted(fetched)))
+    if extracted:
+        parts.append("SPARQL extract fetched " + ", ".join(sorted(extracted)))
+    return "; ".join(parts) or None
+
+
+def _files_of(mp, ds):
+    """The file ids of a stock source that feed data set `ds`: the mapping's `data_set_files` where it names the
+    data set, else every file."""
+    dsf = (mp or {}).get("data_set_files") or {}
+    return None if ds not in dsf else set(dsf[ds])
+
+
+def data_set_versions(stock_names, rdf_names, stock_dir=None, filtered_cache=None, cache_dir=None, table=None,
+                      mappings_dir=None, sources_yaml=SOURCES_YAML):
+    """{DataSet name: version or None} for every data set the selected sources write (the names of data_set_pages)
+    [im-9n4.52]: what version_label makes of the cache facts of the files that feed it. A source not selected adds
+    nothing; a data set nothing cached feeds gets None (no item is written for it, rather than a guess)."""
+    import source_manifest as sm      # the cache readers; imported here so the pages need no stock table
+    from rdfc2im import stock as st
+    table = table if table is not None else st.load_table()
+    with open(sources_yaml, encoding="utf-8") as fh:
+        scfg = yaml.safe_load(fh) or {}
+    facts = {}
+    for n in rdf_names:
+        t = (scfg.get(n) or {}).get("data_set_title")
+        if t:
+            g = sm.rdf_group_facts(n, cache_dir)
+            facts.setdefault(t, []).extend([dict(g, kind="rdf")] if g else [])
+    names = list(stock_names) + (["reactome"] if "reactome" in rdf_names else [])
+    for n in names:
+        mp = load_mapping(n, mappings_dir) or {}
+        if n == "reactome" and n not in stock_names:
+            files = sm.reactome_file_facts(cache_dir, mp)
+        else:
+            files = sm.stock_file_facts(n, table[n], mp, stock_dir, filtered_cache, cache_dir)
+        for ds in mp.get("data_sets") or []:
+            want = _files_of(mp, ds)
+            facts.setdefault(ds, []).extend(f for f in files if want is None or f["id"] in want)
+    return {ds: version_label(fs) for ds, fs in facts.items()}
+
+
+def data_source_records(stock_names, mappings_dir=None):
+    """{DataSource name: {url[, description]}} from the stock mapping files' `data_source_url` and
+    `data_source_description` (the facts HumanMine's datasets.xml gave and that still hold, for the DataSources no
+    UniProt abbreviation covers: update-data-sources describes those) [im-9n4.52]. Two mapping files that name the
+    same DataSource must agree; ValueError otherwise."""
+    out, where = {}, {}
+    for n in stock_names:
+        mp = load_mapping(n, mappings_dir) or {}
+        if not mp.get("data_source_url"):
+            continue
+        rec = {"url": mp["data_source_url"]}
+        if mp.get("data_source_description"):
+            rec["description"] = mp["data_source_description"]
+        name = mp["data_source"]
+        if name in out and out[name] != rec:
+            raise ValueError(f"DataSource {name!r}: {where[name]} and {n} give different data_source_url/description")
+        out[name], where[name] = rec, where.get(name, n)
+    return out
+
+
+def data_set_links_xml(pages, base_url=None, versions=None, data_sources=None):
+    """The items of the data-set-links source: per data set its status page (url, description) when base_url is given
+    and its version where one is known; per DataSource of data_source_records its url and description. A data set with
+    nothing to set gets no item. Deterministic: sorted by name, numbered in that order."""
+    base = base_url.rstrip("/") + "/" if base_url else None
+    versions = versions or {}
     lines = ['<?xml version="1.0" encoding="UTF-8"?>',
-             "<!-- generated by rdfc2im tools/source_pages.py data-set-links: DataSet.url and description point at",
-             "     the data-source status pages; load as the last source (add-links-source) -->", "<items>"]
-    for i, (ds, files) in enumerate(sorted(pages.items()), 1):
-        names = ", ".join(f[:-3] for f in files)
-        desc = (f"Status page of this data set's source ({names}): the file, release and fetch date this build "
-                "loaded, and which fields of the source are loaded and which are not.")
-        lines += [f'  <item id="0_{i}" class="DataSet" implements="">',
-                  f'    <attribute name="name" value={quoteattr(ds)}/>',
-                  f'    <attribute name="url" value={quoteattr(base + files[0])}/>',
-                  f'    <attribute name="description" value={quoteattr(desc)}/>',
-                  "  </item>"]
+             "<!-- generated by rdfc2im tools/source_pages.py data-set-links: DataSet.version (from the build's caches),",
+             "     DataSet.url and description (the data-source status pages), DataSource url/description (the stock",
+             "     mapping files); load as the last source (add-links-source) -->", "<items>"]
+    i = 0
+    for ds in sorted(set(pages) | {d for d, v in versions.items() if v}):
+        files = pages.get(ds) or []
+        attrs = [("name", ds)]
+        if versions.get(ds):
+            attrs.append(("version", versions[ds]))
+        if base and files:
+            names = ", ".join(f[:-3] for f in files)
+            attrs += [("url", base + files[0]),
+                      ("description", f"Status page of this data set's source ({names}): the file, release and fetch "
+                                      "date this build loaded, and which fields of the source are loaded and which are not.")]
+        if len(attrs) == 1:
+            continue
+        i += 1
+        lines.append(f'  <item id="0_{i}" class="DataSet" implements="">')
+        lines += [f'    <attribute name="{k}" value={quoteattr(v)}/>' for k, v in attrs]
+        lines.append("  </item>")
+    for name, rec in sorted((data_sources or {}).items()):
+        i += 1
+        lines.append(f'  <item id="0_{i}" class="DataSource" implements="">')
+        lines.append(f'    <attribute name="name" value={quoteattr(name)}/>')
+        lines += [f'    <attribute name="{k}" value={quoteattr(rec[k])}/>' for k in ("url", "description") if rec.get(k)]
+        lines.append("  </item>")
     lines.append("</items>")
     return "\n".join(lines) + "\n"
 
 
 def add_links_source(project, priorities, items, name="data-set-links"):
     """Append <source name=NAME type=humanmine-items> reading ITEMS to project.xml (idempotent) and put NAME
-    first for DataSet.url and DataSet.description in the priorities file. Text edits, so the rest of both
+    first for DataSet.url, DataSet.description and DataSet.version in the priorities file (DataSource.url and
+    description rank it in curation/priorities_override.properties). Text edits, so the rest of both
     files stays byte for byte as it was."""
     with open(project, encoding="utf-8") as fh:
         text = fh.read()
@@ -691,9 +801,11 @@ def add_links_source(project, priorities, items, name="data-set-links"):
             fh.write(text)
     with open(priorities, encoding="utf-8") as fh:
         ptext = fh.read()
-    keep = [ln for ln in ptext.splitlines() if not re.match(r"^DataSet\.(url|description)\s*=", ln)]
-    keep += [f"# DataSet.url/description: the data-source status pages (rdfc2im source_pages.py, {name})",
-             f"DataSet.url = {name}, *", f"DataSet.description = {name}, *"]
+    keep = [ln for ln in ptext.splitlines() if not re.match(r"^DataSet\.(url|description|version)\s*=", ln)
+            and not ln.startswith("# DataSet.url/description")]
+    keep += [f"# DataSet.url/description/version: the data-source status pages and the build's own release and fetch "
+             f"dates (rdfc2im source_pages.py, {name})",
+             f"DataSet.url = {name}, *", f"DataSet.description = {name}, *", f"DataSet.version = {name}, *"]
     with open(priorities, "w", encoding="utf-8") as fh:
         fh.write("\n".join(keep) + "\n")
 
@@ -709,10 +821,15 @@ def main(argv=None):
     p.add_argument("--out", required=True)
     p.add_argument("--mappings", help="the stock mapping files (default rdfc2im/data/stock_mappings)")
     d = sub.add_parser("data-set-links")
-    d.add_argument("--base-url", required=True)
+    d.add_argument("--base-url", help="where the status pages are published; without it no DataSet.url/description")
     d.add_argument("--out", required=True)
     d.add_argument("--sources", default="")
     d.add_argument("--stock-sources", default="")
+    d.add_argument("--stock-dir", help="the stock data directory (its cache/ holds the raw groups)")
+    d.add_argument("--filtered-cache", help="the stock filtered cache (streamed files' groups)")
+    d.add_argument("--cache-dir", help="the RDF raw-data cache (RDF groups, reactome-uniprot-map)")
+    d.add_argument("--stock-table", help="the stock table (default rdfc2im/data/stock_sources.yaml)")
+    d.add_argument("--mappings", help="the stock mapping files (default rdfc2im/data/stock_mappings)")
     s = sub.add_parser("add-links-source")
     s.add_argument("--project", required=True)
     s.add_argument("--priorities", required=True)
@@ -725,11 +842,20 @@ def main(argv=None):
         for w in write_pages(man, a.out, a.mappings):
             print(w)
     elif a.cmd == "data-set-links":
-        pages = data_set_pages(a.stock_sources.replace(",", " ").split(), a.sources.replace(",", " ").split())
+        from rdfc2im import stock as st
+        stock_names = a.stock_sources.replace(",", " ").split()
+        rdf_names = a.sources.replace(",", " ").split()
+        pages = data_set_pages(stock_names, rdf_names, a.mappings)
+        table = st.load_table(a.stock_table)
+        versions = data_set_versions(stock_names, rdf_names, a.stock_dir, a.filtered_cache, a.cache_dir, table,
+                                     a.mappings)
+        dsrc = data_source_records(stock_names, a.mappings)
         os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
         with open(a.out, "w", encoding="utf-8") as fh:
-            fh.write(data_set_links_xml(pages, a.base_url))
-        print(f"{a.out}: {len(pages)} data sets")
+            fh.write(data_set_links_xml(pages, a.base_url, versions, dsrc))
+        none = sorted(ds for ds in pages if not versions.get(ds))
+        print(f"{a.out}: {len(pages)} data sets, {len(pages) - len(none)} with a version, {len(dsrc)} data sources"
+              + (f"; no version (nothing cached feeds them): {', '.join(none)}" if none else ""))
     else:
         add_links_source(a.project, a.priorities, a.items, a.name)
         print(f"{a.project}: source {a.name} added; {a.priorities}: DataSet.url and DataSet.description first")
