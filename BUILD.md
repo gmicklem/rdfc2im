@@ -2685,6 +2685,56 @@ every one of the 16 has its title from update-publications; Publication 119,966 
 119,920 with a title. `make test` 595 passed, 75 skipped; `make test-live` 75 passed, 0 skipped, 0 failed; the mine's
 version endpoint and the front answer 200.
 
+## The rebuild of 20 Nov 2026, panel Ensembl genes by cross-reference [im-9n4.59]
+
+rdfc2im `maint/im-9n4.59-ensembl-panel-notes` (the im-9n4.55 merge plus this task), InterMine and humanmine-bio-sources
+(1d36e19) as in the im-9n4.56 rebuild, `$TRIAL_HOME/humanmine-bio-sources` removed first; `drive-ut-9n459.sh`, every phase,
+`--offline`, with `DRIVE_CACHE_DIR` = `scratch/im-9n4.59/cached_raw_data.9n459` (the refetched ensembl, gwascatalog,
+pubmed and gene-id-lookup groups; links to every other group of `cached_raw_data.remaining-2026-11-20`). The production
+database was dumped first (`pg_dump -Fc`, 264 MB, in that scratch directory). Nothing was done by hand.
+
+**Stopped once**, at `rdfc2im_pipeline` (119 s): the cached pubmed group was refused, `pmids_md5` changed. gwascatalog's
+new cut (UGT1A1's associations instead of UGT1A8's) cites a different PMID set: 3,926 papers against 3,930 (4 out,
+none in). The cause is the intended change, so pubmed was refetched for the new set (`scratch/im-9n4.59/bin/refetch_pubmed.sh`,
+RDF Portal, under a minute) into the same cache directory and the driver resumed at `rdfc2im_pipeline`.
+
+**Phases** (`phases.tsv`, the resumed run 15:05 to 15:42, every rc 0; 2,468 s with the first three phases):
+
+| Phase | s | Phase | s |
+|---|---|---|---|
+| check_prereqs / fetch_inputs | 1 / 7 | build_dbmodel | 31 |
+| publish_intermine | 227 | **integrate_sources** | **1,051** |
+| rdfc2im_pipeline | 118 (119, rc 1, before) | **postprocess** | **748** |
+| rdfc2im_project / build_humanmine_items | 8 / 12 | build_webapp / resolve_bluegenes_deps | 15 / 2 |
+| build_stock_sources / fetch_stock_data | 25 / 10 | stage_artifacts / start_mine_stack | 5 / 3 |
+| subset_stock_data | 21 | apply_templates / apply_public_lists | 15 / 150 |
+| prepare_mine_checkout / stage_src_data / start_databases | 2 / 2 / 1 | verify / write_source_manifest | 7 / 7 |
+
+**Memory** (`memlog.tsv`): peak 12.6 GB used, 3.6 GB available (15:30:47, postprocess).
+
+**Checks.** The items step: "Gene: 0 of 114 Ensembl genes not joined ... joined 114 by hgnc". UGT1A1 (54658) shows
+ENSG00000241635 and is in the Ensembl and the GWAS Catalog data sets; UGT1A8 (54576) shows its own ENSG00000242366 and,
+not being a panel gene, has no Ensembl-source data (before, it had UGT1A1's); GSTT1 (2952) shows ENSG00000277656 and is in
+the Ensembl data set (it was in none). The prepare line: `32 data sets, 31 with a version, 23 with a cited paper (16
+PubMed ids), 22 with a note, 8 data sources`. The DataSet descriptions as loaded (SQL):
+
+* Ensembl genes (RDF Portal): the status-page sentence, then "Ensembl genes are loaded only where HGNC, NCBI or Ensembl
+  gives a one-to-one cross-reference to an NCBI gene in this mine; the others are left out. 0 of 114 Ensembl genes in
+  this build's scope were not loaded for that reason. This build loads this data set only for the 114 genes of its gene
+  panel."
+* PubMed (RDF Portal): "... Only the PubMed records that other data in this mine cite are loaded, not the whole of PubMed."
+* IntAct molecular interactions: "... This build loads only the records of this data set that involve one of the 114
+  genes of its gene panel or their proteins; the rest of the file is cut before loading."
+* InterPro data set: "... This build loads only the InterPro matches of the proteins of the 114 genes of its gene panel
+  and the InterPro entries they name, with the entries related to them; the rest is cut before loading."
+
+**Objects** against the mine before (the running ut demo, 1,727,345; the 1,727,148 of im-9n4.56 run 2 plus the
+im-9n4.55 change): 1,727,171. No class moved by 1% or more: SNP 3,082 to 3,054 (-0.9%), GWASResult 30,832 to 30,793,
+GWAS 6,175 to 6,167 (gwascatalog's cut: UGT1A1's associations for UGT1A8's), Author -111, Publication -2, MeshTerm -1
+(the 4 papers no longer cited), CrossReference +15 (GSTT1's Ensembl gene). `make test` 640 passed, 78 skipped; `make
+test-live` 78 passed, 0 skipped, 0 failed (the three Ensembl tests among them); the version endpoint and the front
+answer 200.
+
 ## Persistence, and what does not survive
 
 **The loaded mine lives in Docker volumes** - `rdfc2im-pgdata` and `rdfc2im-solrdata` (named
