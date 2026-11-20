@@ -1,0 +1,63 @@
+# HumanMine's own description of its data sets and data sources (datasets.xml of the repository
+# intermine/humanmine-datasets, pinned to its last commit of 11 Feb 2022): an Items XML file that HumanMine loads as it
+# is. The source has no converter: type humanmine-static reads the file as items and keys DataSet and DataSource on name
+# and Publication on pubMedId. The names and versions are those of HumanMine's own sources of 2021-22, not of this build.
+source: humanmine-static
+loader:
+  repository: humanmine-bio-sources
+  path: humanmine-static
+  classes: []
+  commit: 1d36e19
+basis: read from humanmine-static.properties (have.file.xml.tgt) and humanmine-static_keys.properties at humanmine-bio-sources 1d36e19, and from datasets.xml itself
+data_source: HumanMine
+data_sets: []
+home: https://github.com/intermine/humanmine-datasets
+writes: [DataSet, DataSource, Publication]
+# `data_sets` is empty: the file writes DataSet items of its own (41 of them, named for HumanMine's sources of 2021-22) and
+# gives the DataSets of this build that carry the same name their description, version and url. Those that match nothing
+# loaded stay as DataSets with no data (the list is in BUILD.md and the build report).
+files:
+  - id: datasets
+    format: xml
+    release: [{"from": "line", "pattern": "(<items>)", "label": "Items XML"}]
+    record: one item element = one DataSet, DataSource or Publication (the class is the implements attribute)
+    record_key: items/item
+    unlisted: not loaded
+    unlisted_reason: every item is loaded as it stands; nothing in the file is left out
+    fields:
+      - key: "items/item/@implements"
+        name: implements
+        description: "the class of the item: DataSet (41), DataSource (26) or Publication (27)"
+        maps_to: []
+        status: loaded
+        reason: "chooses the class of the object made"
+        code: humanmine-static.properties:1
+        note: "class is empty in the file; the loader reads implements."
+      - key: "items/item/@id"
+        name: id
+        description: local identifier of the item, used by the references in the same file
+        maps_to: []
+        status: not loaded
+        reason: "file-local label"
+        code: ""
+        note: "Only serves the ref_id of references between items of the file."
+      - key: "items/item/attribute"
+        name: attribute
+        description: "a name/value pair: name, description, version, url (DataSet, DataSource) or pubMedId (Publication)"
+        maps_to: [DataSet.name, DataSet.description, DataSet.version, DataSet.url, DataSource.name, DataSource.description, DataSource.url, Publication.pubMedId]
+        status: loaded
+        reason: ""
+        code: humanmine-static_keys.properties:1-3
+        note: >-
+          DataSet and DataSource are keyed on name, Publication on pubMedId. A DataSet or DataSource of this build with
+          the same name takes the description, version or url given here (priorities in curation/priorities_override.properties
+          decide which source wins); one with another name is untouched. 27 Publications are listed, two of them
+          (27899635 and 10802651) twice in the file, which a single load does not merge.
+      - key: "items/item/reference"
+        name: reference
+        description: "dataSource (41, from a DataSet to its DataSource) or publication (34, to a Publication)"
+        maps_to: [DataSet.dataSource, DataSet.publication, DataSource.publications]
+        status: loaded
+        reason: ""
+        code: humanmine-static.properties:1
+        note: "The ref_id of a reference is the id of another item of the file."

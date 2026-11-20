@@ -1,0 +1,323 @@
+# MGI's phenotype reports for mouse alleles and genotypes (MGI_PhenotypicAllele.rpt, MGI_QTLAllele.rpt,
+# MGI_PhenoGenoMP.rpt), loaded by the mgi-alleles source of humanmine-bio-sources: Alleles with their marker gene,
+# paper and high-level Mammalian Phenotype terms, and Genotypes with their alleles and phenotype terms. The reports
+# have no header line; the converter checks the column count and the content of the columns it reads, and stops on
+# any other layout (so a change MGI makes to a report stops the build instead of loading the wrong column).
+source: mgi-alleles
+loader:
+  repository: humanmine-bio-sources
+  path: mgi-alleles
+  classes: [org.intermine.bio.dataconversion.MgiAllelesConverter]
+  commit: 1d36e19
+basis: read from code at humanmine-bio-sources 1d36e19 (MgiAllelesConverter.java, BioFileConverter.java)
+data_source: The Mouse genome database (MGD) from Mouse Genome Informatics (MGI)
+data_sets: [mgi-alleles]
+home: https://www.informatics.jax.org/
+writes: [DataSource, DataSet, Ontology, Allele, Gene, Publication, MammalianPhenotypeTerm, Genotype]
+# Ontology: the "Mammalian Phenotype Ontology" item the terms point at (MgiAllelesConverter.java:104-108, 184-188), and
+# the Sequence Ontology item BioFileConverter makes for Allele's SOTerm. The Gene is a stub (primaryIdentifier MGI:n and
+# organism 10090) that merges with the mouse genes panther and mgi-identifiers write. A MammalianPhenotypeTerm has an
+# identifier only: the term names come from the mammalian-phenotype-ontology source, which is not in this build.
+files:
+  - id: phenotypic-alleles
+    format: tab
+    comment: "#"
+    skip_lines: 0
+    header_line: null
+    record: one row = one mouse allele with its marker, original paper and high-level phenotype terms
+    record_key: null
+    unlisted: not loaded
+    unlisted_reason: the converter expects exactly 13 columns and reads columns 1 to 7 and 11
+    fields:
+      - key: "col:1"
+        name: "MGI Allele Accession ID"
+        description: "allele accession (MGI:2156820)"
+        maps_to: [Allele.primaryIdentifier]
+        status: loaded
+        reason: ""
+        code: MgiAllelesConverter.java:202, 227
+        note: "Checked only as a column; the Allele is keyed by its symbol (column 2) in the load."
+      - key: "col:2"
+        name: "Allele Symbol"
+        description: "allele symbol with its superscript in angle brackets (Pax6<10Neu>)"
+        maps_to: [Allele.symbol]
+        status: loaded
+        reason: ""
+        code: MgiAllelesConverter.java:203, 226, 285-292
+        note: "One Allele per symbol; the same symbol in the genotype file is the same Allele."
+      - key: "col:3"
+        name: "Allele Name"
+        description: "allele name"
+        maps_to: [Allele.name]
+        status: loaded
+        reason: ""
+        code: MgiAllelesConverter.java:204, 228
+        note: ""
+      - key: "col:4"
+        name: "Allele Type"
+        description: "kind of allele (Targeted, Chemically induced (ENU), Endonuclease-mediated, ...)"
+        maps_to: [Allele.type]
+        status: loaded
+        reason: "with column 5"
+        code: MgiAllelesConverter.java:217, 230-232
+        note: "Allele.type is column 4, a comma and column 5 (for example 'Targeted, Conditional ready|Null/knockout|Reporter'); empty parts are not removed."
+      - key: "col:5"
+        name: "Allele Attribute"
+        description: "attributes of the allele, pipe-delimited (Null/knockout|Reporter)"
+        maps_to: [Allele.type]
+        status: loaded
+        reason: "joined to column 4"
+        code: MgiAllelesConverter.java:217, 230-232
+        note: ""
+      - key: "col:6"
+        name: "PubMed ID for original reference"
+        description: "PubMed id of the paper that first described the allele"
+        maps_to: [Allele.publication, Publication.pubMedId]
+        status: loaded
+        reason: "only when all digits"
+        code: MgiAllelesConverter.java:218, 233-238, 296-307
+        note: "A value that is not all digits is ignored (the file once held a bad id). One Publication per PubMed id."
+      - key: "col:7"
+        name: "MGI Marker Accession ID"
+        description: "accession of the allele's marker gene (MGI:97490)"
+        maps_to: [Allele.gene, Gene.primaryIdentifier]
+        status: loaded
+        reason: ""
+        code: MgiAllelesConverter.java:219, 240-243, 309-318
+        note: "Checked to start with 'MGI:'. A Gene stub with organism 10090 per id; it merges with the genes panther and mgi-identifiers load."
+      - key: "col:8"
+        name: "Marker Symbol"
+        description: "symbol of the marker gene"
+        maps_to: []
+        status: not loaded
+        reason: "not read by the converter"
+        code: MgiAllelesConverter.java:199-250
+        note: "The Gene's symbol comes from mgi-identifiers."
+      - key: "col:9"
+        name: "Marker RefSeq ID"
+        description: "RefSeq id of the marker's transcript"
+        maps_to: []
+        status: not loaded
+        reason: "not read by the converter"
+        code: MgiAllelesConverter.java:199-250
+        note: ""
+      - key: "col:10"
+        name: "Marker Ensembl ID"
+        description: "Ensembl id of the marker (ENSMUSG00000027168)"
+        maps_to: []
+        status: not loaded
+        reason: "not read by the converter"
+        code: MgiAllelesConverter.java:199-250
+        note: "A column added by MGI after the converter was first written; the converter now counts it, so the columns after it are read at their new positions."
+      - key: "col:11"
+        name: "High-level Mammalian Phenotype ID (comma-delimited)"
+        description: "Mammalian Phenotype ids of the allele's high-level phenotypes"
+        maps_to: [Allele.highLevelPhenotypeTerms, MammalianPhenotypeTerm.identifier]
+        status: loaded
+        reason: ""
+        code: MgiAllelesConverter.java:220, 244-250, 322-332
+        note: "Checked to be empty or to start with 'MP:'. One MammalianPhenotypeTerm per id, in the Mammalian Phenotype Ontology item."
+      - key: "col:12"
+        name: "Synonyms (|-delimited)"
+        description: "other symbols of the allele"
+        maps_to: []
+        status: not loaded
+        reason: "not read by the converter"
+        code: MgiAllelesConverter.java:225
+        note: "A TODO in the converter."
+      - key: "col:13"
+        name: "Marker Name"
+        description: "name of the marker gene"
+        maps_to: []
+        status: not loaded
+        reason: "not read by the converter"
+        code: MgiAllelesConverter.java:199-250
+        note: ""
+  - id: qtl-alleles
+    format: tab
+    comment: "#"
+    skip_lines: 0
+    header_line: null
+    record: one row = one QTL allele with its QTL marker, original paper and high-level phenotype terms
+    record_key: null
+    unlisted: not loaded
+    unlisted_reason: the converter expects exactly 14 columns and reads columns 1 to 6 and 14
+    fields:
+      - key: "col:1"
+        name: "MGI Allele Accession ID"
+        description: "allele accession (MGI:3042398)"
+        maps_to: [Allele.primaryIdentifier]
+        status: loaded
+        reason: ""
+        code: MgiAllelesConverter.java:202, 227
+        note: ""
+      - key: "col:2"
+        name: "Allele Symbol"
+        description: "allele symbol (Aabpr<NZB/Slc>)"
+        maps_to: [Allele.symbol]
+        status: loaded
+        reason: ""
+        code: MgiAllelesConverter.java:203, 226
+        note: ""
+      - key: "col:3"
+        name: "Allele Name"
+        description: "allele name"
+        maps_to: [Allele.name]
+        status: loaded
+        reason: ""
+        code: MgiAllelesConverter.java:204, 228
+        note: ""
+      - key: "col:4"
+        name: "Allele Type"
+        description: "allele type (QTL)"
+        maps_to: [Allele.type]
+        status: loaded
+        reason: ""
+        code: MgiAllelesConverter.java:212, 230-232
+        note: "The type is this column alone (the phenotypic allele file adds its attribute column)."
+      - key: "col:5"
+        name: "PubMed ID for original reference"
+        description: "PubMed id of the paper that first described the QTL"
+        maps_to: [Allele.publication, Publication.pubMedId]
+        status: loaded
+        reason: "only when all digits"
+        code: MgiAllelesConverter.java:213, 233-238
+        note: ""
+      - key: "col:6"
+        name: "MGI Marker Accession ID"
+        description: "accession of the QTL marker (MGI:3042396)"
+        maps_to: [Allele.gene, Gene.primaryIdentifier]
+        status: loaded
+        reason: ""
+        code: MgiAllelesConverter.java:214, 240-243
+        note: "A QTL is a marker of type QTL: the Gene is a stub with that id. None of this build's cut rows is a panel gene's mouse orthologue, so the cut file is empty."
+      - key: "col:7"
+        name: "Marker Symbol"
+        description: "symbol of the QTL"
+        maps_to: []
+        status: not loaded
+        reason: "not read by the converter"
+        code: MgiAllelesConverter.java:199-250
+        note: ""
+      - key: "col:8"
+        name: "Marker RefSeq ID"
+        description: "RefSeq id (empty for a QTL)"
+        maps_to: []
+        status: not loaded
+        reason: "not read by the converter"
+        code: MgiAllelesConverter.java:199-250
+        note: ""
+      - key: "col:9"
+        name: "Marker Ensembl ID"
+        description: "Ensembl id (empty for a QTL)"
+        maps_to: []
+        status: not loaded
+        reason: "not read by the converter"
+        code: MgiAllelesConverter.java:199-250
+        note: ""
+      - key: "col:10"
+        name: "Marker Chromosome"
+        description: "chromosome of the QTL"
+        maps_to: []
+        status: not loaded
+        reason: "not read by the converter"
+        code: MgiAllelesConverter.java:199-250
+        note: ""
+      - key: "col:11"
+        name: "Marker Start Coordinate"
+        description: "start of the QTL"
+        maps_to: []
+        status: not loaded
+        reason: "not read by the converter"
+        code: MgiAllelesConverter.java:199-250
+        note: ""
+      - key: "col:12"
+        name: "Marker End Coordinate"
+        description: "end of the QTL"
+        maps_to: []
+        status: not loaded
+        reason: "not read by the converter"
+        code: MgiAllelesConverter.java:199-250
+        note: ""
+      - key: "col:13"
+        name: "Genome Build"
+        description: "assembly of the coordinates (GRCm39)"
+        maps_to: []
+        status: not loaded
+        reason: "not read by the converter"
+        code: MgiAllelesConverter.java:199-250
+        note: ""
+      - key: "col:14"
+        name: "High-level Mammalian Phenotype ID (comma-delimited)"
+        description: "Mammalian Phenotype ids of the QTL's high-level phenotypes"
+        maps_to: [Allele.highLevelPhenotypeTerms, MammalianPhenotypeTerm.identifier]
+        status: loaded
+        reason: ""
+        code: MgiAllelesConverter.java:215, 244-250
+        note: ""
+  - id: genotypes
+    format: tab
+    comment: "#"
+    skip_lines: 0
+    header_line: null
+    record: one row = one Mammalian Phenotype term of one genotype (a genotype with several terms has several consecutive rows)
+    record_key: null
+    unlisted: not loaded
+    unlisted_reason: the converter expects exactly 7 columns and reads columns 1 to 6
+    fields:
+      - key: "col:1"
+        name: "Allelic Composition"
+        description: "the genotype as MGI writes it (Pax6<Sey>/Pax6<+>)"
+        maps_to: [Genotype.name]
+        status: loaded
+        reason: ""
+        code: MgiAllelesConverter.java:127, 141-142
+        note: "A new Genotype starts when this value differs from the previous row's; the rows of one genotype must be together."
+      - key: "col:2"
+        name: "Allele Symbols (pipe-delimited)"
+        description: "symbols of the genotype's alleles"
+        maps_to: [Genotype.alleles, Allele.symbol, Genotype.zygosity]
+        status: loaded
+        reason: ""
+        code: MgiAllelesConverter.java:128, 139-153, 165-167
+        note: "Each symbol that is not a wild-type '<+>' one adds an Allele (a stub keyed by symbol) to Genotype.alleles. One symbol makes the genotype 'homozygote'; two different symbols make it 'heterozygote' unless column 6 names more than one marker (then 'complex: > 1 genome feature'); more than two symbols or two equal ones leave zygosity empty."
+      - key: "col:3"
+        name: "Genetic Background"
+        description: "strain background (involves: 129S2/SvPas * C57BL/6)"
+        maps_to: [Genotype.geneticBackground]
+        status: loaded
+        reason: ""
+        code: MgiAllelesConverter.java:129, 143
+        note: ""
+      - key: "col:4"
+        name: "Mammalian Phenotype ID"
+        description: "the phenotype term of this row (MP:0000562)"
+        maps_to: [Genotype.phenotypeTerms, MammalianPhenotypeTerm.identifier]
+        status: loaded
+        reason: ""
+        code: MgiAllelesConverter.java:121, 130, 157
+        note: "Checked to start with 'MP:'; one term per row added to the genotype."
+      - key: "col:5"
+        name: "PubMed IDs (pipe-delimited)"
+        description: "papers describing the genotype's phenotype"
+        maps_to: []
+        status: not loaded
+        reason: "not read by the converter"
+        code: MgiAllelesConverter.java:122-125
+        note: "Checked to hold digits and '|' only."
+      - key: "col:6"
+        name: "MGI Marker Accession IDs (pipe-delimited)"
+        description: "markers of the genotype's alleles"
+        maps_to: [Genotype.zygosity]
+        status: loaded
+        reason: "only to set 'complex'"
+        code: MgiAllelesConverter.java:126, 131, 146-148, 169-177
+        note: "More than one marker, separated by '|' or ',', makes the zygosity 'complex: > 1 genome feature'; the ids themselves are not stored."
+      - key: "col:7"
+        name: "MGI Genotype Accession ID"
+        description: "genotype accession (MGI:2166944)"
+        maps_to: []
+        status: not loaded
+        reason: "not read by the converter"
+        code: MgiAllelesConverter.java:120-157
+        note: "Genotype has no identifier attribute here."

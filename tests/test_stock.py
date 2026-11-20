@@ -689,3 +689,19 @@ def test_no_other_stock_source_sets_a_licence_property_and_none_sets_an_unverifi
         for k in (e.get("properties") or {}):
             if k.split(".")[-1] == "licence":
                 assert n in LICENCE_PROPERTY and e["licence_status"] == "verified", (n, k)
+
+
+# ------------------------------------------------------------------ mapping files of the milestone 3 sources [im-9n4.27]
+
+def test_the_six_milestone_3_sources_that_load_a_file_have_a_mapping_file_with_the_sources_own_file_ids():
+    t = stock.load_table()
+    for n in ("protein2ipr", "interpro", "mgi-alleles", "pubmed-gene", "humanmine-static", "update-data-sources"):
+        path = os.path.join(ROOT, "rdfc2im", "data", "stock_mappings", n + ".yaml")
+        assert os.path.exists(path), n
+        with open(path, encoding="utf-8") as fh:
+            mp = yaml.safe_load(fh)
+        assert [f["id"] for f in mp["files"]] == [f["id"] for f in t[n]["files"]], n
+        for f in mp["files"]:
+            assert f["fields"], (n, f["id"])
+    # the two E-utilities sources read no upstream file and have nothing to map
+    assert t["update-publications"]["files"] == [] and t["entrez-organism"]["files"] == []

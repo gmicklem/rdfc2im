@@ -1,0 +1,59 @@
+# NCBI's gene2pubmed: which PubMed papers are about which Entrez gene. InterMine's pubmed-gene source loads a
+# Publication per PubMed id and adds it to Gene.publications; the papers' titles, authors and abstracts come from the
+# pubmed (RDF Portal) source or from update-publications.
+source: pubmed-gene
+loader:
+  repository: intermine
+  path: bio/sources/pubmed-gene
+  classes: [org.intermine.bio.dataconversion.PubMedGeneConverter]
+  commit: b81dbfd8e5
+basis: read from the code of the demo's InterMine source (PubMedGeneConverter.java, BioFileConverter.java)
+data_source: NCBI
+data_sets: [PubMed to gene mapping]
+home: https://ftp.ncbi.nlm.nih.gov/gene/DATA/
+writes: [DataSource, DataSet, Ontology, Gene, Publication]
+# Ontology (Sequence Ontology) comes from BioFileConverter's four-argument constructor and is what Gene's SOTerm points at.
+# The Gene is a stub (primaryIdentifier, organism) that merges with the genes the other sources load.
+files:
+  - id: gene2pubmed
+    format: tab
+    comment: "#"
+    skip_lines: 0
+    header_line: null
+    record: one row = one link between one Entrez gene and one PubMed paper
+    record_key: null
+    unlisted: not loaded
+    unlisted_reason: the file has three columns and the converter reads all three
+    fields:
+      - key: "col:1"
+        name: tax_id
+        description: NCBI taxon id of the gene's organism (9606)
+        maps_to: [Gene.organism, Organism.taxonId]
+        status: loaded
+        reason: "only for the organisms in pubmed.organisms"
+        code: PubMedGeneConverter.java:81-88, 134-139
+        note: >-
+          Rows of a taxon not listed in `pubmed.organisms` (9606 here; HumanMine lists 9606 and 10090) are skipped. Two
+          strain taxa are mapped to their species first (559292 to 4932, 46245 to 7237). The converter takes a row only
+          if it has exactly three columns, so the '#tax_id GeneID PubMed_ID' header (a comment) is skipped.
+      - key: "col:2"
+        name: GeneID
+        description: Entrez gene id (5080)
+        maps_to: [Gene.primaryIdentifier, Gene.publications]
+        status: loaded
+        reason: "through the ID resolver"
+        code: PubMedGeneConverter.java:83, 91-93, 128-155
+        note: >-
+          The id is resolved to the mine's gene identifier with the ID resolver (the all-human NCBI gene_info this
+          build stages); a gene the resolver does not know, or knows more than once, is skipped with a warning. One
+          Gene stub per resolved identifier, with all its papers.
+      - key: "col:3"
+        name: PubMed_ID
+        description: PubMed id of the paper
+        maps_to: [Publication.pubMedId]
+        status: loaded
+        reason: ""
+        code: PubMedGeneConverter.java:84, 90, 115-126
+        note: >-
+          One Publication per distinct PubMed id, made for every row of a wanted taxon even when its gene is then
+          skipped: only the pubMedId is set, so a paper with no other source stays without a title.

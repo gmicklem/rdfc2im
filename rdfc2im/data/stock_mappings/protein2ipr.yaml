@@ -1,0 +1,91 @@
+# InterPro's protein2ipr.dat: one row per match of a protein by a member-database signature, with the InterPro
+# entry that signature belongs to. InterMine's protein2ipr source loads a ProteinDomainRegion for each row whose
+# protein is already in the mine (a UniProt source must load first); interpro.xml (the interpro source) fills in
+# the ProteinDomains the rows point at.
+source: protein2ipr
+loader:
+  repository: intermine
+  path: bio/sources/protein2ipr
+  classes: [org.intermine.bio.dataconversion.Protein2iprConverter]
+  commit: b81dbfd8e5
+basis: read from the code of the demo's InterMine source (Protein2iprConverter.java, BioFileConverter.java)
+data_source: InterPro
+data_sets: [InterPro data set]
+home: https://www.ebi.ac.uk/interpro/
+writes: [DataSource, DataSet, Ontology, Protein, ProteinDomain, ProteinDomainRegion]
+# Ontology (Sequence Ontology) comes from BioFileConverter's four-argument constructor; Protein, ProteinDomain and
+# ProteinDomainRegion are not sequence features, so no SOTerm is attached. The Proteins and ProteinDomains the rows
+# name are stubs (primaryAccession, primaryIdentifier only) that merge with the UniProt and interpro objects by key.
+files:
+  - id: matches
+    format: tab
+    comment: "#"
+    skip_lines: 0
+    header_line: null
+    record: one row = one match of one protein by one member-database signature, with its start and end
+    record_key: null
+    unlisted: not loaded
+    unlisted_reason: the converter reads columns 1 to 6 and the file has no others
+    fields:
+      - key: "col:1"
+        name: protein accession
+        description: UniProt accession of the matched protein (P35240)
+        maps_to: [Protein.primaryAccession, ProteinDomainRegion.protein]
+        status: loaded
+        reason: "only for a protein already in the mine"
+        code: Protein2iprConverter.java:116, 125-127, 245-280
+        note: >-
+          The converter first reads the primaryAccession of every Protein of the organisms in
+          `protein2ipr.organisms` (9606 here) from the production database, and skips every row whose accession is
+          not among them (counted as "skipped"). The file covers every species, so this build streams it through
+          a filter that keeps the rows of the panel's UniProt accessions (about 15,000 of billions); a full-scope
+          build reads the whole file. One Protein stub per accession, keyed by primaryAccession.
+      - key: "col:2"
+        name: InterPro entry
+        description: accession of the InterPro entry the signature belongs to (IPR000001)
+        maps_to: [ProteinDomain.primaryIdentifier, ProteinDomainRegion.proteinDomain]
+        status: loaded
+        reason: ""
+        code: Protein2iprConverter.java:128, 141-142, 175-185
+        note: >-
+          One ProteinDomain stub per entry, keyed by primaryIdentifier; its name, short name, type and description
+          come from the interpro source (interpro.xml).
+      - key: "col:3"
+        name: InterPro entry name
+        description: name of the InterPro entry
+        maps_to: []
+        status: not loaded
+        reason: "not read by the converter"
+        code: Protein2iprConverter.java:125-131
+        note: "ProteinDomain.name comes from interpro.xml instead."
+      - key: "col:4"
+        name: signature
+        description: accession of the member-database signature that matched (PF00046, NF033085, G3DSA:1.10.10.60)
+        maps_to: [ProteinDomainRegion.identifier, ProteinDomainRegion.database]
+        status: loaded
+        reason: ""
+        code: Protein2iprConverter.java:129, 133-139, 145-146, 198-240
+        note: >-
+          The accession is ProteinDomainRegion.identifier. ProteinDomainRegion.database is named from its prefix:
+          PF Pfam, SM SMART, SSF SUPERFAMILY, SFLD Structure-Function Linkage Database (SFLD), PS PROSITE, PR PRINTS,
+          PTHR PANTHER, G3DSA Gene3D, TIGR TIGRFAMs, NF NCBIfam, ANF AntiFam, PD ProDom, PIRSF PIRSF, MF_ HAMAP and
+          cd Conserved Domain Database. A row with another prefix is skipped with one warning per prefix. NCBIfam
+          (NF) and AntiFam (ANF) rows load since the converter names them; this build's protein2ipr cut was made
+          before that and holds none, so they appear after the next protein2ipr fetch (BUILD.md, "What the
+          converters needed from rdfc2im, and no longer do").
+      - key: "col:5"
+        name: start
+        description: first residue of the match
+        maps_to: [ProteinDomainRegion.start]
+        status: loaded
+        reason: ""
+        code: Protein2iprConverter.java:130, 147
+        note: ""
+      - key: "col:6"
+        name: end
+        description: last residue of the match
+        maps_to: [ProteinDomainRegion.end]
+        status: loaded
+        reason: ""
+        code: Protein2iprConverter.java:131, 148
+        note: ""
