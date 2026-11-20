@@ -1032,14 +1032,13 @@ def test_publications_terms_and_genes_are_not_duplicated_by_the_interaction_load
                        ("InteractionTerm.identifier", "InteractionTerm.identifier"),
                        ("Gene.primaryIdentifier", "Gene.primaryIdentifier")):
         ids = [r[0] for r in query_rows(view, path, "IS NOT NULL", "")]
-        # One paper is in the mine twice because an Items XML source lists it twice in the one file it loads:
-        # update-data-sources writes 28138153 for two databases (the converter now keys Publication, which merges
-        # the papers the mine already had, but the loader does not merge two objects of the one load) [im-9n4.27].
-        # The bound was 5 while the keys file lacked the Publication key, 3 after the rebuild of 20 Nov [im-9n4.28]
-        # while humanmine-static's datasets.xml named 27899635 and 10802651 twice each; it is retired [im-9n4.52].
+        # None, Publication included [im-9n4.56]. A loader does not merge two items of one load that share a key,
+        # so a source that wrote one paper twice in its file stored it twice, and update-publications then stopped
+        # on an item matching both: update-data-sources wrote 28138153 for NDEx and for CIViC (it now writes one
+        # Publication per PubMed id), humanmine-static's datasets.xml 27899635 and 10802651 twice each (retired,
+        # im-9n4.52). The bound was 5 before the keys file had a Publication key [im-9n4.28], then 3, then 1.
         # The interaction loaders' duplicates were hundreds.
-        allowed = 1 if view == "Publication.pubMedId" else 0
-        assert len(ids) - len(set(ids)) <= allowed, f"duplicate {view}: {len(ids) - len(set(ids))}"
+        assert len(ids) == len(set(ids)), f"duplicate {view}: {len(ids) - len(set(ids))}"
     named = query_rows("InteractionTerm.identifier InteractionTerm.name", "InteractionTerm.identifier", "=", "MI:0018")
     assert named and named[0][1] == "two hybrid", named        # the term merged with psi-mi-ontology's
 
