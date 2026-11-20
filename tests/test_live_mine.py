@@ -1332,6 +1332,47 @@ def test_every_human_gene_is_unique_by_identifier_and_symbol():
         assert not dups, f"{len(dups)} duplicate {view}: {sorted(dups)[:10]}"
 
 
+ENSEMBL_DATA_SET = "Ensembl genes (RDF Portal)"
+ENSEMBL_ITEMS = os.environ.get("RDFC2IM_ENSEMBL_ITEMS", os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "out", "ensembl", "items", "ensembl.xml"))
+
+
+def test_no_gene_holds_two_ensembl_ids_and_no_ensembl_id_sits_on_two_genes():
+    """im-9n4.55: the ensembl source joins NCBI genes by cross-reference (items.join_on_xref), keyed
+    on the Entrez id alone.  By symbol, ENSG00000242366 (labelled UGT1A1, UGT1A8 by its own
+    description) went onto UGT1A1, whose Ensembl id is ENSG00000241635: one Gene with the data of
+    two Ensembl genes.  Checked here: no human Ensembl id on two Genes; each Gene the Ensembl data
+    set touched shows the Ensembl id it was joined on (out/ensembl/items, RDFC2IM_ENSEMBL_ITEMS);
+    and one Gene per joined Ensembl gene."""
+    if not mine_up():
+        return _skip(f"live checks off or no mine at {MINE_BASE} (make test-live)")
+    vals = [r[0] for r in query_rows_q('<query model="genomic" view="Gene.secondaryIdentifier">'
+                                       '<constraint path="Gene.organism.taxonId" op="=" value="9606"/>'
+                                       '<constraint path="Gene.secondaryIdentifier" op="IS NOT NULL"/></query>')]
+    seen, dups = set(), set()
+    for v in vals:
+        (dups if v in seen else seen).add(v)
+    assert not dups, f"{len(dups)} Ensembl ids on two Genes: {sorted(dups)[:10]}"
+    rows = query_rows_q('<query model="genomic" view="Gene.primaryIdentifier Gene.secondaryIdentifier">'
+                        f'<constraint path="Gene.dataSets.name" op="=" value="{ENSEMBL_DATA_SET}"/></query>')
+    if not rows:
+        return _skip("no ensembl source in this mine")
+    if not os.path.exists(ENSEMBL_ITEMS):
+        return _skip(f"no ensembl items at {ENSEMBL_ITEMS} (set RDFC2IM_ENSEMBL_ITEMS)")
+    import xml.etree.ElementTree as ET
+    joined = {}
+    for el in ET.parse(ENSEMBL_ITEMS).getroot():
+        if el.get("class") == "Gene":
+            a = {x.get("name"): x.get("value") for x in el.findall("attribute")}
+            if a.get("primaryIdentifier"):
+                joined[a["primaryIdentifier"]] = a.get("secondaryIdentifier")
+    if not joined:
+        return _skip("ensembl items from before im-9n4.55 (no Entrez id: joined by symbol)")
+    wrong = [(pid, ens, joined.get(pid)) for pid, ens in rows if joined.get(pid) != ens]
+    assert not wrong, f"{len(wrong)} Genes whose Ensembl id is not the one ensembl joined: {wrong[:10]}"
+    assert len(rows) == len({r[0] for r in rows}) == len(joined), (len(rows), len(joined))
+
+
 def test_most_human_genes_have_a_symbol_and_an_ensembl_id():
     """HumanMine (2022): 64,160 human genes, 56,020 with a symbol, 42,429 with an Ensembl id.  With
     ncbigene ranked first for secondaryIdentifier, 7,337 genes lost the Ensembl id only hgnc gives
