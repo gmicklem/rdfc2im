@@ -8,6 +8,7 @@ groups' META.json), and the DataSource url/description HumanMine's file gave tha
 files' data_source_url / data_source_description). All offline, on small cache trees made here."""
 import json
 import os
+import re
 import sys
 import xml.etree.ElementTree as ET
 
@@ -308,6 +309,30 @@ def test_add_links_source_ranks_the_source_first_for_the_version(tmp_path):
         sp.add_links_source(proj, pri, "/d/links.xml")
     ptext = open(pri, encoding="utf-8").read()
     assert ptext.count("DataSet.version = data-set-links, *") == 1 and "DataSet.version = x" not in ptext
+
+
+def test_add_links_source_goes_before_the_sources_that_read_the_mine(tmp_path):
+    """[im-9n4.56] update-data-sources, update-publications and entrez-organism read what every loader stored;
+    data-set-links is a loader (DataSets, DataSources), so it goes in front of the first of them, not at the end."""
+    proj = _w(str(tmp_path / "project.xml"), '<project type="bio">\n  <sources>\n'
+              '    <source name="humanmine-go" type="humanmine-items" version="4.3.0">\n'
+              '      <property name="src.data.file" location="/d/go.xml"/>\n    </source>\n'
+              '    <source name="gtex" type="gtex"/>\n'
+              '    <source name="update-data-sources" type="update-data-sources"/>\n'
+              '    <source name="update-publications" type="update-publications"/>\n'
+              '    <source name="entrez-organism" type="entrez-organism"/>\n  </sources>\n</project>\n')
+    pri = _w(str(tmp_path / "p.properties"), "")
+    sp.add_links_source(proj, pri, "/d/links.xml")
+    text = open(proj, encoding="utf-8").read()
+    names = re.findall(r'<source name="([^"]+)"', text)
+    assert names == ["humanmine-go", "gtex", "data-set-links", "update-data-sources", "update-publications",
+                     "entrez-organism"], names
+    assert '<source name="data-set-links" type="humanmine-items" version="4.3.0">' in text
+    # without a mine reader it is the last source, as before
+    proj2 = _w(str(tmp_path / "project2.xml"), '<project type="bio">\n  <sources>\n'
+               '    <source name="gtex" type="gtex"/>\n  </sources>\n</project>\n')
+    sp.add_links_source(proj2, pri, "/d/links.xml")
+    assert re.findall(r'<source name="([^"]+)"', open(proj2, encoding="utf-8").read()) == ["gtex", "data-set-links"]
 
 
 # ---------------------------------------------------------------- the repository's own files
