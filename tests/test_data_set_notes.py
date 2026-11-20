@@ -227,3 +227,13 @@ def test_the_manifest_carries_the_notes_the_items_carry(tmp_path):
     cfg = yaml.safe_load(open(t["sources_yaml"], encoding="utf-8"))
     ent = sm.rdf_entry("toyrdf", args, cfg["toyrdf"], None, None)
     assert ent["notes"] == _notes(tmp_path / "again")["Toy (RDF Portal)"]
+
+
+def test_two_panel_cuts_of_one_data_set_make_one_sentence():
+    """InterPro data set: protein2ipr's rows cut to the panel proteins and interpro's entries cut to the
+    ones those rows name; one sentence, not two."""
+    gene = dsn.STOCK_PANEL_CUTS["uniprot"].format(n=114)
+    ipr = dsn.STOCK_PANEL_CUTS["ipr"].format(n=114)
+    got = dsn.merge_panel_cuts([ipr, gene], 114)
+    assert got == [dsn.IPR_AND_MATCHES_CUT.format(n=114)]
+    assert dsn.merge_panel_cuts([gene, "Other."], 114) == [gene, "Other."]
