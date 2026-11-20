@@ -140,8 +140,9 @@ def test_demo_template_paths_exist_in_the_model():
 def templates_in(sql_text):
     """{name: <template> element} for every template the SQL inserts (the XML is in a single-quoted SQL string)."""
     out = {}
-    for m in re.finditer(r"<template\b.*?</template>", sql_text, re.S):
-        el = ET.fromstring(m.group(0).replace("''", "'"))
+    for m in re.finditer(r"INSERT INTO savedtemplatequery [^;]*?VALUES \([^,]+, '(<template\b.*?</template>)'",
+                         sql_text, re.S):
+        el = ET.fromstring(m.group(1).replace("''", "'"))
         out[el.get("name")] = el
     return out
 
