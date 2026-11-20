@@ -502,6 +502,19 @@ def test_disease_name_priority_ranks_orphanet_above_hpo_annotation():
 
 # ------------------------------------------------------------------ milestone 3 sources [im-9n4.27]
 
+M3 = ["protein2ipr", "interpro", "mgi-alleles", "pubmed-gene", "humanmine-static", "update-data-sources",
+      "update-publications", "entrez-organism"]
+
+
+def test_milestone_3_sources_are_in_the_table_with_a_licence_read_on_20_nov():
+    t = stock.load_table()
+    for n in M3:
+        assert n in t, n
+        assert t[n]["licence_checked"] == "2026-11-20", n
+    assert t["humanmine-static"]["licence_status"] == "not-stated"
+    assert t["update-publications"]["licence_status"] == "partial"      # eutils.ncbi.nlm.nih.gov is blocked
+    assert t["protein2ipr"]["licence_status"] == "verified"
+
 
 def test_protein2ipr_is_cut_while_it_downloads_and_interpro_is_cut_to_its_entries():
     t = stock.load_table()
@@ -539,6 +552,19 @@ def test_the_filter_spec_and_cache_key_carry_the_column_drop_and_the_required_va
     t2 = copy.deepcopy(t)
     t2["mgi-alleles"]["files"][0]["filter"]["drop_columns"] = "9"
     assert stock.cache_meta(t2, "mgi-alleles")[0] != a[0]
+
+
+def test_sources_without_upstream_files_leave_project_xmls_data_property_alone():
+    t = stock.load_table()
+    for n in ("update-publications", "entrez-organism"):
+        assert t[n]["files"] == [] and stock.file_rows(t, [n], "/S", "/S/cache") == []
+    root = etree.fromstring('<sources><source name="update-publications" type="update-publications">'
+                            '<property name="src.data.file" location="publications.xml"/></source></sources>')
+    assert stock.apply_to_project(root, t, ["update-publications"]) == []
+    assert root[0].find("property").get("location") == "publications.xml"
+    # update-data-sources stages dbxref.txt where its `dataSourceFile` property already says
+    d = [r.split("\t") for r in stock.file_rows(t, ["update-data-sources"], "/S", "/S/cache")][0]
+    assert d[14] == "uniprot/xrefs/current" and d[15] == "dbxref.txt" and d[13] == "asis"
 
 
 def test_validation_of_stream_drop_columns_and_require():
