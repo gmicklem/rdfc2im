@@ -399,6 +399,21 @@ def test_rdf_page_shows_the_licence_and_what_rdf_portal_states():
     assert "| Redistributable | yes: no conditions |" in page
 
 
+def test_the_pages_show_the_paper_the_source_asks_to_be_cited_or_why_there_is_none():
+    """[im-9n4.56] the same record data-set-links turns into DataSet.publication."""
+    rows = sp.citation_rows({"citation_pmid": "39565202", "citation_evidence": "https://example.org/cite (read 2026-11-20)"})
+    assert rows == ["| Reference publication | PubMed [39565202](https://pubmed.ncbi.nlm.nih.gov/39565202/), as the "
+                    "source asks: https://example.org/cite (read 2026-11-20) |"]
+    assert sp.citation_rows({"citation_note": "No citation recorded: none stated."}) == [
+        "| Reference publication | none: No citation recorded: none stated. |"]
+    assert sp.citation_rows({}) == []
+    man = {"build": {"name": "b", "rdfc2im_commit": "0123456789abcdef", "finished_at": "2026-11-18T10:00:00Z"}, "sources": []}
+    src = {"id": "rdf:toy", "kind": "rdf", "name": "toy", "data_source": {"name": "Toy"}, "data_set": "Toy (RDF Portal)",
+           "tables": {}, "mapping_rows": [], "columns": [], "cache_group": {},
+           "citation": {"citation_pmid": "22222222", "citation_evidence": "https://toy.example.org/cite"}}
+    assert "| Reference publication | PubMed [22222222](https://pubmed.ncbi.nlm.nih.gov/22222222/)" in sp.rdf_page(src, man)
+
+
 # ---------------------------------------------------------------- DataSet links
 
 def test_data_set_links_items_and_project_wiring(tmp_path):
