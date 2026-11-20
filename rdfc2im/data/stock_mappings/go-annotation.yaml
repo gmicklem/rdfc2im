@@ -14,6 +14,8 @@ basis: >-
 data_source: GO Annotation
 data_sets: [GO Annotation data set]
 home: http://geneontology.org/
+citation_pmid: "25378336"
+citation_evidence: "https://www.ebi.ac.uk/GOA/publications (read 2026-11-20): \"To cite GOA, please use the following publication; Huntley RP ... (2014) The GOA database: Gene Ontology annotation updates for 2015. Nucleic Acids Research 2014 doi: 10.1093/nar/gku1113.\" (PMID by E-utilities esearch on that DOI). The Gene Ontology itself asks for Ashburner et al. 2000 and its 2026 update paper (https://geneontology.org/docs/go-citation-policy/)."
 writes: [DataSource, DataSet, GOEvidenceCode, Organism, Protein, GOTerm, Publication,
          DatabaseReference, GOAnnotation, GOEvidence]
 # Gene is not listed: the converter makes Gene items only for taxa configured as typeAnnotated=gene

@@ -12,6 +12,8 @@ basis: read from the code of the demo's InterMine source (Protein2iprConverter.j
 data_source: InterPro
 data_sets: [InterPro data set]
 home: https://www.ebi.ac.uk/interpro/
+citation_pmid: "39565202"
+citation_evidence: "As interpro (protein2ipr.dat is an InterPro file): https://interpro-documentation.readthedocs.io/en/latest/citing.html (read 2026-11-20)."
 writes: [DataSource, DataSet, Ontology, Protein, ProteinDomain, ProteinDomainRegion]
 # Ontology (Sequence Ontology) comes from BioFileConverter's four-argument constructor; Protein, ProteinDomain and
 # ProteinDomainRegion are not sequence features, so no SOTerm is attached. The Proteins and ProteinDomains the rows

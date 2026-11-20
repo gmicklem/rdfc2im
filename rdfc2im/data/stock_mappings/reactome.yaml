@@ -12,6 +12,8 @@ basis: read from code at intermine 5351d0c301 (ReactomeConverter.java, ReactomeP
 data_source: Reactome
 data_sets: [Reactome pathways data set]
 home: http://www.reactome.org/
+citation_pmid: "41251150"
+citation_evidence: "https://reactome.org/cite (read 2026-11-20): \"To cite the use of Reactome in your work, please reference one or more of the following publications:\" first and newest, Ragueneau E et al., The Reactome Knowledgebase 2026, Nucleic Acids Res (PubMed link 41251150). Also listed: Milacic 2024, ReactomeGSA 32907876, Jassal 2020 31691815 and earlier."
 writes: [DataSource, DataSet, Organism, Protein, Pathway]
 # ReactomePostProcess (the source's postprocessor.class) later copies Protein.pathways to Gene.pathways
 # through Protein.genes; that is a postprocess, not the converter.

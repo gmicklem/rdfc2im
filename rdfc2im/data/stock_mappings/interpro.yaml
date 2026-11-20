@@ -11,6 +11,8 @@ basis: read from the code of the demo's InterMine source (InterProConverter.java
 data_source: InterPro
 data_sets: [InterPro data set]
 home: https://www.ebi.ac.uk/interpro/
+citation_pmid: "39565202"
+citation_evidence: "https://interpro-documentation.readthedocs.io/en/latest/citing.html (read 2026-11-20): \"If you find InterPro useful for your research, please cite the following publications: InterPro: the protein sequence classification resource in 2025 ... PMID: 39565202\". Also listed: InterProScan 6 (42222668), InterProScan 5 (24451626) and earlier InterPro papers."
 writes: [DataSource, DataSet, ProteinDomain, Publication, CrossReference]
 # The converter is built with storeOntology=false (InterProConverter.java:62), so no SO Ontology item. A CrossReference
 # also gets its own DataSource, named for the member database (Pfam, PROSITE, ...), from createCrossReference.

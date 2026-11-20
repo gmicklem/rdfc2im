@@ -12,6 +12,8 @@ data_source: The Human Protein Atlas          # ProteinAtlasConverter.java:52
 data_source_url: "https://www.proteinatlas.org/"
 data_sets: [The Human Protein Atlas expression profiles]   # ProteinAtlasConverter.java:51 (licence CC BY-SA 3.0, :53)
 home: https://www.proteinatlas.org/
+citation_pmid: "25613900"
+citation_evidence: "https://www.proteinatlas.org/about/licence (read 2026-11-20): \"Include a reference to a Primary publication, or one of the other publications listed under Other relevant publications\"; the first primary publication, the tissue map: Uhlen M et al., Tissue-based map of the human proteome, Science 2015 (PubMed 25613900). Other primary publications: subcellular 28495876, brain 32139519, single cell 34321199, pathology 28818916, blood proteome 41066540, cell lines 37669926, blood cells 31857451, secretome 31772123."
 writes: [ProteinAtlasExpression, Gene, Tissue, TissueGroup, Organism, DataSet, DataSource, Ontology, SOTerm]
 # Ontology (Sequence Ontology) and SOTerm (gene) come from BioFileConverter/BioStoreHook for every Gene.
 files:

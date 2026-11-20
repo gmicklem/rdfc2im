@@ -13,6 +13,8 @@ data_source_url: "http://www.ebi.ac.uk/arrayexpress/"
 data_source_description: "ArrayExpress: functional genomics data"
 data_sets: [atlas-express]                    # AtlasExpressConverter.java:33 (no licence set, :53)
 home: http://www.ebi.ac.uk/arrayexpress/
+citation_pmid: "41370097"
+citation_evidence: "https://www.ebi.ac.uk/gxa/home (read 2026-11-20): \"If you're using Expression Atlas in your research, please consider citing our most recent update in Nucleic Acids Research: Expression Atlas in 2026: enabling FAIR and open expression data through community collaboration and integration\" (link to DOI 10.1093/nar/gkaf1238; PMID by E-utilities esearch on that DOI). Also offered: the NAR 2024 and 2021 updates and PLoS One 2014."
 writes: [AtlasExpression, Gene, Organism, DataSet, DataSource, Ontology, SOTerm]
 # Ontology and SOTerm (gene) come from BioFileConverter/BioStoreHook.
 files:

@@ -13,6 +13,8 @@ data_source_url: "https://www.uniprot.org/"
 data_source_description: "UniProt Protein Knowledgebase"
 data_sets: [UniProt data set]
 home: https://www.uniprot.org/
+citation_pmid: "39552041"
+citation_evidence: "As uniprot: https://rest.uniprot.org/help/publications (read 2026-11-20); the keyword list and the FTP README state no citation of their own."
 writes: [DataSource, DataSet, Ontology, OntologyTerm, OntologyTermSynonym]
 # Ontology: one item named 'UniProtKeyword' (UniprotKeywordConverter.java:79). OntologyTerm merges on
 # name + ontology (uniprot-keywords_keys.properties), which is how it meets the uniprot source's keywords.

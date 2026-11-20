@@ -19,6 +19,8 @@ data_source_url: "https://www.uniprot.org/"
 data_source_description: "UniProt Protein Knowledgebase"
 data_sets: [uniprot-fasta]
 home: https://www.uniprot.org/
+citation_pmid: "39552041"
+citation_evidence: "As uniprot: https://rest.uniprot.org/help/publications (read 2026-11-20)."
 # The code has no default names: DataSource.name is project.xml's fasta.dataSourceName and DataSet.name
 # its fasta.dataSetTitle (FastaLoaderTask.java:142-152, 359-394, 439-450); without a title the load throws.
 writes: [DataSource, DataSet, Organism, Sequence, Protein]

@@ -15,6 +15,7 @@ basis: >-
 data_source: PSI Molecular Interactions
 data_sets: [PSI Molecular Interactions]
 home: http://www.psidev.info/
+citation_note: "No citation recorded: www.psidev.info is blocked from the sandbox (HTTP 403 'Approval required', 20 Nov 2026), and the psi-mi-CV README and psi-mi.obo on GitHub state none."
 # psi-mi-ontology.properties: obo.ontology.name=PSI Molecular Interactions, obo.term.class=InteractionTerm,
 # obo.ontology.url=https://github.com/HUPO-PSI/psi-mi-CV, licence CC BY 4.0. OboConverter names the
 # DataSource and the DataSet after the ontology when no dataset/datasource is set (OboConverter.java:186-208);

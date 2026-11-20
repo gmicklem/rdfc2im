@@ -13,6 +13,8 @@ basis: >-
 data_source: IntAct
 data_sets: [IntAct molecular interactions]
 home: https://www.ebi.ac.uk/intact/
+citation_pmid: "24234451"
+citation_evidence: "IntAct's 'How To Cite Us' text, in the site's own scripts at https://www.ebi.ac.uk/intact/ (read 2026-11-20): \"Citing IntAct - The MIntAct project--IntAct as a common curation platform for 11 molecular interaction databases. Orchard S et al [PMID: 24234451] Nucl. Acids Res. (2013)\"."
 writes: [DataSource, DataSet, InteractionTerm, Organism, Gene, Publication, InteractionExperiment, Comment,
          Interaction, InteractionDetail, InteractionRegion, Location]
 # Notes:

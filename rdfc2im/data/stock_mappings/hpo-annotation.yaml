@@ -12,6 +12,8 @@ data_source: Human Phenotype Ontology         # HpoConverter.java:45
 data_source_url: "https://hpo.jax.org/app/"
 data_sets: [hpo-annotation]                   # HpoConverter.java:44 (licence https://hpo.jax.org/app/license, :80)
 home: https://hpo.jax.org/app/
+citation_pmid: "37953324"
+citation_evidence: "https://hpo.jax.org/citation (the site's own script, read 2026-11-20): \"Please cite our most recent article if you use the HPO for published work.\" Gargano MA et al., The Human Phenotype Ontology in 2024: phenotypes around the world, Nucleic Acids Res 2024, PMID: 37953324."
 writes: [Disease, Gene, HPOTerm, HPOAnnotation, HPOEvidence, OntologyAnnotationEvidenceCode, Publication,
          Ontology, Organism, DataSet, DataSource, SOTerm]
 # Ontology: "Human Phenotype Ontology" (:375-381) and the Sequence Ontology from BioDirectoryConverter;

@@ -14,6 +14,7 @@ data_source_url: "https://www.ncbi.nlm.nih.gov"
 data_source_description: "National Center for Biotechnology Information"
 data_sets: [PubMed to gene mapping]
 home: https://ftp.ncbi.nlm.nih.gov/gene/DATA/
+citation_note: "No citation recorded: the NCBI Gene FTP README (gene2pubmed) states none, and NCBI's help pages answered the sandbox with a reCAPTCHA page; pubmed.ncbi.nlm.nih.gov is blocked from the sandbox (HTTP 403 'Approval required', 20 Nov 2026)."
 writes: [DataSource, DataSet, Ontology, Gene, Publication]
 # Ontology (Sequence Ontology) comes from BioFileConverter's four-argument constructor and is what Gene's SOTerm points at.
 # The Gene is a stub (primaryIdentifier, organism) that merges with the genes the other sources load.

@@ -10,6 +10,8 @@ basis: read from code at intermine 5351d0c301 (MgiIdentifiersConverter.java)
 data_source: MGI
 data_sets: [Mouse gene identifiers]
 home: http://www.informatics.jax.org/
+citation_pmid: "38531069"
+citation_evidence: "https://www.informatics.jax.org/mgihome/other/citation.shtml (read 2026-11-20): \"Please use the following citation formats ... MGD: Baldarelli RM ... 2024. Mouse Genome Informatics: an integrated knowledgebase system for the laboratory mouse. Genetics. 2024 May 7;227(1):iyae031.\" (PubMed 38531069 on MGI's own publications page). The citation page also gives GXD, MMHCdb and ontology papers."
 writes: [DataSource, DataSet, Organism, Gene, CrossReference, SOTerm, Ontology]
 # DataSource also gets 'Vega' and 'Ensembl' items (the sources of the CrossReferences).
 # SOTerm and Ontology: BioFileConverter's store hook gives every Gene a sequenceOntologyTerm (BioStoreHook.java:115-157).

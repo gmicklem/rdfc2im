@@ -21,6 +21,8 @@ data_source_url: "https://www.uniprot.org/"
 data_source_description: "UniProt Protein Knowledgebase"
 data_sets: [Swiss-Prot data set]
 home: https://www.uniprot.org/
+citation_pmid: "39552041"
+citation_evidence: "https://rest.uniprot.org/help/publications (UniProt help 'Publications on UniProt', read 2026-11-20): \"If you find UniProt useful, please consider citing our latest publication: The UniProt Consortium UniProt: the Universal Protein Knowledgebase in 2025 Nucleic Acids Res. 53:D609-D617 (2025)\" (the page gives DOI 10.1093/nar/gkae1010; PMID by E-utilities esearch on that DOI). The page also lists papers on the website API, ChEBI ligands and earlier releases."
 writes: [DataSource, DataSet, Ontology, OntologyTerm, Organism, Protein, Sequence, ECNumber, Comment, Component,
          UniProtFeature, Publication, Gene, Synonym, CrossReference]
 # Notes (comments, since the format has no top-level notes key):
