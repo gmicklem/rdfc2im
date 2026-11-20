@@ -2253,7 +2253,7 @@ The `drive-ut-NAME.sh` stock list adds them after `orphanet`. DepMap is not in t
 | `mgi-alleles` | mouse `Allele`, `Genotype`, `Gene.alleles`, `MammalianPhenotypeTerm` links | rows whose marker is a mouse gene on the panel's PANTHER rows (`idsets/mgi.txt`) | whole, but column 10 of the alleles file is still dropped | 32 + 1.3 + 54 MB |
 | `humanmine-static` | `DataSet` and `DataSource` descriptions, versions, urls (an Items XML file, no converter) | none | none | 28 KB, pinned to commit e7a86ea of 11 Feb 2022 |
 | `update-data-sources` | `DataSource.url`, `description` and a `Publication` for each DataSource named like a UniProt database | none (UniProt's `dbxref.txt`, 56 KB) | none | |
-| `update-publications` | `Publication` title, authors, year, journal, abstract, from E-utilities | none (it reads the mine) | none | needs `eutils.ncbi.nlm.nih.gov` |
+| `update-publications` | `Publication` title, authors, year, journal, abstract, from E-utilities | none (it reads the mine) | none | needs `eutils.ncbi.nlm.nih.gov` (372 MB `publications.xml`, 16 min) |
 | `entrez-organism` | `Organism` name, genus, species, short name, from E-utilities | none (it reads the mine) | none | needs `eutils.ncbi.nlm.nih.gov` |
 
 **The panel build of 20 Nov 2026** (`drive-ut-9n427.sh`, every phase from `publish_intermine`, 1,882 s, peak 14.2 GB of
@@ -2313,12 +2313,63 @@ workarounds for faults in the stock converters; the converters are fixed and the
 **The two E-utilities sources** run as the last two sources of `integrate_sources`: each is a pre-retrieve step (a Java
 class that reads `os.production` and writes `publications.xml` or `organisms.xml` through E-utilities) and a load of
 that file, which `:dbmodel:integrate -Psource=NAME` runs as one. They need the build to reach
-`eutils.ncbi.nlm.nih.gov`, which the sandbox blocks until `sbx policy allow network eutils.ncbi.nlm.nih.gov` (HTTP 403,
-"Approval required", 20 Nov 2026). Without it leave both out of `DRIVE_STOCK`; after allowing the host they can be added
-to a built mine, last, with `:dbmodel:integrate -Psource=update-publications` and then `-Psource=entrez-organism` in the
-mine's directory, followed by the `postprocess` phase for the search index. With pubmed-gene the mine has some 117,000
-`Publication`s, 4,000 of them with a title (those the RDF pubmed source loaded): update-publications asks for about
-115,000 in batches of 500, 3 requests a second at most without an API key.
+`eutils.ncbi.nlm.nih.gov`, which the sandbox blocked until `sbx policy allow network eutils.ncbi.nlm.nih.gov` (HTTP 403,
+"Approval required", 20 Nov 2026; allowed the same day). `drive-ut-9n427e.sh` has both in `DRIVE_STOCK`, last.
+
+**They have now run, on the built ut demo, without a rebuild** [im-9n4.27, 20 Nov 2026]: the two `<source>` entries added
+to the mine's `project.xml` (what `rdfc2im project` writes for the new stock list, `src.data.file` `publications.xml` and
+`organisms.xml`, `loadFullRecord=true`), then in the mine's directory `:dbmodel:integrate -Psource=update-publications`,
+`:dbmodel:integrate -Psource=entrez-organism`, and from `postprocess` only what the new data needs:
+`create-attribute-indexes`, `create-search-index`, `create-autocomplete-index`, `summarise-objectstore`
+(`create-references`, the genomic-location tasks and the reactome post-processor do not read Publications or Organisms
+and were not run). Then `docker restart rdfc2im-ut-mine`.
+
+| | before | after |
+|---|---|---|
+| `Publication` | 120,042 | 120,042 (no new rows: the load fills the ones that have a pubMedId) |
+| with a title | 4,067 | 119,993 |
+| with `firstAuthor` | 0 | 118,976 |
+| with a year | 3,899 | 119,767 |
+| with a journal | 3,930 | 119,832 |
+| with an abstract | 3,787 | 114,880 |
+| `Author` | 30,540 | 517,226 |
+| `Organism` with a name | 1 (of 7) | 7 (name, genus, species, short name for all) |
+
+`update-publications` fetched 115,000 or so records in 16 minutes (3 requests a second, no key, no 429 or other error from
+NCBI; `publications.xml` is 372 MB) and the load took 3 more minutes; `entrez-organism` took 17 s. The search index
+(1,196,204 documents, 120,042 of them Publications and 517,226 Authors) took 157 s, the autocomplete index 40 s.
+Title words are not searched (`keyword_search.properties` does not index `Publication.title`); first authors, journals
+and PubMed ids are: `q=Ashburner` finds the Gene Ontology paper (PMID 10802651) and its authors.
+
+Three things stopped the first loads, in this order; the first is in `curation/priorities_override.properties` now, the
+other two are not fixed in the build:
+
+* **Publication fields with no priority.** `Conflicting values for field Publication.abstractText between humanmine-pubmed
+  and update-publications`: the RDF pubmed source and E-utilities write the same abstract with different whitespace and
+  markup, and a field with no entry in `genomic_priorities.properties` stops on the first difference (the file had
+  entries for doi, pages, pubMedId, title and volume only). `abstractText`, `journal`, `issue`, `year`, `month` and
+  `firstAuthor` now rank `humanmine-pubmed, update-publications, *`. The mine's copy of the file was extended by hand
+  with the same six lines (a full `prepare_mine_checkout` writes them).
+* **The abstract index.** An existing mine has btree indexes `publication__abstracttext_equals` and `_like` (from
+  `create-attribute-indexes`); a long abstract does not fit a btree row (`index row size 2856 exceeds btree version 4
+  maximum 2704`) and the load fails with `ObjectStoreException: Error while storing`. The two indexes were dropped
+  before the load (their definitions are in the scratch directory) and `create-attribute-indexes` could not make them
+  again for the same reason; InterMine logs it and goes on. In a full build the indexes do not exist yet when
+  `integrate_sources` runs, so only the missing abstract indexes remain. Queries that constrain on `abstractText` are
+  a table scan.
+* **Three pairs of duplicate Publications.** PMIDs 10802651, 27899635 and 28138153 are each held twice in the mine (bare
+  ids, the three duplicates the live test allows), and an item whose key matches two stored objects stops the load
+  (`Duplicate objects from the same data source`). The second of each pair had its `pubMedId` set to NULL for the load
+  and put back after; the pair stays a titled object and a bare one, as the test already tolerates. A full rebuild
+  stops at `update-publications` on the same three PMIDs until the duplicates' cause (two objects with one key from the
+  same source, whichever writes them) is found.
+
+Every failed load leaves the **tracker** table (field to source, written outside the load's transaction) with rows for
+objects the rolled-back load did not store; with them in place the next try says "already an equivalent ... from a
+*previous* run". After a failed `integrate` restore the table from the pre-run dump (`pg_restore --data-only -t tracker`
+after `TRUNCATE tracker`) before trying again. The retriever keeps its fetched records in a BerkeleyDB cache in the temp
+directory, so a retry takes 2 minutes rather than 16 and editing `publications.xml` between runs does not work (it is
+deleted and written again from the cache).
 
 **humanmine-static** names HumanMine's own sources (`interpro`, `panther`, `ncbi-gff`, `omim`, ...), not the data set titles
 the converters write here (`InterPro data set`, `Panther orthologue and paralogue predictions`, ...). Of its 41

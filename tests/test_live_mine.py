@@ -1092,11 +1092,18 @@ def test_every_loaded_publication_is_cited_by_a_loaded_object():
             xml = f'<query model="genomic" view="{path}.id"/>'
         cited |= {r[0] for r in query_rows_q(xml)}
     uncited = set(pubs) - cited
+    # update-publications [im-9n4.27] gives a title to every PubMed id the mine holds, so on a mine it has run on
+    # "has a title" no longer means "the pubmed source loaded it": the bare ids that no object cites (84 on the
+    # demo, 66 of them titled afterwards) are titled too. Such a mine is told by Publication.firstAuthor, which the
+    # RDF pubmed source never sets, and its uncited Publications are held to the one bound below, titled or not.
+    if query_rows_q('<query model="genomic" view="Publication.id"><constraint path="Publication.firstAuthor" '
+                    'op="IS NOT NULL"/></query>'):
+        titled = set()
     detailed = sorted(pubs[i] or f"id {i}" for i in uncited & titled)
     bare = sorted(pubs[i] or f"id {i}" for i in uncited - titled)
     assert not detailed, (f"{len(detailed)} of {len(titled)} Publications with a title are cited by no object, "
                           f"e.g. {detailed[:10]}")
-    assert len(bare) <= 150, f"{len(bare)} bare (pubMedId only) Publications are cited by no object, e.g. {bare[:10]}"
+    assert len(bare) <= 150, f"{len(bare)} bare (pubMedId only, or titled by update-publications) Publications are cited by no object, e.g. {bare[:10]}"
 
 
 def test_the_cytoscape_tool_query_runs_for_the_example_gene():
