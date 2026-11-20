@@ -503,6 +503,21 @@ def test_disease_name_priority_ranks_orphanet_above_hpo_annotation():
 # ------------------------------------------------------------------ milestone 3 sources [im-9n4.27]
 
 
+def test_protein2ipr_is_cut_while_it_downloads_and_interpro_is_cut_to_its_entries():
+    t = stock.load_table()
+    p = [r.split("\t") for r in stock.file_rows(t, ["protein2ipr"], "/S", "/S/cache")][0]
+    assert p[2] == "stream" and p[3] == p[4] == t["protein2ipr"]["files"][0]["url"]      # the raw field is the URL
+    assert p[7:10] == ["tab", "uniprot", "1"] and p[13] == "filtered" and p[15] == "protein2ipr.dat"
+    assert p[19].startswith("4=^(PF|SM|SSF|SFLD|PS|PR|PTHR|G3DSA|TIGR|PD|PIRSF|MF_|cd)")
+    i = [r.split("\t") for r in stock.file_rows(t, ["interpro"], "/S", "/S/cache")][0]
+    assert i[2] == "download" and i[7:9] == ["interpro-xml", "ipr"] and i[15] == "interpro.xml"
+    order, probs = stock.select(t, ["interpro"])
+    assert any("interpro needs protein2ipr" in x for x in probs)
+    # nothing is stored for a streamed file, so it is not in the disk estimate
+    assert stock.download_bytes(t, ["protein2ipr"]) == 0
+    assert stock.download_bytes(t, ["interpro"]) == 45100722
+
+
 def test_validation_of_stream_drop_columns_and_require():
     bad = {
         "a": _entry(files=[{"id": "x", "url": "https://e/x.gz", "stage_as": "x", "stream": True}]),

@@ -44,6 +44,8 @@ verified licence from an unverified one; this file and `licence_status` do.
 | stock `atlas-express` | CC-BY-4.0 | verified | <https://www.ebi.ac.uk/gxa/licence.html> | 2026-11-18 | yes | attribution: cite Expression Atlas 2026 (NAR) |
 | stock `hpo-annotation` | HPO licence | verified | <https://hpo.jax.org/license> | 2026-11-18 | yes | acknowledge and cite; show file dates or versions; content and relationships not to be altered (a row-subset is a reading the owner must accept) |
 | stock `orphanet` | CC-BY-4.0 | verified | <https://www.orphadata.com/legal-notice/> | 2026-11-18 | yes | attribution: Orphadata Science citation; say if changed; no endorsement; AI-use statement if used in an AI service |
+| stock `protein2ipr` | CC0-1.0 | verified | <https://interpro-documentation.readthedocs.io/en/latest/license.html> | 2026-11-20 | yes | none (citation of InterPro and its member databases requested) |
+| stock `interpro` | CC0-1.0 | verified | <https://interpro-documentation.readthedocs.io/en/latest/license.html> | 2026-11-20 | yes | none (citation requested) |
 | stock `ncbi-fasta` | No restrictions by NCBI (no licence named) | verified | <https://www.ncbi.nlm.nih.gov/home/about/policies/> | 2026-11-18 | yes | as ncbi-gff |
 | stock `omim` | OMIM licensed download (personal or institutional use only) | not checked | none found | 2026-11-18 | no | licensed copy only (not read today) |
 | stock `reactome` | CC0-1.0 | verified | <https://reactome.org/license> | 2026-11-18 | yes | attribution encouraged, not required |
@@ -77,6 +79,8 @@ load through `humanmine-items`, and rdfc2im's items carried no `DataSet.licence`
 | stock `interpro-go` | CC0 (InterPro) | none, passes null (InterproGoConverter.java:48) | InterPro domain GO annotations: empty |
 | stock `panther` | PANTHER terms of use, free with citation (unverified) | http://www.gnu.org/licenses/gpl.txt (PantherConverter.java:69-70) | Panther orthologue and paralogue predictions: the GPL URL |
 | stock `mgi-identifiers` | MGI data are free to use with citation | none (MgiIdentifiersConverter.java:43) | Mouse gene identifiers: empty |
+| stock `protein2ipr` | (new 20 Nov) | none (Protein2iprConverter, `super(writer, model, source, dataset)` with no licence) | InterPro data set: empty |
+| stock `interpro` | (new 20 Nov) | none, passes null (InterProConverter `super(..., null, false)`) | InterPro data set: empty (shared with protein2ipr) |
 | stock `rgd-identifiers` | RGD data are free to use with citation (unverified) | none, passes null (RgdIdentifiersConverter.java:50) | Rat gene identifiers: empty |
 | stock `psi-mi-ontology` | CC BY 4.0 (HUPO-PSI; unverified) | https://creativecommons.org/licenses/by/4.0/ (psi-mi-ontology.properties:10) | PSI Molecular Interactions: same URL |
 | stock `psi-intact` | CC BY 4.0 (IntAct, EMBL-EBI) | https://creativecommons.org/licenses/by/4.0/ in intermine `maint-2026` (PsiConverter.java:80-83, fixed in 6e1209b48c); the old code stamped the Apache-2.0 URL | IntAct molecular interactions: the Apache URL (the demo mine still runs the old code until its next rebuild) |

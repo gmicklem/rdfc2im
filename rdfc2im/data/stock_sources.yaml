@@ -737,3 +737,85 @@ sources:
         last_modified: "2026-11-04"
         stage_as: interpro2go
         filter: none
+
+  # ---- milestone 3 sources [im-9n4.27, T3.3]; licences read 20 Nov 2026 ------------------------------------------
+  # stream: true     the file is cut while it downloads (subset_raw.py filter --in URL, a Range-resuming reader):
+  #                  protein2ipr.dat.gz is 13.8 GB and only the panel's rows are kept. Nothing is stored in the raw
+  #                  cache; the filtered group stock-protein2ipr is reused while its key matches. A --scope full
+  #                  build downloads and unpacks it whole.
+  # data_property: none, files: []   the source reads no staged directory (update-publications, entrez-organism)
+  # filter drop_columns / require    tab filters that repair a layout the loader was not written for (below)
+
+  protein2ipr:
+    type: protein2ipr
+    jar: intermine
+    licence: "CC0-1.0"
+    licence_status: verified
+    licence_url: "https://interpro-documentation.readthedocs.io/en/latest/license.html"
+    licence_checked: "2026-11-20"
+    licence_quote: "All of the InterPro, Pfam, PRINTS and SFLD downloadable data provided on the InterPro website is freely available under CC0 1.0 Universal (CC0 1.0) Public Domain Dedication."
+    licence_conditions:
+      - "\"You do not need a special license for commercial use but please cite the resource and relevant individual member databases and keep the Copyright statement with your installation.\" (a request; CC0 imposes none)."
+      - "protein2ipr.dat.gz (ftp.ebi.ac.uk/pub/databases/interpro/current_release/) has no licence line of its own; the statement is the InterPro documentation page, as for interpro-go."
+      - "The same page: \"The included scanning tools and signature collections may be under different license terms\" (InterProScan software, not these downloads)."
+    redistributable: true
+    redistributable_reason: "CC0 allows redistribution without conditions."
+    data_dir: interpro/match_complete/current
+    properties:
+      protein2ipr.organisms: "9606"
+    after: [uniprot]
+    notes: >-
+      Protein2iprConverter loads a ProteinDomainRegion for each row whose protein (column 1) is already in
+      os.production with a human organism, so it must integrate after the UniProt sources (the table's `after`);
+      the 13,754,882,460-byte protein2ipr.dat.gz (4 Nov 2026) is read as it downloads and cut to the panel's
+      UniProt accessions (`stream: true`, about 70 minutes at the sandbox's 3 MB/s, nothing stored), which keeps a
+      few thousand rows. Columns: protein accession, InterPro entry, entry name, member-database signature,
+      start, end. Today's file has member signatures the converter's getSource() throws on ("Unknown DB found"):
+      NCBIFAM `NF00...` (new since 2022; 1,070 of the 323,843 rows in the first 5 MB of the file), so the cut keeps only rows whose
+      signature starts with a prefix the converter names (PF SM SSF SFLD PS PR PTHR G3DSA TIGR PD PIRSF MF_ cd) and
+      the NCBIFAM matches are not loaded: T3.4 would add `NF` -> NCBIFAM (and AntiFam) to getSource().
+      Full scope: the converter reads the whole file (13.8 GB gzipped, about 100 GB decompressed) and keeps the
+      rows of the proteins in the mine; the `require` filter still removes the unknown signatures.
+    files:
+      - id: matches
+        url: https://ftp.ebi.ac.uk/pub/databases/interpro/current_release/protein2ipr.dat.gz
+        verified: true
+        size: 13754882460
+        last_modified: "2026-11-04"
+        stream: true
+        stage_as: protein2ipr.dat
+        filter:
+          format: tab
+          ids: uniprot
+          column: "1"
+          require: ["4=^(PF|SM|SSF|SFLD|PS|PR|PTHR|G3DSA|TIGR|PD|PIRSF|MF_|cd)"]
+
+  interpro:
+    type: interpro
+    jar: intermine
+    licence: "CC0-1.0"
+    licence_status: verified
+    licence_url: "https://interpro-documentation.readthedocs.io/en/latest/license.html"
+    licence_checked: "2026-11-20"
+    licence_quote: "All of the InterPro, Pfam, PRINTS and SFLD downloadable data provided on the InterPro website is freely available under CC0 1.0 Universal (CC0 1.0) Public Domain Dedication."
+    licence_conditions:
+      - "\"You do not need a special license for commercial use but please cite the resource and relevant individual member databases and keep the Copyright statement with your installation.\" (a request; CC0 imposes none)."
+      - "interpro.xml.gz has no licence line of its own; the statement is the InterPro documentation page, as for interpro-go."
+    redistributable: true
+    redistributable_reason: "CC0 allows redistribution without conditions."
+    data_dir: interpro/current
+    needs: [protein2ipr]
+    notes: >-
+      interpro.xml (45 MB gzipped, 72,944 entries, release 111.0 of 5 Nov 2026) gives ProteinDomain its name,
+      short name, type, description, the related-entry collections and the cited publications; protein2ipr makes
+      the ProteinDomains it points at as stubs, which this fills. The panel cut keeps the entries protein2ipr's
+      rows name (`subset_raw.py ipr-ids` writes idsets/ipr.txt) and the entries those list as parents, children,
+      found-in or contains; the Publications of the kept entries only. A full-scope build keeps the whole file.
+    files:
+      - id: entries
+        url: https://ftp.ebi.ac.uk/pub/databases/interpro/current_release/interpro.xml.gz
+        verified: true
+        size: 45100722
+        last_modified: "2026-11-04"
+        stage_as: interpro.xml
+        filter: {format: interpro-xml, ids: ipr}
