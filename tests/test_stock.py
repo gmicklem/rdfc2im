@@ -664,18 +664,19 @@ def test_validation_of_stream_drop_columns_and_require():
 # ------------------------------------------------------------------ DataSet.licence from project.xml [im-9n4.45]
 
 LICENCE_PROPERTY = {
-    "go-annotation": ("licence", "https://creativecommons.org/licenses/by/4.0/"),         # GoConverter.setLicence
     "uniprot-fasta": ("fasta.licence", "https://creativecommons.org/licenses/by/4.0/"),   # FastaLoaderTask.setLicence
     "ncbi-fasta": ("fasta.licence", "https://www.ncbi.nlm.nih.gov/home/about/policies/"),
     "ncbi-gff": ("gff3.licence", "https://www.ncbi.nlm.nih.gov/home/about/policies/"),    # GFF3ConverterTask.setLicence
 }
 
 
-def test_the_four_loaders_that_read_a_licence_property_get_the_url_docs_licences_records():
+def test_the_three_loaders_that_read_a_licence_property_get_the_url_docs_licences_records():
     t = stock.load_table()
     for n, (prop, url) in LICENCE_PROPERTY.items():
         assert t[n]["licence_status"] == "verified", n          # only a licence read at source is stamped
         assert t[n]["properties"][prop] == url, (n, t[n]["properties"])
+    # go-annotation's converter makes its DataSet in the constructor, before setLicence runs: a property would do nothing
+    assert "licence" not in (t["go-annotation"].get("properties") or {})
     # and it reaches project.xml's <source> as a property of that name
     root = etree.fromstring('<sources><source name="ncbi-gff" type="ncbi-gff"/></sources>')
     assert stock.apply_to_project(root, t, ["ncbi-gff"]) == []
