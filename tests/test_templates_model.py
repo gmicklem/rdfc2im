@@ -215,7 +215,7 @@ def test_every_template_the_build_applies_parses_and_follows_intermines_rules():
 
 DATA_SOURCES = "All_data_sources"
 DATA_SOURCES_VIEW = ("DataSet.dataSource.name DataSet.name DataSet.version DataSet.description DataSet.url "
-                     "DataSet.licence DataSet.publication.firstAuthor DataSet.publication.year "
+                     "DataSet.licence DataSet.publication.year "
                      "DataSet.publication.title DataSet.publication.pubMedId").split()
 
 
@@ -229,12 +229,13 @@ def test_all_data_sources_lists_every_data_set_with_its_source_version_licence_a
     assert tpl.get("title") == "All data sources"
     assert q.get("longDescription"), "the description BlueGenes shows under the title"
     assert q.get("view").split() == DATA_SOURCES_VIEW
-    # Both references are outer joins, so every DataSet shows: one without a citation, and one without a DataSource
-    # (the rebuilt ut mine of 20 Nov 2026 has "modMine gene flanking regions", made by InterMine's flanking-regions
-    # postprocess with no DataSource: an inner join left it out, 32 rows for 33 DataSets). A sort path must be in
-    # the root outer join group, so the sort is on DataSet.name alone (the mine refuses DataSet.dataSource.name).
-    assert q.get("sortOrder").split() == ["DataSet.name", "asc"]
-    assert outer_joins(q) == {"DataSet.publication", "DataSet.dataSource"}
+    # The publication is an outer join, so a DataSet without a citation shows. The data source is an inner join:
+    # a sort path must be in the root outer join group, and the table is sorted by data source, then data set
+    # name. The one DataSet that had no DataSource ("modMine gene flanking regions") is no longer built (Gos
+    # Micklem, 20 Nov 2026); the live test fails if a mine has a DataSet the template leaves out.
+    assert q.get("sortOrder").split() == ["DataSet.dataSource.name", "asc", "DataSet.name", "asc"]
+    assert outer_joins(q) == {"DataSet.publication"}
+    assert "firstAuthor" not in q.get("view")   # Gos Micklem, 20 Nov 2026: year, title and PubMed id only
     # licence, version, description and url are attributes of DataSet itself: no join, a missing one is empty
 
 

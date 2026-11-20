@@ -189,8 +189,8 @@ def test_postprocess_runs_the_stock_postprocesses_in_humanmines_order(tmp_path):
     if plan is None:
         return
     pp = [c.split("-Pprocess=", 1)[1].rstrip(")") for c in _cmds(plan, "postprocess") if "-Pprocess=" in c]
-    assert pp[:9] == ["create-references", "create-chromosome-locations-and-lengths", "transfer-sequences",
-                      "do-sources -Psource=go-annotation", "create-gene-flanking-features",
+    assert pp[:8] == ["create-references", "create-chromosome-locations-and-lengths", "transfer-sequences",
+                      "do-sources -Psource=go-annotation",
                       "create-location-overlap-index", "create-overlap-view", "create-attribute-indexes",
                       "do-sources -Psource=reactome"], pp
     assert "HOOK" not in plan

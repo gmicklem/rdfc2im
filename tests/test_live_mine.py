@@ -1623,8 +1623,6 @@ def test_data_sources_carry_urls_and_descriptions_from_the_mapping_files_and_upd
 # Any other DataSet without a linked object is a record with no data behind it (humanmine-static made 34 of them).
 DATA_SETS_WITHOUT_LINKS = {
     "PubMed (RDF Portal)": "Publication has no dataSets collection in the model: its 3,930 papers cannot link to it",
-    "modMine gene flanking regions": "InterMine's create-gene-flanking-features postprocess makes it and links none of "
-                                     "the GeneFlankingRegions it makes to it",
     "Single-Tissue cis-eQTL Data": "GtexConverter stores it whether or not an eQTL (signif) file is staged; none is, so "
                                    "it is empty (a converter change, not this build's)",
 }
@@ -1697,9 +1695,9 @@ def test_every_data_set_has_a_version_from_this_build():
 def test_the_all_data_sources_template_is_public_in_metadata_and_lists_every_data_set():
     """The public template "All data sources" (curation/metadata_templates.sql, phase apply_templates) [im-9n4.60,
     Gos 20 Nov 2026]: tagged im:aspect:Metadata, so BlueGenes' Templates page has a Metadata category; run with its
-    default (DataSet.name = *) it gives one row per DataSet, a DataSet without a DataSource too ("modMine gene
-    flanking regions" on the mine of 20 Nov 2026: an inner join left it out), sorted by data set name, each with a
-    version but DATA_SETS_WITHOUT_VERSION."""
+    default (DataSet.name = *) it gives one row per DataSet (the data source is an inner join, so this fails if a
+    DataSet has no DataSource, as "modMine gene flanking regions" had until the build dropped the flanking-regions
+    postprocess, 20 Nov 2026), sorted by data source, each with a version but DATA_SETS_WITHOUT_VERSION."""
     if not mine_up():
         return _skip(f"live checks off or no mine at {MINE_BASE} (make test-live)")
     templates = _get_json(f"{MINE_BASE}/service/templates?format=json")["templates"]
@@ -1716,10 +1714,11 @@ def test_the_all_data_sources_template_is_public_in_metadata_and_lists_every_dat
     assert sorted(r[1] for r in rows) == names, \
         f"not one row per DataSet: missing {sorted(set(names) - {r[1] for r in rows})}"
     assert len(rows) == len(names)
-    # sorted by data set name (the database's collation decides the order): the case-folded names do not go down
-    # more than a collation can explain, so check only that the first and last are the extremes
-    folded = [(r[1] or "").casefold() for r in rows]
+    # sorted by data source name (the database's collation decides the order, so check only that the first and
+    # last are the extremes), and no gene flanking regions in the mine any more
+    folded = [(r[0] or "").casefold() for r in rows]
     assert folded[0] == min(folded) and folded[-1] == max(folded), (folded[0], folded[-1])
+    assert not any("flanking" in n for n in names), names
     missing = sorted(r[1] for r in rows if not r[2] and r[1] not in DATA_SETS_WITHOUT_VERSION)
     assert not missing, f"data sets without a version: {missing}"
 

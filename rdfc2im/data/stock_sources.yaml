@@ -211,8 +211,10 @@ sources:
     properties:
       gff3.licence: "https://www.ncbi.nlm.nih.gov/home/about/policies/"
     after: [ncbi-gene]
-    postprocess: [create-chromosome-locations-and-lengths, create-gene-flanking-features,
-                  create-location-overlap-index, create-overlap-view]
+    # No create-gene-flanking-features (Gos Micklem, 20 Nov 2026: gene flanking regions are dropped from the
+    # HumanMine build; HumanMine's own project.xml runs it). It made 20 GeneFlankingRegions per located gene and a
+    # DataSet "modMine gene flanking regions" with no DataSource that none of them linked to.
+    postprocess: [create-chromosome-locations-and-lengths, create-location-overlap-index, create-overlap-view]
     priority_first: [Gene.chromosome]
     chromosome_lengths: {from: gff, source: ncbi-gff-lengths, data_dir: human/gff/lengths}
     notes: >-
@@ -222,8 +224,8 @@ sources:
       dropped by the record handler. The filter keeps every ##sequence-region line, the panel genes
       (Dbxref GeneID) with their Parent closure (transcripts, exons, CDS). `keep_types: [gene]` in
       the filter would also keep every other gene row (the neighbours a genome browser shows, D-1):
-      measured 18 Nov 2026 it adds 41,955 Genes and, through create-gene-flanking-features (20
-      regions per gene), 0.84 million GeneFlankingRegions: 2.18 million objects instead of
+      measured 18 Nov 2026, when create-gene-flanking-features still ran, it added 41,955 Genes and (20
+      regions per gene) 0.84 million GeneFlankingRegions: 2.18 million objects instead of
       0.37 million, Postgres 4.3 GB instead of 2.0, integrate +45 s, postprocess +270 s (the
       search index most), and 2 duplicate symbols (RefSeq names some tRNA genes alike); left off
       until the thin genome comes from the RDF side (BUILD.md, "Locations and gene models"). Keys: Gene on

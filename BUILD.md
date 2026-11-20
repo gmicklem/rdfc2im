@@ -1524,6 +1524,13 @@ that is meant to show JBrowse 2, `trial/front/gen-jbrowse-config.sh` regenerates
 
 ## "All data sources": a template in the category Metadata, linked from the home page [im-9n4.60]
 
+**Changed 20 Nov 2026 (Gos Micklem), which supersedes the outer-join notes below:** gene flanking regions are
+dropped from the build (`create-gene-flanking-features` is no longer in the `postprocess` list of ncbi-gff in
+`rdfc2im/data/stock_sources.yaml`), so no GeneFlankingRegion objects and no DataSet "modMine gene flanking regions"
+are made. With every DataSet now having a DataSource, the template joins the data source normally again and sorts by
+data source, then data set name; only the publication stays an outer join. The first-author column is gone: the
+citation shows as year, title and PubMed id.
+
 The public template `All_data_sources` (title "All data sources") lists every data set of the mine with its data
 source: DataSource name, DataSet name, version, description, url and licence, and the paper the source asks to be cited
 (first author, year, title, PubMed id), sorted by data set name. It is in `curation/metadata_templates.sql`,
