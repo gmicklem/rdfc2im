@@ -41,7 +41,7 @@ ncbigene:
   data_source_name: NCBI
   data_source_url: https://rdfportal.org/dataset/ncbigene
   data_set_title: NCBI Gene (RDF Portal)
-  citation_note: "No citation recorded: the NCBI Gene FTP README states none and NCBI's help pages (www.ncbi.nlm.nih.gov/books/NBK3841, /gene/about) answered the sandbox with a reCAPTCHA page (20 Nov 2026), so NCBI Gene's own citation request could not be read."
+  citation_note: "No citation recorded: the NCBI Gene FTP README states none, and NCBI Gene's help book (www.ncbi.nlm.nih.gov/books/NBK3841, /gene/about) answers the sandbox with a reCAPTCHA page (read 2026-11-20, twice), so its own citation request could not be read."
   data_set_licence: "https://www.ncbi.nlm.nih.gov/home/about/policies/"
   licence: "No restrictions by NCBI (NCBI data-use policy; no licence named)"
   licence_status: verified
@@ -312,7 +312,7 @@ clinvar:
   data_source_name: ClinVar
   data_source_url: https://rdfportal.org/dataset/clinvar
   data_set_title: ClinVar (RDF Portal)
-  citation_note: "No citation recorded: the ClinVar FTP README and its GitHub README state none, and ClinVar's documentation pages (www.ncbi.nlm.nih.gov/clinvar/docs, /clinvar/intro) answered the sandbox with a reCAPTCHA page (20 Nov 2026)."
+  citation_note: "No citation recorded: the ClinVar FTP README and its GitHub README state none, and ClinVar's documentation (www.ncbi.nlm.nih.gov/clinvar/docs, /clinvar/intro) answers the sandbox with a reCAPTCHA page (20 Nov 2026)."
   data_set_licence: "https://www.ncbi.nlm.nih.gov/home/about/policies/"
   licence: "No restrictions by NCBI (NCBI data-use policy); ClinVar's own data-use page unread"
   licence_status: partial
@@ -337,7 +337,7 @@ pubmed:
   data_source_name: PubMed
   data_source_url: https://rdfportal.org/dataset/pubmed
   data_set_title: PubMed (RDF Portal)
-  citation_note: "No citation recorded: pubmed.ncbi.nlm.nih.gov is blocked from the sandbox (HTTP 403 'Approval required', 20 Nov 2026) and NCBI's help pages answered with a reCAPTCHA page; RDF Portal's pubmed dataset page names no reference."
+  citation_note: "No citation recorded: https://pubmed.ncbi.nlm.nih.gov/about/ (read 2026-11-20, once the host was allowed) asks for none, and RDF Portal's pubmed dataset page names no reference."
   data_set_licence: "https://www.nlm.nih.gov/databases/download.html"
   licence: "NLM terms and conditions (free; acknowledge NLM)"
   licence_status: verified

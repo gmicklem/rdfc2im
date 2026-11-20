@@ -2445,9 +2445,10 @@ writes the paper as `DataSet.publication` (a Publication with the pubMedId; upda
 the title and authors) and the status pages show it. Every PMID was read on the source's page and resolved through
 E-utilities esummary on 20 Nov 2026; where the page prints only a DOI, esearch on the DOI gave the PMID. RDF sources
 cite the original provider, as RDF Portal's FAQ asks. 23 of the 32 data sets are cited (16 papers); none for PANTHER
-(pantherdb.org refuses the sandbox), PSI-MI (psidev.info blocked), GTEx and Orphanet (they ask for a data statement, not a
-paper), and NCBI Gene, ClinVar, PubMed and gene2pubmed (NCBI's help pages answered with a reCAPTCHA page,
-pubmed.ncbi.nlm.nih.gov blocked). Live test `test_every_data_set_whose_source_asks_to_be_cited_links_to_that_paper_with_a_title`.
+(pantherdb.org refuses the sandbox; Gos reads it), PSI-MI (psidev.info, allowed and read on 20 Nov, asks for no
+citation), GTEx and Orphanet (they ask for a data statement, not a paper), PubMed (pubmed.ncbi.nlm.nih.gov/about asks
+for none), and NCBI Gene, ClinVar and gene2pubmed (their help pages on www.ncbi.nlm.nih.gov answer the sandbox with a
+reCAPTCHA page). Live test `test_every_data_set_whose_source_asks_to_be_cited_links_to_that_paper_with_a_title`.
 
 **DepMap** (`depmap-sample-info`, `depmap-expression`) is not wired; its licence is being read elsewhere. What it
 needs: `sample_info.csv` and `CCLE_expression.csv` from the DepMap portal (no stable URL: a release is picked by
@@ -2525,7 +2526,18 @@ classes moved by more than 1%: DataSet 67 to 33 and DataSource 165 to 152 (human
 120,042 to 119,957 (the 3 duplicates, 62 uncited psi-intact bibrefs, humanmine-static's papers), 119,911 with a title;
 Author 517,226 to 516,704; MeshTerm 21,941 to 21,926; every other class equal (ProteinDomainRegion 15,128, Allele 61,167,
 Organism 7, all named). Tests: `make test` 589 passed, 74 skipped; `make test-live` 74 passed, 0 skipped, 1 failed
-(the citation test below, written after this build started).
+(the citation test, written after this build started).
+
+**Run 2, the reference publications** (`drive-ut-9n456.sh prepare_mine_checkout`, 11:41:21 to 12:16:53, 2,126 s, every
+rc 0, nothing by hand): prepare_mine_checkout 3, stage_src_data 2, start_databases 1, build_dbmodel 30,
+**integrate_sources 1,096** (update-publications 2 min 26 s, the record cache still in the temp directory;
+entrez-organism 16 s), **postprocess 768** (402 in run 1: available memory fell to 1.2 GB during it), build_webapp 13,
+resolve_bluegenes_deps 4, stage_artifacts 5, start_mine_stack 2, apply_templates 15, apply_public_lists 174, verify 6,
+write_source_manifest 7. Peak 15.0 GB used, 1.2 GB available (12:10:24, postprocess). The prepare line: `32 data sets, 31
+with a version, 23 with a cited paper (16 PubMed ids), 8 data sources`. All 23 cited DataSets link to their paper and
+every one of the 16 has its title from update-publications; Publication 119,966 (9 cited papers no other source had),
+119,920 with a title. `make test` 595 passed, 75 skipped; `make test-live` 75 passed, 0 skipped, 0 failed; the mine's
+version endpoint and the front answer 200.
 
 ## Persistence, and what does not survive
 
