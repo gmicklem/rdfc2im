@@ -452,6 +452,20 @@ def test_ensembl_record_is_the_disclaimer_read_at_source():
     assert any("third-party" in c for c in e["licence_conditions"])
 
 
+def test_planned_sources_are_known_but_not_built():
+    """im-9n4.45: planned_sources.yaml holds sources that are not built (depmap); nothing reads it, so it must not
+    overlap the sources the build fetches, and an unread licence says so."""
+    import yaml
+    path = os.path.join(os.path.dirname(stock.__file__), "data", "planned_sources.yaml")
+    with open(path) as fh:
+        planned = yaml.safe_load(fh)
+    assert "depmap" in planned
+    assert not set(planned) & (set(stock.load_table()) | set(_sources_cfg()))
+    d = planned["depmap"]
+    assert d["licence_status"] == "not-verified" and d["licence"].startswith("not verified")
+    assert d["redistributable"] is False and d["licence_checked"] == "2026-11-20"
+
+
 def test_every_source_has_a_complete_licence_record():
     """im-9n4.45: the licence is what the source states, with the page, the date and a status; an unread licence
     says so (`not verified`) instead of carrying a guess."""

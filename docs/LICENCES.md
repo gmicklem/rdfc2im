@@ -198,6 +198,38 @@ Third pass (20 Nov, after the project owner allowed the Ensembl archive host):
 
 None of these needs more than the one command or a person's reading. The bot checks were not worked around.
 
+## Sources not loaded yet
+
+Record: `rdfc2im/data/planned_sources.yaml` (nothing reads it: `stock_sources.yaml` lists only sources the build
+fetches, so a known-but-unbuilt source would have been fetched there).
+
+### depmap (third pass, 2026-11-20): licence NOT read, status not-verified
+
+* **What HumanMine loaded.** Two stock sources, not three (`repos/humanmine-bio-sources` has `depmap-expression` and
+  `depmap-sample-info` only; `repos/humanmine/project.xml` lines 189-193 load both from `/micklem/data/human/depmap`,
+  version 4.3.0). `depmap-expression` reads `CCLE_expression.csv` (cell lines in rows, genes in columns, the gene symbol
+  taken as the first word of each header; one `DepMapExpression` item per value). `depmap-sample-info` reads `sample_info.csv` (columns
+  `DepMap_ID`, `cell_line_name`, `stripped_cell_line_name`, `CCLE_Name`, ..., `primary_disease`, `Subtype`, `age`,
+  `Sanger_Model_ID`, `lineage` ...; one `CellLine` item per row). The converters were written on 2021-10-06 to 2021-11-11
+  (DepMap's 2021 releases; the repository names no release).
+* **What was read.** `https://depmap.org/portal/` (home page, plain client): the current release is **26Q3**, "DepMap
+  releases data bi-annually", highlights include updates to the CRISPR pipeline and the mutation dataset. Its footer
+  links "Terms & Conditions" (`/portal/terms/`), but every deeper page (terms, data page, download index API, release
+  notes) answers with a Cloudflare Turnstile check: "We're verifying you're a person, not a bot ... Need DepMap data in
+  bulk? You're always welcome to grab everything from the downloads section - please don't scrape the portal."
+  The check was not worked around. WebFetch got the same page.
+* **Not read, so not recorded:** the licence name and wording, attribution text, any non-commercial or redistribution
+  clause, per-data-set exceptions (Sanger, drug screens), current file names and sizes of `CCLE_expression.csv` and
+  `sample_info.csv` (the 26Q3 file names were not checked),
+  and whether the old names still exist. Earlier secondary sources said CC BY 4.0: not recorded as the licence.
+* **Hosts not allowed:** `forum.depmap.org` (the 26Q3 announcement), `api.figshare.com` and `figshare.com` (the
+  releases' archive record, which states a licence per item).
+* **Recommendation: unclear, needs the owner's decision (do not wire it in yet).** Nothing at source was read, and the
+  portal asks automated clients to use the downloads section. A person reads https://depmap.org/portal/terms/ and the
+  data page's release README in a browser and pastes the licence line and the 26Q3 file list; then it can be
+  decided. The old converters also read 2021 file layouts, so they would need rework whatever the licence says.
+  `redistributable` is recorded false until then.
+
 ## Attribution a public mine must show
 
 Words the sources ask for. A "Data sources" page of the mine should carry them; the data-source pages already name each
