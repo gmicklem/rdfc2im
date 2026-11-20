@@ -15,7 +15,8 @@
 #   --only PHASE        Run exactly one phase, then stop.
 #   --list-phases       Print the phase names, in order, and exit.
 #   --sources "a b c"   Space-separated source list (default: the 9-source demo panel).
-#   --genes FILE        Gene-panel file for --genes-scoped sources (default: demo panel).
+#   --genes FILE        Gene-panel file for --genes-scoped sources (default: demo panel). `--genes all` is
+#                       --scope full (the plan's name for it, T3.2).
 #   --taxon LIST        Comma-separated NCBI taxon ids, passed to rdfc2im --taxon (default: 9606).
 #   --skip-templates    Don't apply curation/demo_public_templates.sql.
 #   --report-layout FILE  After the demo templates, in phase apply_templates: load the HumanMine templates the
@@ -111,6 +112,16 @@
 #                       panel, and so do the id sets subset_raw cuts the stock files to and the PMIDs pubmed is
 #                       fetched for. Their cache groups are recorded as scope=full: give them a cache of their own
 #                       (--cache-dir), not the panel's release cache [im-9n4.40].
+#   --scope panel|full  panel (default): the build is cut to the --genes panel as the options above say. full: no
+#                       gene panel anywhere [im-9n4.26, T3.2]: every gene-shaped RDF source is fetched for the whole
+#                       --taxon (SCOPE_MODE full; --gene-identifiers all follows), pubmed for the PMIDs all of their
+#                       items cite, every stock file is used whole (no id sets, no filter: `rdfc2im stock files
+#                       --scope full`; only ncbi-fasta keeps its cut to the 24 assembled chromosomes), the ID resolver
+#                       holds the whole taxon, and every cache group saved or restored records scope=full instead of
+#                       a scope mode and genes_md5, so a panel cache is refused by a full build and a full cache by a
+#                       panel one. No gene-id lookups (nothing is resolved by symbol). Refuses --genes FILE,
+#                       --gene-identifiers panel and --resolver-scope panel. Needs the DBCLS-sized server: BUILD.md,
+#                       "Full scope".
 #   --stock-local DIR   Local copies of stock data: DIR/<source>/<raw file name>. Used instead of a
 #                       download when present; the only way in for a source that is not
 #                       redistributable (OMIM: D-7). Also RDFC2IM_STOCK_LOCAL.
@@ -233,6 +244,7 @@ HUMANMINE_60_REF=${HUMANMINE_60_REF:-maint-2026}
 HUMANMINE_BIO_60_URL=${HUMANMINE_BIO_60_URL:-https://github.com/gmicklem/humanmine-bio-sources.git}
 HUMANMINE_BIO_60_REF=${HUMANMINE_BIO_60_REF:-maint-2026}
 BIND_ADDR=${BIND_ADDR:-127.0.0.1}
+MINE_TITLE_GIVEN=${MINE_TITLE:+1}
 MINE_TITLE=${MINE_TITLE:-"rdfc2im: 114 gene food/drug-metabolism panel"}
 
 # The demo panel this project actually built and verified this session (STATUS.md Table 2 /
@@ -257,6 +269,8 @@ STOCK_SOURCES=${STOCK_SOURCES:-}
 STOCK_LOCAL=${RDFC2IM_STOCK_LOCAL:-}
 RESOLVER_SCOPE=taxon
 GENE_IDENTIFIERS=panel
+SCOPE=panel
+GIVEN=""          # the panel-shaped options given on the command line, which --scope full refuses
 WITH_GENOME_SEQUENCE=0
 JBROWSE2_SRC=${JBROWSE2_SRC:-}
 WITH_FRONT=0
@@ -350,7 +364,8 @@ while [ $# -gt 0 ]; do
     --only) ONLY_PHASE=$2; shift ;;
     --list-phases) LIST_PHASES=1 ;;
     --sources) SOURCES=$2; shift ;;
-    --genes) GENE_PANEL=$2; shift ;;
+    --genes) if [ "$2" = all ]; then SCOPE=full; GIVEN="$GIVEN genes-all"; else GENE_PANEL=$2; GIVEN="$GIVEN genes"; fi; shift ;;
+    --scope) SCOPE=$2; GIVEN="$GIVEN scope"; shift ;;
     --taxon) TAXON=$2; shift ;;
     --skip-templates) SKIP_TEMPLATES=1 ;;
     --report-layout) REPORT_LAYOUT=$2; shift ;;
@@ -369,7 +384,7 @@ while [ $# -gt 0 ]; do
     --stock-local) STOCK_LOCAL=$2; shift ;;
     --with-genome-sequence) WITH_GENOME_SEQUENCE=1 ;;
     --resolver-scope) RESOLVER_SCOPE=$2; shift ;;
-    --gene-identifiers) GENE_IDENTIFIERS=$2; shift ;;
+    --gene-identifiers) GENE_IDENTIFIERS=$2; GIVEN="$GIVEN gene-identifiers"; shift ;;
     --jbrowse2-src) JBROWSE2_SRC=$2; shift ;;
     --with-front) WITH_FRONT=1 ;;
     --source-pages) SOURCE_PAGES=$2; shift ;;
@@ -398,12 +413,36 @@ case "$RESOLVER_SCOPE" in
   panel|taxon) ;;
   *) echo "--resolver-scope wants panel or taxon, not '$RESOLVER_SCOPE'" >&2; exit 2 ;;
 esac
+# --scope full [im-9n4.26]: no gene panel anywhere, so nothing that names one can come with it
+case "$SCOPE" in
+  panel|full) ;;
+  *) echo "--scope wants panel or full, not '$SCOPE'" >&2; exit 2 ;;
+esac
+case " $GIVEN " in *" genes-all "*)
+  [ "$SCOPE" = full ] || { echo "--genes all is --scope full; it cannot go with --scope $SCOPE" >&2; exit 2; } ;;
+esac
+if [ "$SCOPE" = full ]; then
+  case " $GIVEN " in *" genes "*)
+    echo "--scope full has no gene panel: drop --genes $GENE_PANEL" >&2; exit 2 ;;
+  esac
+  case " $GIVEN " in *" gene-identifiers "*)
+    [ "$GENE_IDENTIFIERS" = all ] || { echo "--scope full holds every gene: it cannot go with --gene-identifiers $GENE_IDENTIFIERS" >&2; exit 2; } ;;
+  esac
+  [ "$RESOLVER_SCOPE" = taxon ] || { echo "--scope full resolves every gene of the taxon: it cannot go with --resolver-scope $RESOLVER_SCOPE" >&2; exit 2; }
+  GENE_IDENTIFIERS=all
+  [ -n "$MINE_TITLE_GIVEN" ] || MINE_TITLE="rdfc2im: every gene of taxon $TAXON (full scope)"
+fi
 # --gene-identifiers all: the identifier sources hold every human gene; everything else keeps its mode
 case "$GENE_IDENTIFIERS" in
   panel) ;;
   all) SCOPE_MODE[ncbigene]=full; SCOPE_MODE[hgnc]=full ;;
   *) echo "--gene-identifiers wants panel or all, not '$GENE_IDENTIFIERS'" >&2; exit 2 ;;
 esac
+# --scope full: every gene-shaped source as well (ensembl, uniprot, clinvar, gwascatalog); ontologies (none),
+# reactome (already full) and pubmed (pmid: the PMIDs the full items cite) keep their modes
+if [ "$SCOPE" = full ]; then
+  for s in "${!SCOPE_MODE[@]}"; do [ "${SCOPE_MODE[$s]}" != panel ] || SCOPE_MODE[$s]=full; done
+fi
 
 case "$PUBLIC_LISTS_SELECT" in
   all|100k) ;;
@@ -528,6 +567,7 @@ mkdir -p "$LOG_DIR"
 : > "$TIMING_TSV" 2>/dev/null || true
 log "full-build.sh starting - run id $RUN_ID, log $LOGFILE, dry_run=$DRY_RUN"
 log "sources: $SOURCES"
+[ "$SCOPE" != full ] || log "scope: full - no gene panel; every source for taxon $TAXON, every stock file whole, cache groups scope=full"
 log "trial home: $TRIAL_HOME"
 log "raw-data cache: $RAW_CACHE_DIR (use_cached_data=$USE_CACHED_DATA offline=$OFFLINE)"
 [ -z "$STOCK_SOURCES" ] || log "stock sources: $STOCK_SOURCES (working area $STOCK_DIR${STOCK_LOCAL:+, local copies $STOCK_LOCAL})"
@@ -571,7 +611,11 @@ phase_check_prereqs() {
      JAVA8_HOME, e.g.: apt-get install -y openjdk-8-jdk && export JAVA8_HOME=/usr/lib/jvm/java-8-openjdk-\$(dpkg --print-architecture)"
   GRADLE_ENV=(env "JAVA_HOME=$JAVA8_HOME" "${GRADLE_HOME_ENV[@]}")
   log "JAVA8_HOME=$JAVA8_HOME, GRADLE_USER_HOME=$GRADLE_USER_HOME, user.home=$HOME"
-  [ -f "$GENE_PANEL" ] || die "gene panel file not found: $GENE_PANEL"
+  [ "$SCOPE" = full ] || [ -f "$GENE_PANEL" ] || die "gene panel file not found: $GENE_PANEL"
+  if [ "$SCOPE" = full ] && [[ " $SOURCES " == *" ensembl "* ]]; then
+    log "note: --scope full fetches ensembl for every gene, and it merges on symbol and Ensembl id with no key_ambiguity" \
+      "for the 845 labels several Ensembl genes share (BUILD.md, \"Full scope\"): leave it out of --sources for now"
+  fi
   # A misspelled --sources entry falling through to SCOPE_MODE's ${...:-none} default would
   # silently fetch that source completely unscoped instead of erroring - exactly the kind of
   # mistake that would only surface hours later as an unexpectedly huge ClinVar/UniProt pull.
@@ -752,6 +796,16 @@ scope_flags_for() {
 # contain whitespace, so the caller can word-split the result.
 cache_meta_for() {
   local src=$1
+  if [ "$SCOPE" = full ]; then
+    # --scope full: every group says so, whatever the source's mode, so that no group of a panel build (scope
+    # none, panel or pmid) is ever restored into a full build, nor the other way round. The one exception is
+    # right: the ncbigene and hgnc groups of a --gene-identifiers all build say scope=full too, and they are
+    # the same fetch (the taxon, no panel) [im-9n4.26]
+    printf -- '--meta scope=full --meta taxon=%s --meta limit=0' "$TAXON"
+    [ "${SCOPE_MODE[$src]:-none}" != pmid ] || [ ! -f "$TRIAL_HOME/cited_pmids.txt" ] ||
+      printf -- ' --meta pmids_md5=%s' "$(md5sum "$TRIAL_HOME/cited_pmids.txt" | cut -d' ' -f1)"
+    return 0
+  fi
   printf -- '--meta scope=%s --meta taxon=%s --meta limit=0' "${SCOPE_MODE[$src]:-none}" "$TAXON"
   case "${SCOPE_MODE[$src]:-none}" in
     panel) printf -- ' --meta genes_md5=%s' "$(md5sum "$GENE_PANEL" | cut -d' ' -f1)" ;;
@@ -765,7 +819,7 @@ cache_meta_for() {
 # raw-data group gene-id-lookup, restored into / saved from $LOOKUP_DIR (the dir translate uses:
 # $RDFC2IM_RESOLVER_CACHE, else out/_resolver). Only these sources resolve symbols.
 LOOKUP_DIR=${RDFC2IM_RESOLVER_CACHE:-"$HERE/out/_resolver"}
-uses_lookup() { local s; for s in $SOURCES; do case " ncbigene hgnc clinvar ensembl gwascatalog " in *" $s "*) return 0 ;; esac; done; return 1; }
+uses_lookup() { local s; [ "$SCOPE" != full ] || return 1; for s in $SOURCES; do case " ncbigene hgnc clinvar ensembl gwascatalog " in *" $s "*) return 0 ;; esac; done; return 1; }
 lookup_meta() { printf -- '--meta taxon=%s --meta genes_md5=%s' "$TAXON" "$(md5sum "$GENE_PANEL" | cut -d' ' -f1)"; }
 
 phase_rdfc2im_pipeline() {
@@ -806,7 +860,8 @@ phase_rdfc2im_pipeline() {
       # left out so that uniprot's sequence lengths [im-9n4.32] do not change the set, and with it
       # pmids_md5 and the cached pubmed group. Taking pubMedId alone is the real fix; it changes which
       # PubMed records load and needs the pubmed group fetched again, so it is a task of its own.
-      if [ "${SCOPE_MODE[hgnc]}" = full ] && [[ " $SOURCES " == *" hgnc "* ]]; then
+      # --scope full: every gene is in scope, so the PMIDs are those of the whole items [im-9n4.26]
+      if [ "$SCOPE" != full ] && [ "${SCOPE_MODE[hgnc]}" = full ] && [[ " $SOURCES " == *" hgnc "* ]]; then
         # --gene-identifiers all: hgnc holds every human gene (about 23,500 papers); the PMIDs stay the
         # panel's, read from the panel genes' cut of its items (subset_raw.py panel_items) [im-9n4.40]
         local hgnc_cut="$TRIAL_HOME/hgnc-panel-items.xml"
@@ -1085,7 +1140,8 @@ _stock_rows() {
   printf '%s\n' "$out"
 }
 _stock_files() {
-  _stock_rows files --stock-dir "$STOCK_DIR" --raw-cache "$STOCK_RAW_CACHE" ${STOCK_LOCAL:+--local "$STOCK_LOCAL"}
+  local full=(); [ "$SCOPE" != full ] || full=(--scope full)   # every panel-cut file used whole [im-9n4.26]
+  _stock_rows files --stock-dir "$STOCK_DIR" --raw-cache "$STOCK_RAW_CACHE" ${STOCK_LOCAL:+--local "$STOCK_LOCAL"} "${full[@]}"
 }
 _dash() { [ "$1" = - ] && echo "" || echo "$1"; }
 
@@ -1320,8 +1376,13 @@ phase_subset_stock_data() {
   [ "$DRY_RUN" -eq 1 ] || [ -f tools/subset_raw.py ] || die "tools/subset_raw.py (task T0.2) is missing"
   local rows s fid origin url raw unpack member fmt ids col taxon keep work kind sdir sname ktypes xdb
   rows=$(_stock_files)
-  run python3 tools/subset_raw.py idsets --genes "$GENE_PANEL" --out "$STOCK_DIR/idsets" --items-root out \
-    --lookup-dir "$LOOKUP_DIR" --taxon "$TAXON"
+  if [ "$SCOPE" = full ]; then
+    # --scope full: no panel, so no id sets; every stock file is unpacked or used as it is [im-9n4.26]
+    log "scope full: no id sets and no panel cut; the stock files are used whole"
+  else
+    run python3 tools/subset_raw.py idsets --genes "$GENE_PANEL" --out "$STOCK_DIR/idsets" --items-root out \
+      --lookup-dir "$LOOKUP_DIR" --taxon "$TAXON"
+  fi
   # The ID-resolver gate (plan 50 2.2 mechanism 1): the filtered NCBI gene_info as
   # ${resolver.file.rootpath}/entrez, so psi, biogrid, panther, omim and the HumanMine expression
   # loaders drop what the resolver does not know. Under D-1 the mine holds ALL human genes as
@@ -1336,6 +1397,13 @@ phase_subset_stock_data() {
   rrows=$(python3 -m rdfc2im stock resolver $STOCK_SOURCES --taxon "$TAXON") || die "rdfc2im stock resolver failed"
   while IFS=$'\t' read -r -u 4 rt rurl _; do
     local rargs=(--format gene_info --in "$STOCK_RAW_CACHE/$(_resolver_group "$rt")/data/$(basename "$rurl")" --taxon "$rt")
+    if [ "$SCOPE" = full ]; then
+      # NCBI's per-organism files hold one taxon each: decompressed whole, the --taxon one first [im-9n4.26]
+      local into='>>'; [ "$first" -eq 0 ] || into='>'
+      first=0
+      run bash -c "gzip -dc '${rargs[3]}' $into '$RESOLVER_ROOT/entrez'"
+      continue
+    fi
     if [ "$first" -eq 1 ]; then
       first=0
       rargs+=(--out "$RESOLVER_ROOT/entrez")
@@ -1359,10 +1427,17 @@ phase_subset_stock_data() {
     more=$(python3 -m rdfc2im stock meta "$src" --record) || die "rdfc2im stock meta $src failed"
     # shellcheck disable=SC2206  # --meta k=v words without whitespace
     local need=(--meta "genes_md5=$genes_md5" --meta "taxon=$TAXON" $spec)
-    case "$src" in   # these two are cut to panther's partner genes: a new PANTHER release changes the cut
+    # --scope full: the one cut left (ncbi-fasta's chromosomes) is no panel's; its group says scope=full [im-9n4.26]
+    # shellcheck disable=SC2206
+    [ "$SCOPE" != full ] || need=(--meta scope=full --meta "taxon=$TAXON" $spec)
+    [ "$SCOPE" = full ] || case "$src" in   # these two are cut to panther's partner genes: a new PANTHER release changes the cut
       mgi-identifiers) need+=(--meta "partners_md5=$(md5sum "$STOCK_DIR/idsets/mgi.txt" 2>/dev/null | cut -d' ' -f1 || true)") ;;
       rgd-identifiers) need+=(--meta "partners_md5=$(md5sum "$STOCK_DIR/idsets/rgd.txt" 2>/dev/null | cut -d' ' -f1 || true)") ;;
     esac
+    # a source with no filtered file has no filtered group, so its derived file (ncbi-gff's chromosome
+    # lengths, read from the whole GFF under --scope full) is made on every build, never restored
+    local has_filtered=0
+    awk -F'\t' -v s="$src" '$1 == s && $14 == "filtered" { f = 1 } END { exit !f }' <<< "$rows" && has_filtered=1
     # --use-cached-data restores the filtered group - unless none matches this panel (a new
     # genes_md5 after a panel change, or a first run) while the raw group is cached: filtering needs
     # no network, so the files are cut from the raw group and saved, as without the option [im-9n4.6]
@@ -1380,14 +1455,14 @@ phase_subset_stock_data() {
       case "$kind" in
         filtered) filtered=1
                   [ "$restore" -eq 1 ] && continue ;;
-        derived) [ "$restore" -eq 1 ] && continue ;;   # in the filtered group; made after the file it reads
+        derived) [ "$restore" -eq 1 ] && [ "$has_filtered" -eq 1 ] && continue ;;   # in the filtered group; made after the file it reads
         asis) continue ;;
       esac
       _stock_produce "$src" "$fid" "$raw" "$(_dash "$unpack")" "$(_dash "$member")" "$(_dash "$fmt")" "$(_dash "$ids")" \
         "$(_dash "$col")" "$(_dash "$taxon")" "$keep" "$work" "$kind" "$(_dash "$sname")" "$(_dash "$ktypes")" "$(_dash "$xdb")"
       # phenotype.hpoa is disease-keyed: cut to the diseases of the genes_to_phenotype.txt just filtered (listed
       # before it in the table), as mgi-identifiers is cut to panther's partners [im-9n4.15]
-      if [ "$src" = hpo-annotation ] && [ "$fid" = genes-to-phenotype ]; then
+      if [ "$SCOPE" != full ] && [ "$src" = hpo-annotation ] && [ "$fid" = genes-to-phenotype ]; then
         run python3 tools/subset_raw.py disease-ids --in "$work/$sname" --out "$STOCK_DIR/idsets"
       fi
     done 3<<< "$rows"

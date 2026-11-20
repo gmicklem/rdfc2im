@@ -232,6 +232,9 @@ def _add_stock_parser(sub):
         if name == "files":
             c.add_argument("--stock-dir", required=True, help="full-build.sh's STOCK_DIR")
             c.add_argument("--raw-cache", required=True, help="cache dir of the raw download groups")
+            c.add_argument("--scope", choices=("panel", "full"), default="panel",
+                           help="full: no panel cut, every file filtered on a panel id set is used whole "
+                                "(full-build.sh --scope full)")
     c = ss.add_parser("meta", parents=[common])
     c.add_argument("name")
     g = c.add_mutually_exclusive_group()
@@ -283,7 +286,7 @@ def run_stock(a, ws) -> int:
         if a.stock_cmd == "jars":
             rows = stock.jar_rows(table, names, a.im_version)
         elif a.stock_cmd == "files":
-            rows = stock.file_rows(table, names, a.stock_dir, a.raw_cache, a.local)
+            rows = stock.file_rows(table, names, a.stock_dir, a.raw_cache, a.local, full=a.scope == "full")
         elif a.stock_cmd == "resolver":
             rows = stock.resolver_rows(table, names, a.taxon.split(",")[0])
         elif a.stock_cmd == "postprocess":

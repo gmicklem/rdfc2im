@@ -509,8 +509,14 @@ def lengths_sources(table: Dict[str, dict], names: List[str]) -> List[Tuple[str,
     return out
 
 
+# The id sets subset_stock_data derives from the gene panel (subset_raw.py idsets, partner-ids, disease-ids). A
+# filter on one of them is a panel cut; `chromosomes` (the GRCh38 assembly's 24 RefSeq chromosomes, which cut the
+# genome FASTA to what the ncbi-gff loader maps) is not, and stays in a full-scope build [im-9n4.26].
+PANEL_ID_SETS = frozenset({"entrez", "ensembl", "uniprot", "symbol", "mgi", "rgd", "hpo-diseases"})
+
+
 def file_rows(table: Dict[str, dict], names: List[str], stock_dir: str, raw_cache: str,
-              local_dir: Optional[str] = None) -> List[str]:
+              local_dir: Optional[str] = None, full: bool = False) -> List[str]:
     """One row per upstream file, 18 fields:
 
       source, file id, origin (download|local|derived), url, raw path, unpack, member,
@@ -525,7 +531,10 @@ def file_rows(table: Dict[str, dict], names: List[str], stock_dir: str, raw_cach
     never cached twice); `asis` files are staged straight from the raw path. A `chromosome_lengths`
     entry adds a last `derived` row for the source: its raw path is the filtered GFF it reads, its
     format chromosome-lengths, and its work dir sits in the filtered group, so it is cached and
-    restored with it [im-9n4.9]."""
+    restored with it [im-9n4.9].
+
+    full (full-build.sh --scope full): no panel cut - a file filtered on a PANEL_ID_SETS id set is used whole
+    instead (unpacked or decompressed, else staged as it is), as HumanMine's own build reads it [im-9n4.26]."""
     rows = []
     for n in names:
         e = table[n]
@@ -535,6 +544,8 @@ def file_rows(table: Dict[str, dict], names: List[str], stock_dir: str, raw_cach
             origin = "local" if lp else "download"
             raw = lp or os.path.join(raw_cache, f"stock-raw-{n}", "data", raw_name(f))
             flt = f.get("filter", "none")
+            if full and isinstance(flt, dict) and flt.get("ids") in PANEL_ID_SETS:
+                flt = "none"
             packed = bool(f.get("unpack")) or raw.endswith(".gz")
             if flt != "none":
                 kind, work = "filtered", os.path.join(stock_dir, "subset", n, f["id"])

@@ -958,6 +958,82 @@ The cache groups of the two sources are saved as `scope=full` (no `genes_md5`), 
 refuse a panel build: they live in a cache of their own (`--cache-dir`, here `repos/rdfc2im/cached_raw_data.allgenes-
 2026-11-18`, a verified copy of the panel cache with the two groups replaced).
 
+#### Full scope: `--scope full` (the plan's `--genes all`) [im-9n4.26, T3.2]
+
+`--gene-identifiers all` gives every gene its identifiers and keeps the deep annotation on the panel. `--scope full`
+takes the panel out of the build altogether: the HumanMine-sized build, for the DBCLS server (milestone 3). One
+option switches off everything that is keyed on the panel; `--genes all` is the same option under the plan's name
+(`--scope` because the cache meta, `SCOPE_MODE` and `--resolver-scope` already speak of scope, and because `--genes`
+otherwise takes a file).
+
+```sh
+tools/full-build.sh --scope full --intermine-src DIR --stack-name NAME --stock-sources "uniprot uniprot-fasta ..." \
+  --sources "go ncbigene reactome hgnc uniprot clinvar gwascatalog pubmed hpo" --cache-dir /big/disk/cached_raw_data.full
+```
+
+| Keyed on the panel in a panel or `--gene-identifiers all` build | `--scope full` |
+|---|---|
+| `SCOPE_MODE` panel: ensembl, uniprot, clinvar, gwascatalog (and ncbigene, hgnc without `all`) get `--genes @panel` | every one `full`: `translate`/`fetch --taxon 9606` only; `--gene-identifiers all` follows |
+| per-source limits | none: every `fetch` is `--limit 0` (as before; `translate`'s LIMIT is a preview default the fetch overrides) |
+| the gene-id lookups (`translate --genes` resolves symbols; group `gene-id-lookup`) | not made, not restored, not saved |
+| the pubmed scope: the PMIDs of the panel's items (with `all`, of the panel genes' cut of hgnc) | the PMIDs of the whole items (still the cited set: an unscoped PubMed would be all of its some 37 million records) |
+| `subset_raw.py idsets`, `partner-ids`, `disease-ids` | not run: there is no panel to derive ids from |
+| every stock file filtered on a panel id set (UniProt XML, varsplic FASTA, GAF, GFF, IntAct and BioGRID PSI-MI, PANTHER, MGI, RGD, HPA, GTEx, Expression Atlas, HPO) | used whole: unpacked or decompressed into `$RDFC2IM_STOCK_DIR/whole/`, or staged from the raw group as it is (`rdfc2im stock files --scope full`, `stock.PANEL_ID_SETS`) |
+| the resolver's gene_info files cut by `subset_raw.py filter` | decompressed whole (NCBI's per-organism files hold one taxon each); `--resolver-scope panel` is refused |
+| cache meta `scope=<mode>` and `genes_md5` | `scope=full` in every RDF group (pubmed keeps `pmids_md5`), no `genes_md5`; the one stock cut left (ncbi-fasta's 24 chromosomes) records `scope=full` too |
+| `reduce_mine.py` trims project.xml, priorities, web config and object-store summary to the sources loaded | the same call; with every source of project.xml loaded it says "nothing to trim" and leaves each file byte for byte |
+| `MINE_TITLE` "114 gene food/drug-metabolism panel" | "every gene of taxon 9606 (full scope)", unless `MINE_TITLE` is set |
+
+`--genes FILE`, `--gene-identifiers panel` and `--resolver-scope panel` are refused with `--scope full` (exit 2), and
+the gene panel file need not exist. A full build cannot use a panel cache, nor a panel build a full one: every group a
+full build restores must say `scope=full`, and a panel build asks for `scope=panel`, `none` or `pmid`, so both refuse the
+other's groups (`rdfc2im cache restore`: "cached data was fetched for scope='none', but this build needs scope='full' -
+refusing to use it"). The one sharing that remains is right: ncbigene and hgnc of a `--gene-identifiers all` cache say
+`scope=full` and are the same fetch. The stock raw groups (`stock-raw-*`, keyed to URL and Last-Modified) and the
+groups that are the same whatever the scope (`humanmine-model`, `reactome-uniprot-map`, `bluegenes-tools`) are shared.
+Give a full build a cache directory of its own.
+
+Checked by dry run only (no full build can run in the sandbox): `tests/test_full_build_scope.py`, and the whole phase
+list with the ut demo's arguments and stock list (`repos/.sandbox-disk/scratch/im-9n4.26/dryruns.sh`): no
+`subset_raw.py filter`, `idsets`, `panel-items`, `partner-ids`, `disease-ids`, `--genes` or `genes_md5` anywhere; the
+panel, stock-panel and stock-all (`--gene-identifiers all`) dry runs are byte-identical before and after the change, once
+time stamps and the per-phase seconds are taken out.
+
+**Not settled before a full build:**
+
+* **ensembl.** With `--scope full` it is fetched for every human gene, and the note above ("ensembl=full is not cheap")
+  holds: 845 labels shared by several of RDF Portal's 53,636 human Ensembl genes, merged on symbol and Ensembl id. Leave it
+  out of `--sources` (as the command above does) until it has its own `key_ambiguity` and a rule against NCBI/HGNC's
+  Ensembl ids; ncbigene and hgnc already give 45,051 genes an Ensembl id.
+* **The stock list.** `--scope full` does not choose the stock sources; HumanMine's project.xml lists 46 sources, the
+  stock table 20 (`rdfc2im stock list`). With fewer than all of them `reduce_mine.py` still trims the rest, as now.
+* **Proteins without an organism** (im-9n4.46 follow-up): go-annotation's evidence "with" proteins outrank hgnc's
+  organism on `Protein.organism`; with the whole of UniProt Swiss-Prot loaded the human ones get theirs from stock
+  uniprot, but TrEMBL accessions and other organisms' stay stubs.
+
+**Sizes, estimated** (nothing here was fetched at full scope; the figures are scaled from this repository's caches and
+the stock table's downloads, as each line says):
+
+| Source | Panel / all-genes figure (measured) | Full scope (estimate, and from what) |
+|---|---|---|
+| ncbigene, hgnc | 45 MB / 15 MB raw, 466,399 / 778,913 rows, 28 min (the all-genes fetch) | the same: already full with `all` |
+| go, hpo, reactome | 47 MB, 19 MB, 15 MB raw | the same: never panel-scoped |
+| uniprot (RDF) | 1,547 entries, 14.4 MB raw | about 2 GB: 210,709 human entries (20,431 Swiss-Prot + 190,278 TrEMBL, sources.yaml) at the panel's bytes per entry; less in practice, TrEMBL entries cite and cross-reference less |
+| ensembl (RDF) | 113 genes, 0.44 MB | about 0.2 GB: 53,636 genes at the panel's bytes per gene (but see above) |
+| clinvar (RDF) | 114 genes, 61,900 records, 43 MB | about 2 GB: ClinVar's published size, some 3 million records (not counted here), at the panel's bytes per record; scaling by genes (x560) would overstate it, the panel genes are among the best studied |
+| gwascatalog | 112 genes, 39,332 rows, 15.5 MB | about 0.4 GB: the GWAS Catalog's published size, about a million associations (not counted here), at the panel's bytes per row |
+| pubmed | 6,758 papers, 14.5 MB, 21 requests | 100,000-250,000 papers (hgnc alone cites 23,555 for every gene; Swiss-Prot human and the GWAS Catalog add theirs), 0.2-0.5 GB, 300-750 requests of 1,000 PMIDs |
+| stock downloads | 1.83 GB (the ut demo's 18 stock sources, `rdfc2im stock size`) | the same: the downloads are whole already |
+| stock files unpacked | the panel cuts, a few hundred MB | about 29 GB: IntAct human.zip 20.0 GB in 344 members, BioGRID's Homo sapiens member 5.8 GB, the GFF 1.6 GB, Swiss-Prot human XML 1.1 GB, GAF 0.18 GB, the rest under 0.5 GB (sizes read from the raw groups, 20 Nov 2026) |
+| mine | 1.12 M objects, Postgres 2.2 GB (all genes, ut demo) | of the order of HumanMine's own production database; not measured here |
+
+**What the server needs** (from the above and the sandbox builds): disk for the raw groups (2 GB stock, 5-6 GB RDF), the
+unpacked stock files (about 29 GB, under `RDFC2IM_STOCK_DIR`, never a small root disk), `out/` (the items XML, several
+times the RDF raw size) and Postgres and Solr (`RDFC2IM_PGDATA`, `RDFC2IM_SOLRDATA` on the big disk); a Gradle heap well
+above the 4 GB default for integrate (the all-genes build already needed a fresh JVM per source, which `--scope full`
+keeps: `--no-daemon`), and for the IntAct and BioGRID loaders, which read 20 GB and 5.8 GB of PSI-MI XML; network to RDF
+Portal for some hours (the all-genes ncbigene and hgnc fetches alone took 28 min at 1 s between pages).
+
 ### The ID-resolver gate [im-9n4.4]
 
 The stock loaders for psi, biogrid, panther, omim and the HumanMine expression sources have no gene filter of their
