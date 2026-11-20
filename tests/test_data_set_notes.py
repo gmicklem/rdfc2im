@@ -122,6 +122,18 @@ def test_the_panel_cut_is_said_where_the_build_applied_it(tmp_path):
     assert n["whole data set"] == ["Whole note."], "a file used whole: only its own note"
 
 
+def test_a_data_set_no_file_of_the_build_feeds_gets_no_panel_note(tmp_path):
+    """gtex's eQTL data set: `data_set_files` names no file of this build, so nothing was cut for it."""
+    t = _tree(tmp_path)
+    p = os.path.join(t["mappings_dir"], "cutsrc.yaml")
+    mp = yaml.safe_load(open(p, encoding="utf-8"))
+    mp["data_sets"] = ["cutsrc data set", "cutsrc empty"]
+    mp["data_set_files"] = {"cutsrc empty": []}
+    _w(p, yaml.safe_dump(mp))
+    n = sp.data_set_notes(["cutsrc"], [], panel_genes=114, **t)
+    assert "cutsrc empty" not in n and "one of the 114 genes" in n["cutsrc data set"][0]
+
+
 def test_no_panel_no_panel_note(tmp_path):
     n = _notes(tmp_path, panel_genes=None)
     assert n["Toy (RDF Portal)"] == [NOTE, "2 of 4 Toy genes in this build's scope were not loaded for that reason."]
