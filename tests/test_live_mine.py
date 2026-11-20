@@ -1433,3 +1433,127 @@ def test_the_legacy_humanmine_lists_that_resolve_are_public_with_their_own_names
     snp = by.get("PL_T2DcandSNPs_Voight2010")
     assert snp is None or "of the 29 members of the original HumanMine list" in snp["description"] or snp["size"] == 29
 
+
+# ----------------------------------------------------------------- milestone 3 sources [im-9n4.27]
+def _data_set_loaded(name: str) -> bool:
+    try:
+        return bool(query_rows("DataSet.name", "DataSet.name", "=", name))
+    except Exception:
+        return False
+
+
+def _m3_skip(data_set: str, source: str):
+    if not mine_up():
+        return _skip(f"live checks off or no mine at {MINE_BASE} (make test-live)")
+    if not _data_set_loaded(data_set):
+        return _skip(f"mine built without --stock-sources {source}")
+    return None
+
+
+def test_pax6_has_protein_domain_regions_named_by_interpro():
+    """protein2ipr (cut to the panel's accessions while it downloads) gives the domain regions, interpro.xml the
+    domains' names. PAX6 is the mine-tests gene; its paired and homeobox domains are the ones to find."""
+    if (s := _m3_skip("InterPro data set", "protein2ipr interpro")) is not None:
+        return s
+    rows = query_rows_q(
+        '<query model="genomic" view="Gene.symbol Gene.proteins.primaryAccession '
+        'Gene.proteins.proteinDomainRegions.proteinDomain.primaryIdentifier '
+        'Gene.proteins.proteinDomainRegions.proteinDomain.name Gene.proteins.proteinDomainRegions.database '
+        'Gene.proteins.proteinDomainRegions.start Gene.proteins.proteinDomainRegions.end">'
+        '<constraint path="Gene.primaryIdentifier" op="=" value="5080"/></query>')
+    assert len(rows) >= 5, rows
+    names = {r[3] for r in rows if r[3]}
+    assert any("omeobox" in n for n in names) and any("aired" in n for n in names), names
+    assert all(r[2].startswith("IPR") and int(r[5]) <= int(r[6]) for r in rows if r[2]), rows[:3]
+    assert {"Pfam", "PROSITE"} & {r[4] for r in rows}, rows[:5]
+
+
+def test_every_domain_a_panel_protein_has_is_an_interpro_entry_with_a_name():
+    """interpro.xml is cut to the entries of the loaded matches: none may be left a bare stub the protein2ipr
+    loader made, and no signature the converter throws on (NCBIFAM NF...) may have got in."""
+    if (s := _m3_skip("InterPro data set", "protein2ipr interpro")) is not None:
+        return s
+    rows = query_rows_q('<query model="genomic" view="ProteinDomain.primaryIdentifier ProteinDomain.name">'
+                        '<constraint path="ProteinDomain.proteinDomainRegions.protein.primaryAccession" op="IS NOT NULL"/>'
+                        '</query>')
+    assert rows, "no ProteinDomain with a domain region"
+    nameless = sorted({r[0] for r in rows if not r[1]})
+    assert len(nameless) <= 0.02 * len({r[0] for r in rows}), nameless[:10]
+    ids = query_rows("ProteinDomainRegion.identifier", "ProteinDomainRegion.identifier", "CONTAINS", "NF0")
+    assert ids == [], ids[:3]
+
+
+def test_the_mouse_orthologue_of_pax6_has_its_mgi_alleles_and_genotypes():
+    """mgi-alleles, cut to the mouse genes on the panel's PANTHER rows: Pax6 (MGI:97490) has 61 alleles in the
+    report file of 16 Nov 2026. The phenotype terms are Mammalian Phenotype ids (the file's Ensembl id column,
+    which the converter reads as them, is taken out)."""
+    if (s := _m3_skip("mgi-alleles", "mgi-alleles")) is not None:
+        return s
+    rows = query_rows("Gene.alleles.symbol Gene.alleles.primaryIdentifier", "Gene.primaryIdentifier", "=", "MGI:97490")
+    assert len(rows) >= 50 and all(r[1].startswith("MGI:") for r in rows), len(rows)
+    via_human = query_rows("Gene.homologues.homologue.alleles.symbol", "Gene.primaryIdentifier", "=", "5080")
+    assert len(via_human) >= 50, len(via_human)
+    terms = query_rows("Allele.highLevelPhenotypeTerms.identifier", "Allele.gene.primaryIdentifier", "=", "MGI:97490")
+    assert terms and all(t[0].startswith("MP:") for t in terms), terms[:5]
+    gts = query_rows("Allele.genotypes.name", "Allele.gene.primaryIdentifier", "=", "MGI:97490")
+    assert gts, "no genotype of a Pax6 allele"
+    bad = query_rows("MammalianPhenotypeTerm.identifier", "MammalianPhenotypeTerm.identifier", "CONTAINS", "ENSMUSG")
+    assert bad == [], bad[:3]
+
+
+def test_panel_genes_cite_their_gene2pubmed_papers():
+    """pubmed-gene, cut to the panel's Entrez ids: PAX6 has 1,132 gene2pubmed rows (19 Nov 2026), CYP2D6 1,096."""
+    if (s := _m3_skip("PubMed to gene mapping", "pubmed-gene")) is not None:
+        return s
+    for gid, floor in (("5080", 900), (EXAMPLE_GENE_ID, 900)):
+        rows = query_rows("Gene.publications.pubMedId", "Gene.primaryIdentifier", "=", gid)
+        assert len({r[0] for r in rows}) >= floor, (gid, len(rows))
+
+
+def test_data_sources_carry_urls_and_descriptions_after_humanmine_static_and_update_data_sources():
+    """humanmine-static (HumanMine's own datasets.xml) gives DataSource HumanMine its url and description;
+    update-data-sources fills the url and description of every DataSource that is a UniProt database abbreviation
+    (InterPro, IntAct, PANTHER, ...), ahead of the RDF Portal page the RDF sources wrote for the same name."""
+    if not mine_up():
+        return _skip(f"live checks off or no mine at {MINE_BASE} (make test-live)")
+    rows = query_rows("DataSource.name DataSource.url DataSource.description", "DataSource.name", "=", "HumanMine")
+    if not rows:
+        return _skip("mine built without --stock-sources humanmine-static")
+    assert rows[0][1] == "http://www.humanmine.org" and "Homo sapiens" in rows[0][2], rows
+    ds = query_rows("DataSource.name DataSource.url DataSource.description", "DataSource.name", "=", "InterPro")
+    if not ds or not ds[0][1]:
+        return _skip("mine built without --stock-sources update-data-sources")
+    assert ds[0][1] == "https://www.ebi.ac.uk/interpro/" and ds[0][2], ds
+    allds = query_rows("DataSource.name DataSource.url", "DataSource.name", "CONTAINS", "")
+    with_url = [r for r in allds if r[1]]
+    assert len(with_url) >= 100, (len(with_url), len(allds))
+
+
+def test_publications_cited_by_genes_have_titles_after_update_publications():
+    """update-publications asks E-utilities for the pubMedId of every Publication in the mine and gives each its
+    title. Needs eutils.ncbi.nlm.nih.gov reachable from the build (it was blocked on 20 Nov 2026), so a mine
+    whose gene2pubmed papers have no titles at all is taken to be built without it."""
+    if not mine_up():
+        return _skip(f"live checks off or no mine at {MINE_BASE} (make test-live)")
+    if not _data_set_loaded("PubMed to gene mapping"):
+        return _skip("mine built without --stock-sources pubmed-gene")
+    rows = query_rows("Gene.publications.pubMedId Gene.publications.title", "Gene.primaryIdentifier", "=", "5080")
+    titled = [r for r in rows if r[1]]
+    if len(titled) < 0.5 * len(rows):
+        return _skip("mine built without --stock-sources update-publications (E-utilities not reachable)")
+    assert len(titled) >= 0.99 * len(rows), [r[0] for r in rows if not r[1]][:10]
+
+
+def test_every_organism_has_its_names_after_entrez_organism():
+    """entrez-organism reads the taxon id of every Organism and asks E-utilities for its names (Organism.genus
+    was filled for one of the seven before it)."""
+    if not mine_up():
+        return _skip(f"live checks off or no mine at {MINE_BASE} (make test-live)")
+    rows = query_rows("Organism.taxonId Organism.name Organism.genus Organism.species Organism.shortName",
+                      "Organism.taxonId", "CONTAINS", "")
+    assert rows, "no Organism"
+    if sum(1 for r in rows if r[2]) <= 1:
+        return _skip("mine built without --stock-sources entrez-organism (E-utilities not reachable)")
+    assert all(r[1] and r[2] and r[3] for r in rows), rows
+    human = next(r for r in rows if r[0] == "9606")
+    assert human[1:4] == ["Homo sapiens", "Homo", "sapiens"], human
