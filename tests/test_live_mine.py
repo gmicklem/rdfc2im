@@ -1661,6 +1661,33 @@ def test_every_data_set_has_a_version_from_this_build():
     assert len(fetched) >= 0.8 * len(rows), sorted(f"{r[0]}: {r[1]}" for r in rows if r not in fetched)
 
 
+def test_the_all_data_sources_template_is_public_in_metadata_and_lists_every_data_set():
+    """The public template "All data sources" (curation/metadata_templates.sql, phase apply_templates) [im-9n4.60,
+    Gos 20 Nov 2026]: tagged im:aspect:Metadata, so BlueGenes' Templates page has a Metadata category; run with its
+    default (DataSet.name = *) it gives one row per DataSet, sorted by data source then data set, each with a
+    version but DATA_SETS_WITHOUT_VERSION."""
+    if not mine_up():
+        return _skip(f"live checks off or no mine at {MINE_BASE} (make test-live)")
+    templates = _get_json(f"{MINE_BASE}/service/templates?format=json")["templates"]
+    assert "All_data_sources" in templates, "no public template All_data_sources (was apply_templates run?)"
+    tpl = templates["All_data_sources"]
+    assert tpl["title"] == "All data sources"
+    assert "im:aspect:Metadata" in tpl.get("tags", []), tpl.get("tags")
+    url = (f"{MINE_BASE}/service/template/results?name=All_data_sources"
+           f"&constraint1=DataSet.name&op1=eq&value1=*&format=json&size=100000")
+    payload = _get_json(url, timeout=TIMEOUT * 4)
+    assert payload.get("wasSuccessful", False), payload.get("error")
+    rows = payload["results"]
+    names = sorted(r[0] for r in query_rows("DataSet.name", "DataSet.name", "IS NOT NULL", ""))
+    assert sorted(r[1] for r in rows) == names, "not one row per DataSet (a DataSet without a DataSource is left out)"
+    # sorted by data source (the database's collation decides the order): each source's data sets are together
+    sources = [r[0] for r in rows]
+    runs = [s for i, s in enumerate(sources) if i == 0 or s != sources[i - 1]]
+    assert len(runs) == len(set(runs)), f"rows not grouped by data source: {runs}"
+    missing = sorted(r[1] for r in rows if not r[2] and r[1] not in DATA_SETS_WITHOUT_VERSION)
+    assert not missing, f"data sets without a version: {missing}"
+
+
 def test_every_data_set_whose_source_asks_to_be_cited_links_to_that_paper_with_a_title():
     """[im-9n4.56] Gos Micklem, 20 Nov 2026: data sets link to their reference publication. The curated citation_pmid
     of the stock mapping files and sources.yaml (each read at the source's own citation page) is written by

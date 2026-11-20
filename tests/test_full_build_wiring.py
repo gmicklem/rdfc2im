@@ -44,6 +44,22 @@ def test_start_mine_stack_starts_the_front_only_with_with_front(tmp_path):
     assert any(" up -d mine bluegenes" in c for c in cmds[:restart]) and restart < up, cmds
 
 
+def test_apply_templates_loads_the_metadata_templates_before_the_restart(tmp_path):
+    """curation/metadata_templates.sql ("All data sources", category Metadata) on every build [im-9n4.60], into the
+    same userprofile database as demo_public_templates.sql, before the restart that makes the webapp read them."""
+    plan = _plan(tmp_path, "--only", "apply_templates")
+    if plan is None:
+        return
+    cmds = _cmds(plan, "apply_templates")
+    demo = next(i for i, c in enumerate(cmds) if "curation/demo_public_templates.sql" in c)
+    meta = next(i for i, c in enumerate(cmds) if "curation/metadata_templates.sql" in c)
+    restart = next(i for i, c in enumerate(cmds) if c.startswith("docker restart"))
+    assert demo < meta < restart, cmds
+    assert "psql -U intermine -d humanmine-userprofile < curation/metadata_templates.sql" in cmds[meta]
+    skipped = _cmds(_plan(tmp_path, "--only", "apply_templates", "--skip-templates"), "apply_templates")
+    assert not any("metadata_templates.sql" in c for c in skipped), skipped
+
+
 def test_the_properties_comment_with_backticks_is_written_intact(tmp_path):
     """The heredoc was unquoted, so backticks in a comment ran as commands ("syntax error near
     `webapp.hostname`") on every run and the words in them vanished from the file."""
