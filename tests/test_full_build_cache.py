@@ -425,10 +425,26 @@ def test_gene_identifiers_all_fetches_ncbigene_and_hgnc_unscoped_and_keeps_pubme
         assert "--genes @" in next(c for c in pc if f"rdfc2im translate --source {src}" in c)
     assert "--genes @" in next(c for c in fc if "rdfc2im translate --source ensembl" in c)
     cut = next(i for i, c in enumerate(fc) if "subset_raw.py panel-items" in c and "out/hgnc/items/hgnc.xml" in c)
-    grep = next(i for i, c in enumerate(fc) if "cited_pmids.txt" in c and "grep" in c)
-    assert cut < grep and "hgnc-panel-items.xml" in fc[grep] and "out/{hgnc," not in fc[grep], fc[grep]
+    cite = next(i for i, c in enumerate(fc) if "subset_raw.py cited-pmids" in c)
+    assert cut < cite and "hgnc-panel-items.xml" in fc[cite] and "out/hgnc/" not in fc[cite], fc[cite]
     assert not any("panel-items" in c for c in pc)
-    assert "out/{hgnc,uniprot,gwascatalog,reactome}" in next(c for c in pc if "cited_pmids.txt" in c and "grep" in c)
+    pcite = next(c for c in pc if "subset_raw.py cited-pmids" in c)
+    for src in ("hgnc", "uniprot", "gwascatalog", "reactome"):
+        assert f"out/{src}/items/{src}.xml" in pcite, pcite
+    assert pcite.endswith("cited_pmids.txt"), pcite
+
+
+def test_cited_pmids_come_from_publication_items_not_a_grep_of_numbers(tmp_path):
+    """im-9n4.48: the pubmed scope is written by subset_raw.py cited-pmids (the pubMedId of the
+    Publication items the citing sources link to), never by a grep of every 4-9 digit value."""
+    plan = _plan(tmp_path, "--only", "rdfc2im_pipeline", "--sources", "hgnc uniprot gwascatalog pubmed")
+    if plan is None:
+        return
+    cmds = _cmds(plan)
+    assert not any("grep" in c and "[0-9]{4,9}" in c for c in cmds), [c for c in cmds if "grep" in c]
+    cite = next(i for i, c in enumerate(cmds) if "subset_raw.py cited-pmids" in c)
+    fetch = next(i for i, c in enumerate(cmds) if "rdfc2im fetch --source pubmed" in c)
+    assert cite < fetch
 
 
 def test_gene_identifiers_takes_panel_or_all_only(tmp_path):

@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Fixture for subset_raw.py cited-pmids [im-9n4.48]: numbers of every kind the old 4-9 digit grep
+     took for PMIDs. Only 11237011 (cited by a Protein, the uniprot shape), 22916037 (cited by a GWAS,
+     the gwascatalog shape) and 123 (a real, short PMID) are cited PubMed ids. 7773298 is the pages
+     value of a cited paper and a real PMID (of another paper); 8894702 is the pubMedId of a
+     Publication nothing links to. -->
+<items>
+  <item id="0_1" class="Organism" implements="">
+    <attribute name="taxonId" value="9606"/>
+  </item>
+  <item id="0_2" class="Gene" implements="">
+    <attribute name="primaryIdentifier" value="1066"/>
+    <attribute name="symbol" value="CES1"/>
+    <reference name="organism" ref_id="0_1"/>
+    <collection name="proteins"><reference ref_id="0_3"/></collection>
+  </item>
+  <item id="0_3" class="Protein" implements="">
+    <attribute name="primaryAccession" value="P23141"/>
+    <attribute name="molecularWeight" value="62521"/>
+    <attribute name="length" value="2025"/>
+    <collection name="publications"><reference ref_id="0_4"/><reference ref_id="0_9"/></collection>
+  </item>
+  <item id="0_4" class="Publication" implements="">
+    <attribute name="title" value="Initial sequencing and analysis of the human genome."/>
+    <attribute name="volume" value="409"/>
+    <attribute name="pages" value="7773298"/>
+    <attribute name="pubMedId" value="11237011"/>
+    <collection name="entities"><reference ref_id="0_3"/></collection>
+  </item>
+  <item id="0_5" class="GWAS" implements="">
+    <attribute name="year" value="2012"/>
+    <attribute name="name" value="Study of PMID:18045538 in free text"/>
+    <reference name="publication" ref_id="0_6"/>
+  </item>
+  <item id="0_6" class="Publication" implements="">
+    <attribute name="pubMedId" value="22916037"/>
+  </item>
+  <item id="0_7" class="CrossReference" implements="">
+    <attribute name="identifier" value="70492"/>
+  </item>
+  <item id="0_8" class="Publication" implements="">
+    <attribute name="pubMedId" value="8894702"/>
+  </item>
+  <item id="0_9" class="Publication" implements="">
+    <attribute name="pubMedId" value="123"/>
+  </item>
+  <item id="0_10" class="Publication" implements="">
+    <attribute name="doi" value="10.1000/no-pmid"/>
+    <collection name="entities"><reference ref_id="0_3"/></collection>
+  </item>
+</items>

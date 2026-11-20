@@ -344,6 +344,41 @@ def test_panel_items_keeps_the_panel_genes_and_what_they_reach(tmp_path):
     assert res2["panel_genes"] == 1 and "8195233" in out.read_text()
 
 
+def test_cited_pmids_takes_only_linked_publication_pubmedids(tmp_path):
+    """im-9n4.48: the pubmed source's scope is the pubMedId of every Publication item that some other
+    item of the citing sources links to (or that links to one), and nothing else: not a mass, an
+    Entrez id, a year, a cross-reference id or a page number that happens to be a real PMID, nor a
+    PMID written in free text, nor a Publication no object cites. A short PMID is kept."""
+    out = tmp_path / "cited_pmids.txt"
+    res = subset_raw.cited_pmids([fx("cited_pmids_items.xml")], str(out))
+    assert out.read_text() == "123\n11237011\n22916037\n"
+    assert res == {"files": 1, "publications": 4, "cited": 3, "uncited": 1, "pmids": 3}
+
+
+def test_cited_pmids_cli_joins_files_and_skips_missing_ones(tmp_path):
+    other = tmp_path / "other.xml"
+    other.write_text('<items><item id="0_1" class="GWAS"><reference name="publication" ref_id="0_2"/></item>'
+                     '<item id="0_2" class="Publication"><attribute name="pubMedId" value="11237011"/></item>'
+                     '<item id="0_3" class="GWAS"><reference name="publication" ref_id="0_4"/></item>'
+                     '<item id="0_4" class="Publication"><attribute name="pubMedId" value="19936222"/></item></items>')
+    out = tmp_path / "pmids.txt"
+    p = run_cli("cited-pmids", "--in", fx("cited_pmids_items.xml"), str(other), str(tmp_path / "absent.xml"),
+                "--out", str(out))
+    assert p.returncode == 0, p.stderr
+    assert out.read_text() == "123\n11237011\n19936222\n22916037\n"
+    assert json.loads(p.stdout)["pmids"] == 4 and "absent.xml" in p.stderr
+
+
+def test_cited_pmids_refuses_an_empty_set(tmp_path):
+    """An empty list once made `rdfc2im fetch --pmids` fall through to a fetch of all of PubMed
+    (full-build.sh's comment on grep -a): no PMID at all is an error, and no file is written."""
+    empty = tmp_path / "empty.xml"
+    empty.write_text('<items><item id="0_1" class="Gene"><attribute name="primaryIdentifier" value="1066"/></item></items>')
+    out = tmp_path / "pmids.txt"
+    p = run_cli("cited-pmids", "--in", str(empty), "--out", str(out))
+    assert p.returncode != 0 and "no cited PubMed id" in p.stderr and not out.exists()
+
+
 def test_idsets_without_any_input_fails(tmp_path):
     p = run_cli("idsets", "--genes", fx("panel.txt"), "--out", str(tmp_path / "o"),
                 "--items-root", str(tmp_path / "empty"), "--lookup-dir", str(tmp_path / "none"))

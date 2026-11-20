@@ -1023,6 +1023,61 @@ def test_publications_terms_and_genes_are_not_duplicated_by_the_interaction_load
     assert named and named[0][1] == "two hybrid", named        # the term merged with psi-mi-ontology's
 
 
+# The paper's own details, not citations of it: the reverse ends of Publication.authors, .meshTerms, .crossReferences.
+PUBLICATION_DETAILS = {("Author", "publications"), ("MeshTerm", "publications"), ("DatabaseReference", "subject")}
+
+
+def _publication_citing_paths(classes: dict) -> list:
+    """Every reference or collection of the model that points at Publication and is not one of the paper's own
+    details. The two-way ones (Annotatable.publications and its subclasses, reverse Publication.entities) are
+    one path, Publication.entities; the one-way ones (GOEvidence.publications, GWAS.publication,
+    InteractionExperiment.publication, ...) are read from the citing class."""
+    paths = set()
+    for cname, c in classes.items():
+        for kind in ("references", "collections"):
+            for fname, f in c.get(kind, {}).items():
+                if f.get("referencedType") != "Publication" or (cname, fname) in PUBLICATION_DETAILS:
+                    continue
+                rev = f.get("reverseReference")
+                paths.add(f"Publication.{rev}" if rev else f"{cname}.{fname}")
+    return sorted(paths)
+
+
+def test_every_loaded_publication_is_cited_by_a_loaded_object():
+    """im-9n4.48: the pubmed source loads the papers the other sources cite, and nothing else. Its PMID list was
+    every 4-9 digit attribute value of the citing sources' items (6,890 numbers, 3,930 of them pubMedIds): a mass,
+    an Entrez id, a year or a page number that is also a real PMID loaded an unrelated paper that nothing in the
+    mine refers to (2,828 such Publications on the 19 Nov 2026 ut demo). Every Publication with a title must be
+    reached from some object through a reference or collection other than the paper's own authors, MeSH terms and
+    cross-references.
+
+    A Publication with no title is a bare pubMedId a loader wrote for a reference: those the stock psi-intact
+    and go-annotation loaders write for experiments and annotation rows the panel filter left without a loaded
+    object (84 on the same demo, 80 of them psi-intact bibrefs) are not the pubmed source's; they are held to
+    a bound here and are a question of their own."""
+    if not mine_up():
+        return _skip(f"live checks off or no mine at {MINE_BASE} (make test-live)")
+    classes = _get_json(f"{MINE_BASE}/service/model?format=json")["model"]["classes"]
+    rows = query_rows_q('<query model="genomic" view="Publication.id Publication.pubMedId Publication.title"/>')
+    pubs = {r[0]: r[1] for r in rows}
+    titled = {r[0] for r in rows if r[2]}
+    assert pubs, "no Publication loaded"
+    cited = set()
+    for path in _publication_citing_paths(classes):
+        if path.startswith("Publication."):
+            xml = (f'<query model="genomic" view="Publication.id">'
+                   f'<constraint path="{path}" op="IS NOT NULL"/></query>')
+        else:
+            xml = f'<query model="genomic" view="{path}.id"/>'
+        cited |= {r[0] for r in query_rows_q(xml)}
+    uncited = set(pubs) - cited
+    detailed = sorted(pubs[i] or f"id {i}" for i in uncited & titled)
+    bare = sorted(pubs[i] or f"id {i}" for i in uncited - titled)
+    assert not detailed, (f"{len(detailed)} of {len(titled)} Publications with a title are cited by no object, "
+                          f"e.g. {detailed[:10]}")
+    assert len(bare) <= 150, f"{len(bare)} bare (pubMedId only) Publications are cited by no object, e.g. {bare[:10]}"
+
+
 def test_the_cytoscape_tool_query_runs_for_the_example_gene():
     """The query bundled in bluegenes-cytoscape-interaction-network-viewer (Gene_Interactions plus type = physical):
     it answered 400 while the model had no Gene.interactions."""
