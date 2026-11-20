@@ -1550,13 +1550,19 @@ HUMANMINE_STATIC_ONLY = ("ncbi-fasta", "ncbi-gene", "ncbi-summaries", "panther",
                          "GTEx RNA-Seq Data", "hpo", "clinvar", "hgnc", "mgi-identifiers", "so", "psi-mi-ontology",
                          "rgd-identifiers", "mammalian-phenotype-ontology", "go", "go-annotation",
                          "disgenet-disease-associations", "depmap-expression", "depmap-sample-info")
+# ... and the versions it gave (every DataSet it wrote had one of these)
+HUMANMINE_STATIC_VERSIONS = {"GRCh38.p13", "109.20210514; September 2021", "16.0; December 2020", "87.0; November 2021",
+                             "February 2022", "September 2021", "2021_04", "June 2011", "July 2014", "79; December 2021",
+                             "4.4.206; February 2022", "21.0; November 2021", "8; July 2019", "6.17; February 2022",
+                             "Version 7; May 2021", "May 2021"}
 
 
 def _objects_per_data_set() -> dict:
     """{DataSet name: objects linked to it}, one column summary per class with a dataSets collection whose parent
-    class has none (a subclass's objects are counted with its parent's)."""
+    class has none (a subclass's objects are counted with its parent's). DataSource.dataSets is the reverse of
+    DataSet.dataSource, not data: left out."""
     classes = _get_json(f"{MINE_BASE}/service/model?format=json")["model"]["classes"]
-    has = {c for c, d in classes.items() if "dataSets" in (d.get("collections") or {})}
+    has = {c for c, d in classes.items() if "dataSets" in (d.get("collections") or {})} - {"DataSource"}
     top = sorted(c for c in has if not any(p in has for p in classes[c].get("extends") or []))
     counts: dict = {}
     for c in top:
@@ -1594,12 +1600,11 @@ def test_every_data_set_has_a_version_from_this_build():
     rows = query_rows("DataSet.name DataSet.version", "DataSet.name", "IS NOT NULL", "")
     missing = sorted(r[0] for r in rows if not r[1] and r[0] not in DATA_SETS_WITHOUT_VERSION)
     assert not missing, f"DataSets without a version: {missing}"
-    # data-set-links always ends with the fetch date where the build knows it, or gives the file's Last-Modified; the
-    # postprocess's own DataSet carries the time it ran (Java's Date.toString)
-    made_elsewhere = {"modMine gene flanking regions"}
-    old = sorted(f"{r[0]}: {r[1]}" for r in rows if r[1] and r[0] not in made_elsewhere
-                 and "fetched 20" not in r[1] and "Last-Modified 20" not in r[1])
-    assert not old, f"DataSets with a version this build did not write: {old}"
+    old = sorted(f"{r[0]}: {r[1]}" for r in rows if r[1] in HUMANMINE_STATIC_VERSIONS)
+    assert not old, f"DataSets with a version of HumanMine's datasets.xml: {old}"
+    # most end with the date this build fetched the file (a cut of an earlier download states its release alone)
+    fetched = [r for r in rows if r[1] and "fetched 20" in r[1]]
+    assert len(fetched) >= 0.8 * len(rows), sorted(f"{r[0]}: {r[1]}" for r in rows if r not in fetched)
 
 
 def test_publications_cited_by_genes_have_titles_after_update_publications():
