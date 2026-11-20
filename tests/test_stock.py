@@ -659,3 +659,33 @@ def test_validation_of_stream_drop_columns_and_require():
     ok = _entry(files=[{"id": "x", "url": "https://e/x.gz", "stage_as": "x", "stream": True,
                         "filter": {"format": "tab", "ids": "none", "column": "1", "drop_columns": "10"}}])
     assert stock.validate_table({"ok": ok}) == []
+
+
+# ------------------------------------------------------------------ DataSet.licence from project.xml [im-9n4.45]
+
+LICENCE_PROPERTY = {
+    "go-annotation": ("licence", "https://creativecommons.org/licenses/by/4.0/"),         # GoConverter.setLicence
+    "uniprot-fasta": ("fasta.licence", "https://creativecommons.org/licenses/by/4.0/"),   # FastaLoaderTask.setLicence
+    "ncbi-fasta": ("fasta.licence", "https://www.ncbi.nlm.nih.gov/home/about/policies/"),
+    "ncbi-gff": ("gff3.licence", "https://www.ncbi.nlm.nih.gov/home/about/policies/"),    # GFF3ConverterTask.setLicence
+}
+
+
+def test_the_four_loaders_that_read_a_licence_property_get_the_url_docs_licences_records():
+    t = stock.load_table()
+    for n, (prop, url) in LICENCE_PROPERTY.items():
+        assert t[n]["licence_status"] == "verified", n          # only a licence read at source is stamped
+        assert t[n]["properties"][prop] == url, (n, t[n]["properties"])
+    # and it reaches project.xml's <source> as a property of that name
+    root = etree.fromstring('<sources><source name="ncbi-gff" type="ncbi-gff"/></sources>')
+    assert stock.apply_to_project(root, t, ["ncbi-gff"]) == []
+    props = {p.get("name"): p.get("value") for p in root[0].iter("property")}
+    assert props["gff3.licence"] == LICENCE_PROPERTY["ncbi-gff"][1], props
+
+
+def test_no_other_stock_source_sets_a_licence_property_and_none_sets_an_unverified_one():
+    t = stock.load_table()
+    for n, e in t.items():
+        for k in (e.get("properties") or {}):
+            if k.split(".")[-1] == "licence":
+                assert n in LICENCE_PROPERTY and e["licence_status"] == "verified", (n, k)
