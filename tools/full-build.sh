@@ -294,10 +294,10 @@ declare -A SCOPE_MODE=(
   [hgnc]=panel [ensembl]=panel [uniprot]=panel [clinvar]=panel [gwascatalog]=panel
   [pubmed]=pmid
 )
-# How a panel source's genes were chosen, where it is not by symbol: ensembl's by the cross-reference join
-# (sources.yaml gene_scope_resolver: xref_join, im-9n4.59). Recorded in the cache key (cache_meta_for), so a
+# How a panel source's genes were chosen, where it is not by symbol: ensembl's and gwascatalog's by the cross-reference
+# join (sources.yaml gene_scope_resolver: xref_join, im-9n4.59). Recorded in the cache key (cache_meta_for), so a
 # group fetched for the label-chosen ids is never restored under the new rule.
-declare -A GENE_SELECT=( [ensembl]=xref )
+declare -A GENE_SELECT=( [ensembl]=xref [gwascatalog]=xref )
 
 # In the repository (gitignored), not under $TRIAL_HOME: TRIAL_HOME is usually inside a sandbox's or
 # build machine's private home, and the repository is the one directory a person watching from

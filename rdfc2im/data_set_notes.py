@@ -32,6 +32,19 @@ STOCK_PANEL_CUTS = {"entrez": _GENE_CUT, "ensembl": _GENE_CUT, "uniprot": _GENE_
                     "mgi": _PARTNER_CUT, "rgd": _PARTNER_CUT, "ipr": _IPR_CUT}
 _ORDER = ("entrez", "ensembl", "uniprot", "hpo-diseases", "mgi", "rgd", "ipr")
 RDF_PANEL_CUT = "This build loads this data set only for the {n} genes of its gene panel."
+IPR_AND_MATCHES_CUT = ("This build loads only the InterPro matches of the proteins of the {n} genes of its gene panel and "
+                       "the InterPro entries they name, with the entries related to them; the rest is cut before loading.")
+
+
+def merge_panel_cuts(sentences: List[str], n: int) -> List[str]:
+    """One data set fed by two cut stock files (the InterPro data set: protein2ipr's matches cut to the panel
+    proteins, interpro's entries cut to those the matches name) gets one sentence for both."""
+    gene, ipr = _GENE_CUT.format(n=n), _IPR_CUT.format(n=n)
+    if gene in sentences and ipr in sentences:
+        i = min(sentences.index(gene), sentences.index(ipr))
+        rest = [s for s in sentences if s not in (gene, ipr)]
+        return rest[:i] + [IPR_AND_MATCHES_CUT.format(n=n)] + rest[i:]
+    return sentences
 
 
 def xref_join_counts(path: str) -> Optional[Dict[str, int]]:

@@ -392,7 +392,8 @@ def source_gene_ids(s: str, scfg: dict, genes: list, taxon: str, lookup_dir: str
         return list(genes)
     if scfg.get("gene_scope_resolver") == "xref_join":
         entrez = resolve_gene_ids(resolve_ncbigene_symbols, genes, taxon, lookup_dir)
-        xsources = (scfg.get("xref_join") or {}).get("sources") or []
+        # the join's own sources (ensembl), else the default pair (gwascatalog, which has no join of its own)
+        xsources = (scfg.get("xref_join") or {}).get("sources") or scfg.get("gene_scope_xref_sources") or ["hgnc", "ncbigene"]
         resolver = ensembl_xref_resolver(entrez, out, xsources,
                                          own=lambda e, t: ensembl_ncbigene_xrefs(e, t))
         return resolve_gene_ids(resolver, genes, taxon, lookup_dir)

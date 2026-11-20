@@ -147,6 +147,24 @@ def apply_gene_scope(rows: List[dict], im_field: str, identifiers: List[str]) ->
     return rows, (f"has no query-level Gene.{im_field} row to restrict a gene list against")
 
 
+def widen_organisms(rows: List[dict], iris: List[str]) -> List[dict]:
+    """A copy of `rows` whose query-level Organism.taxonId rows also accept `iris` (VALUES), for a run
+    already restricted to gene ids (sources.yaml `gene_scope_organism_also`) [im-9n4.59]: Ensembl's
+    RDF tags alternative-haplotype genes (GSTT1's ENSG00000277656) with obo:RO_0002162
+    <http://ensembl.org/Homo_sapiens>, not taxonomy:9606, so the human filter dropped a gene the
+    selection asked for by id.  The source's constant Organism.taxonId (9606) still gives the item
+    its organism.  An unscoped fetch is never widened."""
+    if not iris:
+        return rows
+    out = [dict(r) for r in rows]
+    for r in out:
+        if r.get("im_class") == "Organism" and r.get("im_field") == "taxonId" and r.get("kind") != "const" \
+                and r.get("required") == "yes" and r.get("value"):
+            have = r["value"].split()
+            r["value"] = " ".join(have + [i for i in iris if i not in have])
+    return out
+
+
 def apply_full_scope_filter(rows: List[dict], spec: dict) -> Tuple[List[dict], List[str]]:
     """Restrict an UNSCOPED (no gene list) run of a source to the records sources.yaml's
     `full_scope_filter` keeps: {"Class.field": [allowed values, ...]}.

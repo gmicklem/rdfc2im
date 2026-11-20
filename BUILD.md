@@ -1108,18 +1108,30 @@ two is seen to). `xref_ids_for` and `join_on_xref` share `items.xref_pairing`: e
 every gene that would join one is fetched (tested on random data). The answer goes into the lookup cache as
 `resolve_ensembl_xref-<taxon>-<md5>.txt` (a new name: the old label answers are never reused), the cached ensembl group
 of a panel build records `gene_select=xref` (full-build.sh `GENE_SELECT`, `cache_meta_for`), so a group fetched for the
-label-chosen ids is refused, and `subset_raw.py idsets` adds the new answer to the ensembl id set. gwascatalog still
-restricts by `resolve_ensembl_symbols` (its Ensembl ids from labels: a follow-up, it changes the cached gwascatalog group
-fetched from TogoVar).
+label-chosen ids is refused, and `subset_raw.py idsets` adds the new answer to the ensembl id set. **gwascatalog**,
+whose `snp_gene_ids` are Ensembl gene ids, takes the same selection (`gene_scope_resolver: xref_join`,
+`gene_scope_xref_sources: [hgnc, ncbigene]`; the same `resolve_ensembl_xref` answer; `GENE_SELECT[gwascatalog]=xref`).
+Refetched from TogoVar (125 s): 39,333 rows to 38,640; ENSG00000242366 (UGT1A8) 833 rows to 0, ENSG00000241635
+(UGT1A1) 0 to 140.
+
+**Alternative-haplotype genes.** Ensembl's RDF gives every primary-assembly human gene both `obo:RO_0002162
+taxonomy:9606` and `<http://ensembl.org/Homo_sapiens>`, but alternative-haplotype and patch genes only the second.
+sources.yaml `ensembl: gene_scope_organism_also: ["<http://ensembl.org/Homo_sapiens>"]` makes a run restricted to gene
+ids accept either tag (`scope.widen_organisms`, applied right after `apply_gene_scope`); the source's constant
+Organism.taxonId still gives each gene taxon 9606 (one Organism item). An unscoped (`--scope full`) fetch is not widened:
+it would add up to **34,057** human Ensembl genes that carry only Ensembl's tag (one COUNT query on rdfportal.org/ebi,
+20 Nov 2026; the im-9n4.55 extract cannot say, it was fetched with `taxonomy:9606`), before the join leaves out those
+with no NCBI counterpart. On the panel every row now comes twice, once per tag (main 230 to 461 rows); the items are
+unchanged but for GSTT1, which joins (via HGNC): "0 of 114 Ensembl genes not joined".
 
 The panel, old (label) against new (cross-reference), 20 Nov 2026 (`scratch/im-9n4.59/bin/compare_panel_ids.py`): 113
 ids against 114; 112 the same. Out: ENSG00000242366 (UGT1A8, 54576, the label "UGT1A1"). In: ENSG00000241635 (UGT1A1,
 54658, via HGNC) and ENSG00000277656 (GSTT1, 2952, via HGNC). All 114 panel NCBI genes have an Ensembl gene by
 cross-reference (all via HGNC) and all 114 are asked for. GSTT1's ENSG00000277656 lies on an alternative haplotype (GSTT1
 is not on the GRCh38 primary assembly) and Ensembl's RDF gives it `obo:RO_0002162 <http://ensembl.org/Homo_sapiens>`, not
-`taxonomy:9606`, so the source's taxon filter returns no row for it: the extract holds 113 genes, as before, and the
-items step says "0 of 113 Ensembl genes not joined". The refetched group (4 tables, 230 / 289 / 339 / 2,657 rows) and the
-new gene-id-lookup group are in `scratch/im-9n4.59/cached_raw_data.9n459/` beside links to every other group of
+`taxonomy:9606`, so the taxon filter first returned no row for it (113 genes); see "Alternative-haplotype genes" below
+for the fix (114). The refetched groups (ensembl: 4 tables, 461 / 579 / 679 / 5,335 rows; gwascatalog; the new
+gene-id-lookup) are in `scratch/im-9n4.59/cached_raw_data.9n459/` beside links to every other group of
 `cached_raw_data.remaining-2026-11-20` (not written).
 
 **Open decision (Gos): the 12,300 Ensembl genes with no NCBI counterpart.** Left out (now): a user of the mine sees one
@@ -1689,13 +1701,14 @@ its `Notes` row. Per source, in order (`rdfc2im/data_set_notes.py`):
    PubMed.": full-build.sh always fetches it by the cited PMIDs).
 2. `data_set_note_counts`: ensembl's "{not_joined} of {total} Ensembl genes in this build's scope were not loaded for that
    reason.", filled from this build's `out/ensembl/items/ensembl_xref_join.tsv` (left out when the build wrote none; no
-   number is in the file). Panel: "0 of 113"; at full scope it would be the 12,300 of 53,636 above.
+   number is in the file). Panel: "0 of 114"; at full scope it would be the 12,300 of 53,636 above.
 3. The gene-panel cut, on a panel build only (`--genes PANEL` to data-set-links and source_manifest.py; full-build.sh
    passes it unless `--scope full`): an RDF source whose cached extract says `scope=panel` (ensembl, uniprot, clinvar,
    gwascatalog: "This build loads this data set only for the 114 genes of its gene panel."), and a stock source with a
    file cut by panel ids (the table's `filter.ids`: entrez, ensembl, uniprot: "only the records ... that involve one of
    the 114 genes of its gene panel or their proteins"; mgi, rgd: the genes on a PANTHER row with a panel gene; ipr: the
-   InterPro entries of the panel proteins). A file used whole, or one cut to chromosomes, gets none; a data set no file
+   InterPro entries of the panel proteins; the InterPro data set, fed by protein2ipr and interpro, gets one sentence for
+   both, `merge_panel_cuts`). A file used whole, or one cut to chromosomes, gets none; a data set no file
    of the build feeds (`data_set_files`) gets none.
 
 Considered and left out: human only (every source; HumanMine is a human mine and the Organism says so); ncbigene's
@@ -1703,8 +1716,7 @@ Considered and left out: human only (every source; HumanMine is a human mine and
 unscoped fetch); symbols shared by several genes dropped (`key_ambiguity`: a value rule, not a scope one, and its counts
 are not written to a file the notes could read); hgnc yielding to ncbigene where they disagree (`defer_to`: precedence,
 not scope); the psi-intact/biogrid partner rule (an interaction with a panel participant keeps its non-panel partner:
-covered by "involve one of"); GSTT1's Ensembl gene missing for want of `taxonomy:9606` (one gene, a data quirk found
-in this task, not configuration).
+covered by "involve one of").
 
 The template: neither this build's template sets (curation/humanmine_templates.xml, 73; curation/demo_public_templates.sql;
 the mine's default-template-queries.xml, 3) nor public HumanMine's 73 public templates (read 20 Nov 2026) has an "All data

@@ -846,7 +846,7 @@ def data_set_notes(stock_names, rdf_names, mappings_dir=None, sources_yaml=SOURC
         entry = (table or {}).get(n) if n in stock_names else None
         for ds in mp.get("data_sets") or []:
             per.setdefault(ds, []).extend(dsn.stock_notes(mp, entry, panel_genes, _files_of(mp, ds)))
-    return {ds: list(dict.fromkeys(s)) for ds, s in sorted(per.items()) if s}
+    return {ds: dsn.merge_panel_cuts(list(dict.fromkeys(s)), panel_genes) for ds, s in sorted(per.items()) if s}
 
 
 def data_set_links_xml(pages, base_url=None, versions=None, data_sources=None, citations=None, notes=None):

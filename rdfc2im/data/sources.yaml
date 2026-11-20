@@ -314,6 +314,11 @@ gwascatalog:
       basis: java:HugeGwasConverter
       reason: declared in huge-gwas_additions.xml, never created by the converter
   gene_scope_field: secondaryIdentifier
+  # [im-9n4.59] its snp_gene_ids are Ensembl gene ids: a panel build restricts by the ensembl
+  # selection (the cross-reference join's genes for the panel's NCBI genes, from hgnc and ncbigene's
+  # items and Ensembl's own xrefs; the same lookup answer), never by label
+  gene_scope_resolver: xref_join
+  gene_scope_xref_sources: [hgnc, ncbigene]
   scope: good
 clinvar:
   replaces: [clinvar]
@@ -414,6 +419,10 @@ ensembl:
   # cli.source_gene_ids, scope.ensembl_xref_resolver), not the first gene labelled with the panel
   # symbol: that was ENSG00000242366 (UGT1A8) for UGT1A1, whose own gene is ENSG00000241635.
   gene_scope_resolver: xref_join
+  # Ensembl's RDF tags alternative-haplotype genes (GSTT1's ENSG00000277656) with this organism, not
+  # taxonomy:9606: a run restricted to gene ids accepts it too (scope.widen_organisms); the constant
+  # below still gives the gene taxon 9606. An unscoped fetch is not widened [im-9n4.59].
+  gene_scope_organism_also: ["<http://ensembl.org/Homo_sapiens>"]
   # Shown with the data set (DataSet.description after the status-page sentence, and the Notes row
   # of its status page); the numbers come from this build's join report [im-9n4.59].
   data_set_note: "Ensembl genes are loaded only where HGNC, NCBI or Ensembl gives a one-to-one cross-reference to an NCBI gene in this mine; the others are left out."
