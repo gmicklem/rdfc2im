@@ -1526,14 +1526,18 @@ that is meant to show JBrowse 2, `trial/front/gen-jbrowse-config.sh` regenerates
 
 The public template `All_data_sources` (title "All data sources") lists every data set of the mine with its data
 source: DataSource name, DataSet name, version, description, url and licence, and the paper the source asks to be cited
-(first author, year, title, PubMed id), sorted by data source then data set. It is in `curation/metadata_templates.sql`,
+(first author, year, title, PubMed id), sorted by data set name. It is in `curation/metadata_templates.sql`,
 which phase `apply_templates` runs on every build (panel and full scope; not with `--skip-templates`), after
 `demo_public_templates.sql` and before the restart.
 
-- The publication is an outer join, so a data set without a citation still shows; licence, version, description and url
-  are DataSet attributes and show empty when unset. DataSet.dataSource is an inner join: the mine refuses a sort on a
-  path outside the root outer join group ("Order by element DataSet.dataSource.name ASC is not in the root outer join
-  group"), and every DataSet has a DataSource (the live test checks one row per DataSet).
+- The publication and the data source are outer joins, so every DataSet shows (the live test checks one row per
+  DataSet): one without a citation, and one without a DataSource, as "modMine gene flanking regions" is (InterMine's
+  flanking-regions postprocess makes it without one; with an inner join the ut mine of 20 Nov 2026 listed 32 of its 33).
+  Licence, version, description and url are DataSet attributes and show empty when unset. The price: the mine refuses
+  a sort on a path outside the root outer join group ("Order by element DataSet.dataSource.name ASC is not in the root
+  outer join group"), so the template cannot sort by data source, and a click on the sort icon of the Data source (or a
+  publication) column of the results table gets the same refusal. No single PathQuery both keeps a DataSet without a
+  DataSource and sorts by source.
 - InterMine needs at least one editable constraint in a template (`CreateTemplateAction`, `TemplatesImportAction`). The
   template's one is `DataSet.name = *`: every data set by default (`=` with a wildcard runs as a case-insensitive
   LIKE), and a user can type a name or a pattern.
