@@ -2041,7 +2041,7 @@ gwascatalog and reactome items; the new lengths of 1,000 and over joined it, `pm
 group was refused (the first run stopped at `rdfc2im_pipeline`). `length` lines are now left out: the set is again the
 6,890 numbers the cached group was fetched for. Only 3,930 of them are `pubMedId` values (the rest are masses,
 identifiers, years, pages); taking `pubMedId` alone is the fix, left for a task of its own since it changes the PubMed
-records loaded and needs the pubmed group fetched again.
+records loaded and needs the pubmed group fetched again. Done in im-9n4.48: "The cited-PMID set", below.
 
 **Build** (`drive-ut-9n4.32.sh`, the canonical driver with this worktree, the cache above and `pages-9n4.32`; resumed at
 `rdfc2im_pipeline` after the PMID fix): `rdfc2im_pipeline` 111 s, `integrate_sources` 934 s (9n4.35: 786 s;
@@ -2098,6 +2098,71 @@ carries its licence (CC BY 4.0, im-9n4.45).
   no fragments (`loadfragments` false) and drops a TrEMBL entry whose sequence another entry already has.
 
 Whether to show only reviewed proteins by default is the owner's decision; nothing filters them here.
+
+## The cited-PMID set [im-9n4.48]
+
+The pubmed source loads the papers that the other RDF sources cite, so its fetch is scoped to a PMID list,
+`$TRIAL_HOME/cited_pmids.txt`, written in `rdfc2im_pipeline` just before pubmed's own fetch:
+
+```sh
+python3 tools/subset_raw.py cited-pmids --in out/hgnc/items/hgnc.xml out/uniprot/items/uniprot.xml \
+  out/gwascatalog/items/gwascatalog.xml out/reactome/items/reactome.xml --out "$TRIAL_HOME/cited_pmids.txt"
+```
+
+(with `--gene-identifiers all`, hgnc's file is the panel genes' cut of it, `$TRIAL_HOME/hgnc-panel-items.xml`).
+
+**The rule.** The list is the `pubMedId` of every `Publication` item that another item of the same file links to, or
+that itself links to another item. Nothing else is a PMID: not a number in another attribute, not a PMID written in a
+description, not a `Publication` that nothing cites. A missing input file is skipped with a note; an empty list stops
+the build (an empty `--pmids` once made the fetch take all of PubMed). Which items carry citations, from the 19 Nov
+2026 ut build's items:
+
+| Source | Citing items | Publication items with a `pubMedId` |
+|---|---|---|
+| hgnc (panel cut; 23,555 in the every-gene file) | `Gene.publications` (and `Publication.entities` back) | 154 |
+| uniprot | `Protein.publications`, `Publication.entities` | 2,663 (of 2,801 Publication items; 138 have no `pubMedId`) |
+| gwascatalog | `GWAS.publication` | 1,186 |
+| reactome | none (one PMID in a `Pathway.description`, free text) | 0 |
+| clinvar, ensembl, ncbigene, go, hpo | none (go and hpo have PMIDs in 4 and 22 term descriptions, free text) | 0 |
+
+Every `Publication` item with a `pubMedId` in these files is linked, so today the rule gives the same list as
+"`Publication.pubMedId` alone"; the link test keeps a future unlinked one out. The stock loaders (go-annotation,
+psi-intact, biogrid, hpo-annotation, uniprot) write their own `Publication` objects from their own files and are not in
+the list: the RDF pubmed source only adds details to papers the RDF sources cite.
+
+**Before and after** (the 19 Nov 2026 ut build's items; `repos/.sandbox-disk/scratch/im-9n4.48/classify.py`):
+
+| | the grep (until 20 Nov 2026) | `cited-pmids` |
+|---|---|---|
+| numbers in the list | 6,890 | 3,930 (every one of them in the old list) |
+| `pmids_md5` | `5d346e5be740dceeaf8ab924bcd8f299` | `c1ea603897ba7eee8da42d8eda45be78` |
+| pubmed Publication items | 6,758 | 3,930 |
+| Publications with a title that no object cites (live, `test_every_loaded_publication_is_cited_by_a_loaded_object`) | 2,828 of 6,895 | 0 expected |
+
+The grep took every 4-9 digit attribute value (with `length` lines left out since im-9n4.32). The 2,960 numbers it took
+that are not cited PMIDs, by the field they came from (a number can come from several): 1,498 `Protein.molecularWeight`
+(uniprot), 1,173 `CrossReference.identifier` (uniprot) and 191 (hgnc), 98 `Gene.primaryIdentifier` (Entrez ids,
+hgnc), 46 `Publication.pages` and 43 `Publication.volume` (uniprot), 16 `GWAS.year`, 14 `OntologyTerm.identifier`
+(uniprot) and the taxon id 9606. 2,828 of them are also some paper's PMID, and the build loaded those papers as
+Publications that nothing in the mine refers to (PMID 1003 came from a uniprot `OntologyTerm.identifier`, PMID 1007
+from a journal volume). PMIDs under 1,000 were never in the grep's list; none is cited today (the smallest is 201845).
+
+**The pubmed cache group must be fetched again.** The group records the md5 of the list it was fetched for
+(`pmids_md5`), and `cache restore` refuses a group whose `pmids_md5` differs from the md5 of the `cited_pmids.txt` the
+build has just written: with the new list a `--use-cached-data` or `--offline` build stops at pubmed's restore until a
+group fetched for the new list is in the cache. The refetch is the pubmed fetch alone, no mine build: `translate
+--source pubmed`, then `fetch --source pubmed --limit 0 --force --pmids @cited_pmids.txt` (RDF Portal's
+`rdfportal.org/ncbi/sparql`, the three tables in VALUES batches of 1,000 PMIDs, 1 s apart: 12 requests, 76 s on 20 Nov
+2026; 3,930 / 43,561 / 76,757 rows of main / main_mesh_subject_term / main_slot), then `cache save pubmed out/pubmed/raw
+--meta scope=pmid --meta taxon=9606 --meta limit=0 --meta pmids_md5=<md5>`. The 20 Nov group (3 files, 11,411,044 B)
+is in `repos/.sandbox-disk/scratch/im-9n4.48/cached_raw_data.cited-pmids-2026-11-20/`, beside verified copies of every
+other group of `cached_raw_data.trembl-seq-2026-11-18`; a build without `--use-cached-data` fetches and saves it
+itself. The panel release asset (`cached_raw_data-*.tar.gz`) needs the same group: the panel build's list is the same
+3,930 PMIDs, since the hgnc cut gives the panel build's hgnc items (im-9n4.40).
+
+Not in the list, and a question of their own: 84 bare Publications (a `pubMedId` and nothing else) that no object
+cites, on the same demo. 80 are bibrefs of psi-intact experiments whose interactions the panel filter dropped, 4 are
+references of go-annotation rows that loaded no annotation. The live test holds them to a bound (150).
 
 ## Persistence, and what does not survive
 
