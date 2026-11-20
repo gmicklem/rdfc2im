@@ -181,9 +181,83 @@ def test_the_other_sources_keep_their_resolvers(monkeypatch, tmp_path):
     monkeypatch.setattr(cli, "resolve_ensembl_symbols", resolve_ensembl_symbols)
     lk, out = str(tmp_path / "lookup"), str(tmp_path / "out")
     assert cli.source_gene_ids("ncbigene", cfg["ncbigene"], ["A"], "9606", lk, out) == ["1"]
-    assert cli.source_gene_ids("gwascatalog", cfg["gwascatalog"], ["A"], "9606", lk, out) == ["ENSG_SYM"]
     assert cli.source_gene_ids("uniprot", cfg["uniprot"], ["A"], "9606", lk, out) == ["A"]
     assert cli.source_gene_ids("go", cfg["go"], ["A"], "9606", lk, out) == []
+
+
+def test_gwascatalog_restricts_by_the_same_cross_reference_selection(monkeypatch, tmp_path):
+    """Orchestrator 20 Nov 2026 (1b): gwascatalog's snp_gene_ids are Ensembl gene ids, chosen by label
+    like ensembl's were; it takes the ensembl selection, the same lookup answer."""
+    from rdfc2im import cli
+    cfg = yaml.safe_load(open(os.path.join(ROOT, "rdfc2im", "data", "sources.yaml")))
+    assert cfg["gwascatalog"]["gene_scope_resolver"] == "xref_join"
+
+    def resolve_ncbigene_symbols(symbols, taxon="9606"):
+        return ["54658"]
+
+    def resolve_ensembl_symbols(symbols, taxon="9606"):
+        raise AssertionError("no symbol lookup for gwascatalog")
+    monkeypatch.setattr(cli, "resolve_ncbigene_symbols", resolve_ncbigene_symbols)
+    monkeypatch.setattr(cli, "resolve_ensembl_symbols", resolve_ensembl_symbols)
+    monkeypatch.setattr(cli, "ensembl_ncbigene_xrefs", lambda e, t: [])
+    lk, out = str(tmp_path / "lookup"), str(tmp_path / "out")
+    _items(os.path.join(out, "hgnc", "items", "hgnc.xml"), UGT_HGNC)
+    g = cli.source_gene_ids("gwascatalog", cfg["gwascatalog"], ["UGT1A1"], "9606", lk, out)
+    e = cli.source_gene_ids("ensembl", cfg["ensembl"], ["UGT1A1"], "9606", lk, out)
+    assert g == e == ["ENSG00000241635"]
+    assert sorted(n.split("-")[0] for n in os.listdir(lk)) == ["resolve_ensembl_xref", "resolve_ncbigene_symbols"]
+    sh = open(os.path.join(ROOT, "tools", "full-build.sh"), encoding="utf-8").read()
+    assert "[gwascatalog]=xref" in sh, "its cached panel group is keyed on the rule too"
+
+
+# ---------------------------------------------------------------- 1c: alternative-haplotype genes
+
+def test_a_gene_scoped_ensembl_fetch_also_accepts_ensembls_own_human_tag():
+    """GSTT1's Ensembl gene (ENSG00000277656, alternative haplotype) has obo:RO_0002162
+    <http://ensembl.org/Homo_sapiens>, not taxonomy:9606, so the human filter dropped a gene the
+    selection asked for by id.  Only a run restricted to gene ids accepts the second tag."""
+    cfg = yaml.safe_load(open(os.path.join(ROOT, "rdfc2im", "data", "sources.yaml")))
+    also = cfg["ensembl"]["gene_scope_organism_also"]
+    assert also == ["<http://ensembl.org/Homo_sapiens>"]
+    rows = [{"im_class": "Organism", "im_field": "taxonId", "kind": "iri", "required": "yes", "value": "taxonomy:9606"},
+            {"im_class": "Organism", "im_field": "taxonId", "kind": "const", "required": "no", "value": "9606"},
+            {"im_class": "Gene", "im_field": "symbol", "kind": "literal", "required": "no", "value": ""}]
+    out = scope.widen_organisms(rows, also)
+    assert out[0]["value"] == "taxonomy:9606 <http://ensembl.org/Homo_sapiens>"
+    assert out[1]["value"] == "9606" and rows[0]["value"] == "taxonomy:9606", "const kept, input untouched"
+    assert scope.widen_organisms(rows, []) == rows
+
+
+def test_the_pipeline_widens_only_a_gene_scoped_run(tmp_path, monkeypatch):
+    from rdfc2im import pipeline
+    seen = []
+    monkeypatch.setattr(pipeline, "widen_organisms", lambda rows, iris: seen.append(list(iris)) or rows)
+    src = open(os.path.join(ROOT, "rdfc2im", "pipeline.py"), encoding="utf-8").read()
+    body = src[src.index("def run_source("):]
+    i = body.index("apply_gene_scope(rows")
+    assert "widen_organisms(rows" in body[i:i + 600], "applied right after the gene restriction"
+    assert "gene_scope_organism_also" in body[i:i + 600]
+
+
+def test_an_alternative_haplotype_gene_still_gets_taxon_9606(tmp_path):
+    """The row's own taxon column holds "Homo_sapiens" (iri_localname); the source's constant
+    9606 is the Organism the gene gets, one Organism item."""
+    import textwrap
+    from rdfc2im.items import emit_items
+    m = model(tmp_path)
+    out = tmp_path / "out" / "ensembl"
+    (out / "tsv").mkdir(parents=True)
+    (out / "columns.tsv").write_text(textwrap.dedent("""\
+    table\tposition\tcolumn\tvariable\tim_class\tim_field\ttransform\tfilter\tvalue\tkind\tvia\tstatus\trequired
+    main\t0\tid\tid\tGene\tsecondaryIdentifier\t\t\t\tliteral\t\tsure\tyes
+    main\t1\ttax\ttax\tOrganism\ttaxonId\tiri_localname\t\t\tiri\tGene.organism\tsure\tyes
+    main\t2\tc\t\tOrganism\ttaxonId\t\t\t9606\tconst\t\tsure\tno
+    """))
+    (out / "tsv" / "main.tsv").write_text("Gene.secondaryIdentifier\tOrganism.taxonId\tOrganism.taxonId\n"
+                                          "ENSG00000277656\tHomo_sapiens\t9606\nENSG00000007372\t9606\t9606\n")
+    emit_items(m, str(out), "toy", {}, log=lambda *a: None)
+    xml = (out / "items" / "toy.xml").read_text()
+    assert xml.count('class="Organism"') == 1 and "Homo_sapiens" not in xml
 
 
 # ---------------------------------------------------------------- the cache and the stock id sets
