@@ -789,35 +789,29 @@ phase_rdfc2im_pipeline() {
     run python3 -m rdfc2im translate --source "$src" $flags
     local pmid_file="$TRIAL_HOME/cited_pmids.txt"
     if [ "$src" = "pubmed" ]; then
-      # PMID-scoped to the union of PMIDs the panel's own already-loaded data cites (hgnc's
-      # main_reference, uniprot's main_citation, gwascatalog, reactome) - see LOAD-TRIAL.md's
-      # pubmed section. Requires those sources' items to already exist on disk. Derived from the
-      # other sources' items, so it is regenerated - not cached - and its checksum is what ties
-      # the cached pubmed data to the PMID set it was fetched for.
+      # PMID-scoped to the papers the panel's own already-loaded data cites (hgnc's main_reference,
+      # uniprot's main_citation, gwascatalog's studies; reactome's items hold none today) - see
+      # LOAD-TRIAL.md's pubmed section and BUILD.md, "The cited-PMID set". Requires those sources'
+      # items to already exist on disk. Derived from the other sources' items, so it is regenerated -
+      # not cached - and its checksum is what ties the cached pubmed data to the PMID set it was
+      # fetched for.
       #
-      # -a forces text mode: without it, grep inside this `bash -c` context (unlike an interactive
-      # shell) mis-detects these UTF-8 items XML files as binary and reports "binary file matches"
-      # with zero actual matches - confirmed live, silently produced an empty cited_pmids.txt, which
-      # made cli.py's `if pmids and pmid_field` (falsy on []) fall through to an unrestricted,
-      # LIMIT-0 fetch of all of PubMed instead of the intended PMID-scoped one.
-      #
-      # The grep takes every 4-9 digit attribute value, not only Publication.pubMedId: on the panel 6,890
-      # numbers of which 3,930 are PMIDs (the rest masses, identifiers, years, pages). `length` lines are
-      # left out so that uniprot's sequence lengths [im-9n4.32] do not change the set, and with it
-      # pmids_md5 and the cached pubmed group. Taking pubMedId alone is the real fix; it changes which
-      # PubMed records load and needs the pubmed group fetched again, so it is a task of its own.
+      # The set is the pubMedId of every Publication item that another item links to (subset_raw.py
+      # cited-pmids) [im-9n4.48]. It was a grep of every 4-9 digit attribute value: on the panel 6,890
+      # numbers of which 3,930 were PMIDs, the rest masses, Entrez and cross-reference ids, years and
+      # pages, and every one of those that is also some paper's PMID loaded an unrelated Publication
+      # that nothing cites (2,912 on the 19 Nov 2026 ut demo). cited-pmids stops on an empty set: an
+      # empty list once made the fetch fall through to all of PubMed (a grep -a story, LOAD-TRIAL.md).
+      local cite_in="out/hgnc/items/hgnc.xml"
       if [ "${SCOPE_MODE[hgnc]}" = full ] && [[ " $SOURCES " == *" hgnc "* ]]; then
         # --gene-identifiers all: hgnc holds every human gene (about 23,500 papers); the PMIDs stay the
         # panel's, read from the panel genes' cut of its items (subset_raw.py panel_items) [im-9n4.40]
-        local hgnc_cut="$TRIAL_HOME/hgnc-panel-items.xml"
+        cite_in="$TRIAL_HOME/hgnc-panel-items.xml"
         run python3 tools/subset_raw.py panel-items --genes "$GENE_PANEL" --in out/hgnc/items/hgnc.xml \
-          --out "$hgnc_cut" --lookup-dir "$LOOKUP_DIR" --taxon "$TAXON"
-        run bash -c "grep -ahv '<attribute name=\"length\"' '$hgnc_cut' out/{uniprot,gwascatalog,reactome}/items/*.xml 2>/dev/null \
-                      | grep -aoE '\"[0-9]{4,9}\"' | tr -d '\"' | sort -u > '$pmid_file'"
-      else
-        run bash -c "grep -ahv '<attribute name=\"length\"' out/{hgnc,uniprot,gwascatalog,reactome}/items/*.xml 2>/dev/null \
-                      | grep -aoE '\"[0-9]{4,9}\"' | tr -d '\"' | sort -u > '$pmid_file'"
+          --out "$cite_in" --lookup-dir "$LOOKUP_DIR" --taxon "$TAXON"
       fi
+      run python3 tools/subset_raw.py cited-pmids --in "$cite_in" out/uniprot/items/uniprot.xml \
+        out/gwascatalog/items/gwascatalog.xml out/reactome/items/reactome.xml --out "$pmid_file"
     fi
     local meta; meta=$(cache_meta_for "$src")
     if [ "$USE_CACHED_DATA" -eq 1 ]; then

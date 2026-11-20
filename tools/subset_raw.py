@@ -25,6 +25,9 @@ written transparently by file suffix.
   subset_raw.py panel-items --genes FILE --in ITEMS.xml --out ITEMS.xml [--lookup-dir DIR]
       The panel genes' part of an items file fetched for every gene (see panel_items).
 
+  subset_raw.py cited-pmids --in ITEMS.xml [ITEMS.xml ...] --out FILE
+      The pubMedId of every linked Publication item: the pubmed source's PMID list (see cited_pmids).
+
 Per-format rules are in each filter function's docstring and in USAGE.md.
 """
 import argparse
@@ -1116,6 +1119,54 @@ def panel_items(src, dst, entrez=(), symbols=()):
     return {"items_in": len(info), "genes_in": len(gene_ids), "panel_genes": len(seeds), "items_out": n}
 
 
+PMID_RE = re.compile(r"^[1-9][0-9]{0,8}$")
+
+
+def cited_pmids(paths, dst):
+    """Write the PubMed ids the citing sources' items cite, one per line, sorted as numbers: the
+    pubMedId of every Publication item that another item of the same file refers to, or that itself
+    refers to another item (uniprot's Publication.entities, gwascatalog's GWAS.publication, hgnc's
+    Gene.publications).  Nothing else counts: masses, Entrez and cross-reference ids, years and page
+    numbers are not PMIDs even when they are numbers that some paper has as its PMID, a PMID in a
+    description creates no object, and a Publication nothing links to would load uncited [im-9n4.48].
+
+    Missing paths are skipped (reported on stderr); an empty result is an error and writes nothing,
+    because an empty --pmids list once made the pubmed fetch take all of PubMed."""
+    pmids, n_files, n_pub, n_cited = set(), 0, 0, 0
+    for path in paths:
+        if not os.path.isfile(path):
+            print(f"cited-pmids: {path}: no such file, skipped", file=sys.stderr)
+            continue
+        n_files += 1
+        pubs, linked = {}, set()   # Publication item id -> pubMedId; item ids that are linked
+        for it in _iter_items(path):
+            iid = it.get("id")
+            refs = [r.get("ref_id") for r in it.iter("reference")]
+            if refs:
+                linked.add(iid)
+                linked.update(refs)
+            if it.get("class") == "Publication":
+                pm = (_attrs(it).get("pubMedId") or "").strip()
+                if PMID_RE.match(pm):
+                    pubs[iid] = pm
+        n_pub += len(pubs)
+        cited = {pm for iid, pm in pubs.items() if iid in linked}
+        n_cited += sum(1 for iid in pubs if iid in linked)
+        pmids |= cited
+    if not pmids:
+        raise SubsetError(f"no cited PubMed id in {', '.join(paths)}")
+    tmp = dst + ".part"
+    with open(tmp, "w", encoding="utf-8", newline="\n") as fh:
+        for pm in sorted(pmids, key=int):
+            fh.write(pm + "\n")
+    os.replace(tmp, dst)
+    return {"files": n_files, "publications": n_pub, "cited": n_cited, "uncited": n_pub - n_cited, "pmids": len(pmids)}
+
+
+def run_cited_pmids(a):
+    print(json.dumps(cited_pmids(a.inputs, a.out)))
+
+
 def run_panel_items(a):
     entrez = set()
     if a.lookup_dir:
@@ -1276,6 +1327,10 @@ def build_parser():
     i.add_argument("--out", required=True, help="items XML to write")
     i.add_argument("--lookup-dir", default=None, help="gene-id lookup cache: panel genes by Entrez id (else by symbol)")
     i.add_argument("--taxon", default="9606")
+    m = sub.add_parser("cited-pmids", help="the PubMed ids the Publication items of rdfc2im items XML files are cited for"
+                                           " (see cited_pmids): the pubmed source's --pmids list")
+    m.add_argument("--in", dest="inputs", nargs="+", required=True, help="items XML files (a missing one is skipped)")
+    m.add_argument("--out", required=True, help="PMID list to write, one per line")
     return p
 
 
@@ -1311,6 +1366,8 @@ def main(argv=None):
             run_disease_ids(a)
         elif a.cmd == "panel-items":
             run_panel_items(a)
+        elif a.cmd == "cited-pmids":
+            run_cited_pmids(a)
         else:
             run_filter(a)
     except SubsetError as e:
