@@ -1476,6 +1476,22 @@ def test_pax6_has_protein_domain_regions_named_by_interpro():
     assert {"Pfam", "PROSITE"} & {r[4] for r in rows}, rows[:5]
 
 
+def test_pfam_is_one_data_source_spelt_pfam():
+    """[im-9n4.54] Gos Micklem, 20 Nov 2026: "The correct capitalisation is Pfam". interpro wrote the member database
+    as interpro.xml spells it ("PFAM") and go-annotation followed it; protein2ipr, UniProt's dbxref.txt and the RDF
+    uniprot source write "Pfam". The mine had a DataSource of each (209 and 130 CrossReferences); now one, with
+    interpro's member cross-references, protein2ipr's ProteinDomainRegion.database and update-data-sources' url on it."""
+    if (s := _m3_skip("InterPro data set", "protein2ipr interpro")) is not None:
+        return s
+    names = [r[0] for r in query_rows("DataSource.name", "DataSource.name", "=", "pfam")]   # = is case-insensitive
+    assert names == ["Pfam"], names
+    xrefs = query_rows_q('<query model="genomic" view="CrossReference.identifier CrossReference.source.name">'
+                         '<constraint path="CrossReference.identifier" op="=" value="PF*"/></query>')
+    assert xrefs and {r[1] for r in xrefs} == {"Pfam"}, {r[1] for r in xrefs}
+    dbs = {r[0] for r in query_rows("ProteinDomainRegion.database", "ProteinDomainRegion.database", "=", "pfam")}
+    assert dbs == {"Pfam"}, dbs
+
+
 def test_every_domain_a_panel_protein_has_is_an_interpro_entry_with_a_name():
     """interpro.xml is cut to the entries of the loaded matches: none may be left a bare stub the protein2ipr
     loader made. (NCBIfam `NF...` matches load since the converter names them [im-9n4.28], but the cached protein2ipr cut
