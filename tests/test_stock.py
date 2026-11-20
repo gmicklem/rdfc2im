@@ -526,7 +526,8 @@ def test_disease_name_priority_ranks_orphanet_above_hpo_annotation():
 
 # ------------------------------------------------------------------ milestone 3 sources [im-9n4.27]
 
-M3 = ["protein2ipr", "interpro", "mgi-alleles", "pubmed-gene", "humanmine-static", "update-data-sources",
+# humanmine-static was the eighth: retired [im-9n4.52] (test_data_set_versions.py)
+M3 = ["protein2ipr", "interpro", "mgi-alleles", "pubmed-gene", "update-data-sources",
       "update-publications", "entrez-organism"]
 
 
@@ -535,7 +536,6 @@ def test_milestone_3_sources_are_in_the_table_with_a_licence_read_on_20_nov():
     for n in M3:
         assert n in t, n
         assert t[n]["licence_checked"] == "2026-11-20", n
-    assert t["humanmine-static"]["licence_status"] == "not-stated"
     assert t["update-publications"]["licence_status"] == "partial"      # eutils.ncbi.nlm.nih.gov is blocked
     assert t["protein2ipr"]["licence_status"] == "verified"
 
@@ -694,9 +694,9 @@ def test_no_other_stock_source_sets_a_licence_property_and_none_sets_an_unverifi
 
 # ------------------------------------------------------------------ mapping files of the milestone 3 sources [im-9n4.27]
 
-def test_the_six_milestone_3_sources_that_load_a_file_have_a_mapping_file_with_the_sources_own_file_ids():
+def test_the_five_milestone_3_sources_that_load_a_file_have_a_mapping_file_with_the_sources_own_file_ids():
     t = stock.load_table()
-    for n in ("protein2ipr", "interpro", "mgi-alleles", "pubmed-gene", "humanmine-static", "update-data-sources"):
+    for n in ("protein2ipr", "interpro", "mgi-alleles", "pubmed-gene", "update-data-sources"):
         path = os.path.join(ROOT, "rdfc2im", "data", "stock_mappings", n + ".yaml")
         assert os.path.exists(path), n
         with open(path, encoding="utf-8") as fh:

@@ -410,7 +410,7 @@ def test_data_set_links_items_and_project_wiring(tmp_path):
     proj = _w(str(tmp_path / "project.xml"), '<project type="bio">\n  <sources>\n'
               '    <source name="humanmine-go" type="humanmine-items" version="4.3.0">\n'
               '      <property name="src.data.file" location="/d/go.xml"/>\n    </source>\n  </sources>\n</project>\n')
-    pri = _w(str(tmp_path / "p.properties"), "DataSource.url = humanmine-static, *\nDataSet.url = x, *\n")
+    pri = _w(str(tmp_path / "p.properties"), "DataSource.url = data-set-links, *\nDataSet.url = x, *\n")
     for _ in range(2):    # idempotent
         sp.add_links_source(proj, pri, "/d/links.xml")
     text = open(proj, encoding="utf-8").read()
@@ -418,7 +418,8 @@ def test_data_set_links_items_and_project_wiring(tmp_path):
     assert text.index("data-set-links") > text.index("humanmine-go") and text.rstrip().endswith("</project>")
     ptext = open(pri, encoding="utf-8").read()
     assert "DataSet.url = data-set-links, *" in ptext and "DataSet.url = x, *" not in ptext
-    assert ptext.count("DataSet.description = data-set-links, *") == 1 and "DataSource.url = humanmine-static" in ptext
+    assert ptext.count("DataSet.description = data-set-links, *") == 1 and "DataSource.url = data-set-links, *" in ptext
+    assert ptext.count("DataSet.version = data-set-links, *") == 1
 
 
 def test_data_set_pages_from_the_mapping_files_and_sources_yaml():
@@ -434,10 +435,15 @@ def test_every_mapping_file_is_well_formed():
         with open(os.path.join(sp.MAPPINGS_DIR, n), encoding="utf-8") as fh:
             mp = yaml.safe_load(fh)
         assert mp["source"] == n[:-5], n
-        # data_sets may be empty: humanmine-static and update-data-sources write no DataSet of their own [im-9n4.27]
+        # data_sets may be empty: update-data-sources writes no DataSet of its own [im-9n4.27]
         assert isinstance(mp.get("data_sets"), list) and mp.get("loader", {}).get("commit"), n
         if not mp["data_sets"]:
-            assert n in ("humanmine-static.yaml", "update-data-sources.yaml"), n
+            assert n == "update-data-sources.yaml", n
+        # data_set_files: the file ids that feed a data set, where not every file of the source does [im-9n4.52]
+        for ds, fids in (mp.get("data_set_files") or {}).items():
+            assert ds in mp["data_sets"] and set(fids) <= {f["id"] for f in mp["files"]}, (n, ds)
+        for k in ("data_source_url", "data_source_description"):
+            assert mp.get(k) is None or isinstance(mp[k], str), (n, k)
         for f in mp["files"]:
             assert f["format"] in fc.FORMATS, (n, f["id"])
             if f["format"] == "xml":
