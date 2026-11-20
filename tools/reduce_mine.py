@@ -37,7 +37,9 @@ Subcommands:
       (the plugin catches it and keeps going, so the build's exit code stays 0).
 
 Every subcommand edits in place and prints a one-line summary of what it removed, so the effect
-is visible in the calling script's own log rather than silent.
+is visible in the calling script's own log rather than silent. When there is nothing to remove - a
+full-scope build (full-build.sh --scope full) that loads every source project.xml lists, so the merged
+model has every class - it says "nothing to trim" and leaves the file exactly as it is [im-9n4.26].
 """
 import os
 import re
@@ -114,6 +116,12 @@ def cmd_sources(args):
     if missing:
         sys.exit(f"reduce_mine sources: no <source> named {', '.join(missing)} in {path} - "
                  f"nothing changed")
+    if all(s.get("type") == keep_type or s.get("name") in keep_names
+           for s in sources if isinstance(s.tag, str)):
+        # every source of project.xml is loaded (a full-scope build with every stock source): nothing to
+        # trim, and the file is not even rewritten [im-9n4.26]
+        print(f"reduce_mine sources: nothing to trim - all {len(present)} sources are loaded; {path} left as it is")
+        return
     kept, dropped = [], []
     for src in list(sources):
         if src.get("type") == keep_type or src.get("name") in keep_names:
@@ -147,6 +155,9 @@ def cmd_priorities(args):
             no_field.append(key)
         else:
             kept.append(line)
+    if not dropped and not no_field:
+        print(f"reduce_mine priorities: nothing to trim - every class and field is in the model; {path} left as it is")
+        return
     with open(path, "w", encoding="utf-8") as fh:
         fh.writelines(kept)
     print(f"reduce_mine priorities: dropped {len(dropped)} line(s) for absent classes"
@@ -220,6 +231,10 @@ def cmd_objectstoresummary(args):
             if k not in seen:
                 kept.append(f"{k} = {v}\n")
                 added.append(k)
+    if not dropped and not no_field and not added and not replaced:
+        print(f"reduce_mine objectstoresummary: nothing to trim - every class and field is in the model; "
+              f"{path} left as it is")
+        return
     with open(path, "w", encoding="utf-8") as fh:
         fh.writelines(kept)
     if added or replaced:
@@ -305,6 +320,10 @@ def cmd_webconfig(args):
             dropped_widgets.append(w.get("id") or w.tag)
             widgets_el.remove(w)
 
+    if not dropped_classes and not dropped_fields and not dropped_widgets:
+        print(f"reduce_mine webconfig: nothing to trim - every class, field and widget path resolves; "
+              f"{path} left as it is")
+        return
     t.write(path, xml_declaration=True, encoding="UTF-8", pretty_print=True)
     print(f"reduce_mine webconfig: dropped {len(dropped_classes)} class(es)"
           + (" (" + ", ".join(dropped_classes) + ")" if dropped_classes else "")
