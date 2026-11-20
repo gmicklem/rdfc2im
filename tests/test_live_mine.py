@@ -1629,6 +1629,35 @@ def test_every_data_set_has_a_version_from_this_build():
     assert len(fetched) >= 0.8 * len(rows), sorted(f"{r[0]}: {r[1]}" for r in rows if r not in fetched)
 
 
+def test_every_data_set_whose_source_asks_to_be_cited_links_to_that_paper_with_a_title():
+    """[im-9n4.56] Gos Micklem, 20 Nov 2026: data sets link to their reference publication. The curated citation_pmid
+    of the stock mapping files and sources.yaml (each read at the source's own citation page) is written by
+    data-set-links as DataSet.publication, before update-publications gives the paper its title."""
+    if not mine_up():
+        return _skip(f"live checks off or no mine at {MINE_BASE} (make test-live)")
+    import sys
+    tools = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools")
+    if tools not in sys.path:
+        sys.path.insert(0, tools)
+    import source_pages as sp
+    import yaml
+    with open(sp.SOURCES_YAML, encoding="utf-8") as fh:
+        rdf = sorted(yaml.safe_load(fh))
+    want = sp.data_set_citations(sorted(n[:-5] for n in os.listdir(sp.MAPPINGS_DIR)), rdf)
+    rows = query_rows_q('<query model="genomic" view="DataSet.name DataSet.publication.pubMedId DataSet.publication.title">'
+                        '<join path="DataSet.publication" style="OUTER"/></query>')
+    have = {r[0]: (r[1], r[2]) for r in rows}
+    checked = {ds: pmid for ds, pmid in want.items() if ds in have}
+    assert checked, f"no DataSet of the mine has a curated citation (curated: {sorted(want)})"
+    wrong = sorted(f"{ds}: want PubMed {pmid}, has {have[ds][0]}" for ds, pmid in checked.items() if have[ds][0] != pmid)
+    assert not wrong, wrong
+    untitled = sorted(ds for ds in checked if not have[ds][1])
+    assert not untitled, f"cited papers without a title (update-publications did not reach them): {untitled}"
+    # a data set whose source states no citation links to none (humanmine-static's guesses are gone)
+    extra = sorted(f"{ds}: {v[0]}" for ds, v in have.items() if v[0] and ds not in want)
+    assert not extra, extra
+
+
 def test_publications_cited_by_genes_have_titles_after_update_publications():
     """update-publications asks E-utilities for the pubMedId of every Publication in the mine and gives each its
     title. Needs eutils.ncbi.nlm.nih.gov reachable from the build (it was blocked on 20 Nov 2026), so a mine
