@@ -73,6 +73,14 @@ GLOB_CHARS = set("*?[")
 OTHER_LICENCES = os.path.join(HERE, "data", "other_licences.yaml")
 LICENCE_STATUSES = ("verified", "partial", "not-verified", "not-stated", "not-checked")
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+# Sources taken out of the table, and why: a --stock-sources list that still names one stops with this text.
+RETIRED = {
+    "humanmine-static": "retired [im-9n4.52, Gos 20 Nov 2026]. HumanMine's datasets.xml of Feb 2022 made 40 DataSets, "
+                        "34 of them with no data in this build and all with versions of 2011-22. DataSet.version now comes "
+                        "from the build's own caches and the DataSource urls it gave from the stock mapping files, both "
+                        "through the data-set-links source tools/full-build.sh adds (BUILD.md, \"DataSet versions\"). "
+                        "Remove it from the list.",
+}
 
 
 class StockError(Exception):
@@ -372,7 +380,10 @@ def select(table: Dict[str, dict], names: List[str], project_xml: Optional[str] 
         seen.add(n)
     if dup:
         problems.append(f"listed more than once: {', '.join(dup)}")
-    unknown = [n for n in dict.fromkeys(names) if n not in table]
+    for n in dict.fromkeys(names):
+        if n in RETIRED and n not in table:
+            problems.append(f"{n} is no longer a stock source: {RETIRED[n]}")
+    unknown = [n for n in dict.fromkeys(names) if n not in table and n not in RETIRED]
     if unknown:
         problems.append(f"unknown stock source(s) {', '.join(unknown)} - not in rdfc2im/data/stock_sources.yaml; "
                         f"known: {', '.join(sorted(table))}")

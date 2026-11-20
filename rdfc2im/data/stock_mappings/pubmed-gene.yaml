@@ -9,6 +9,9 @@ loader:
   commit: b81dbfd8e5
 basis: read from the code of the demo's InterMine source (PubMedGeneConverter.java, BioFileConverter.java)
 data_source: NCBI
+# data_source_url/description: what HumanMine's datasets.xml (humanmine-datasets e7a86ea) gave this DataSource [im-9n4.52] (as ncbi-gff.yaml)
+data_source_url: "https://www.ncbi.nlm.nih.gov"
+data_source_description: "National Center for Biotechnology Information"
 data_sets: [PubMed to gene mapping]
 home: https://ftp.ncbi.nlm.nih.gov/gene/DATA/
 writes: [DataSource, DataSet, Ontology, Gene, Publication]

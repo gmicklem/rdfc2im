@@ -1032,13 +1032,13 @@ def test_publications_terms_and_genes_are_not_duplicated_by_the_interaction_load
                        ("InteractionTerm.identifier", "InteractionTerm.identifier"),
                        ("Gene.primaryIdentifier", "Gene.primaryIdentifier")):
         ids = [r[0] for r in query_rows(view, path, "IS NOT NULL", "")]
-        # Three papers are in the mine twice because an Items XML source lists them twice in the one file it loads:
-        # datasets.xml of humanmine-static names 27899635 and 10802651 for two data sets each, and
+        # One paper is in the mine twice because an Items XML source lists it twice in the one file it loads:
         # update-data-sources writes 28138153 for two databases (the converter now keys Publication, which merges
         # the papers the mine already had, but the loader does not merge two objects of the one load) [im-9n4.27].
-        # The bound was 5 while the keys file lacked the Publication key; the rebuild of 20 Nov shows 3 [im-9n4.28].
+        # The bound was 5 while the keys file lacked the Publication key, 3 after the rebuild of 20 Nov [im-9n4.28]
+        # while humanmine-static's datasets.xml named 27899635 and 10802651 twice each; it is retired [im-9n4.52].
         # The interaction loaders' duplicates were hundreds.
-        allowed = 3 if view == "Publication.pubMedId" else 0
+        allowed = 1 if view == "Publication.pubMedId" else 0
         assert len(ids) - len(set(ids)) <= allowed, f"duplicate {view}: {len(ids) - len(set(ids))}"
     named = query_rows("InteractionTerm.identifier InteractionTerm.name", "InteractionTerm.identifier", "=", "MI:0018")
     assert named and named[0][1] == "two hybrid", named        # the term merged with psi-mi-ontology's
@@ -1518,16 +1518,18 @@ def test_panel_genes_cite_their_gene2pubmed_papers():
         assert len({r[0] for r in rows}) >= floor, (gid, len(rows))
 
 
-def test_data_sources_carry_urls_and_descriptions_after_humanmine_static_and_update_data_sources():
-    """humanmine-static (HumanMine's own datasets.xml) gives DataSource HumanMine its url and description;
+def test_data_sources_carry_urls_and_descriptions_from_the_mapping_files_and_update_data_sources():
+    """data-set-links gives the DataSources HumanMine's datasets.xml used to describe (and no UniProt abbreviation
+    covers) the url and description the stock mapping files keep (`data_source_url`, NCBI's here) [im-9n4.52];
     update-data-sources fills the url and description of every DataSource that is a UniProt database abbreviation
-    (InterPro, IntAct, PANTHER, ...), ahead of the RDF Portal page the RDF sources wrote for the same name."""
+    (InterPro, IntAct, PANTHER, ...), ahead of the RDF Portal page the RDF sources wrote for the same name. The
+    DataSource HumanMine, which described no data, is gone with humanmine-static."""
     if not mine_up():
         return _skip(f"live checks off or no mine at {MINE_BASE} (make test-live)")
-    rows = query_rows("DataSource.name DataSource.url DataSource.description", "DataSource.name", "=", "HumanMine")
-    if not rows:
-        return _skip("mine built without --stock-sources humanmine-static")
-    assert rows[0][1] == "http://www.humanmine.org" and "Homo sapiens" in rows[0][2], rows
+    assert query_rows("DataSource.name", "DataSource.name", "=", "HumanMine") == [], "humanmine-static was loaded"
+    rows = query_rows("DataSource.name DataSource.url DataSource.description", "DataSource.name", "=", "NCBI")
+    if rows and _data_set_loaded("ncbi-gff"):
+        assert rows[0][1] == "https://www.ncbi.nlm.nih.gov" and rows[0][2] == "National Center for Biotechnology Information", rows
     ds = query_rows("DataSource.name DataSource.url DataSource.description", "DataSource.name", "=", "InterPro")
     if not ds or not ds[0][1]:
         return _skip("mine built without --stock-sources update-data-sources")
@@ -1535,6 +1537,81 @@ def test_data_sources_carry_urls_and_descriptions_after_humanmine_static_and_upd
     allds = query_rows("DataSource.name DataSource.url", "DataSource.name", "CONTAINS", "")
     with_url = [r for r in allds if r[1]]
     assert len(with_url) >= 100, (len(with_url), len(allds))
+
+
+# DataSets that have data no object of the mine links to, each for a reason outside rdfc2im's own build [im-9n4.52].
+# Any other DataSet without a linked object is a record with no data behind it (humanmine-static made 34 of them).
+DATA_SETS_WITHOUT_LINKS = {
+    "PubMed (RDF Portal)": "Publication has no dataSets collection in the model: its 3,930 papers cannot link to it",
+    "modMine gene flanking regions": "InterMine's create-gene-flanking-features postprocess makes it and links none of "
+                                     "the GeneFlankingRegions it makes to it",
+    "Single-Tissue cis-eQTL Data": "GtexConverter stores it whether or not an eQTL (signif) file is staged; none is, so "
+                                   "it is empty (a converter change, not this build's)",
+}
+# ... and DataSets without a version: no file of the build feeds this one (gtex mapping data_set_files)
+DATA_SETS_WITHOUT_VERSION = {"Single-Tissue cis-eQTL Data"}
+# The DataSet names only humanmine-static's datasets.xml of Feb 2022 wrote: none may come back
+HUMANMINE_STATIC_ONLY = ("ncbi-fasta", "ncbi-gene", "ncbi-summaries", "panther", "interpro", "protein2ipr", "psi-intact",
+                         "psi-complexes", "omim", "uniprot", "uniprot-keywords", "arrayexpress-atlas", "reactome", "biogrid",
+                         "pubmed-gene", "interpro-go", "huge-gwas", "protein-atlas", "protein-atlas-rna", "gtex",
+                         "GTEx RNA-Seq Data", "hpo", "clinvar", "hgnc", "mgi-identifiers", "so", "psi-mi-ontology",
+                         "rgd-identifiers", "mammalian-phenotype-ontology", "go", "go-annotation",
+                         "disgenet-disease-associations", "depmap-expression", "depmap-sample-info")
+# ... and the versions it gave (every DataSet it wrote had one of these)
+HUMANMINE_STATIC_VERSIONS = {"GRCh38.p13", "109.20210514; September 2021", "16.0; December 2020", "87.0; November 2021",
+                             "February 2022", "September 2021", "2021_04", "June 2011", "July 2014", "79; December 2021",
+                             "4.4.206; February 2022", "21.0; November 2021", "8; July 2019", "6.17; February 2022",
+                             "Version 7; May 2021", "May 2021"}
+
+
+def _objects_per_data_set() -> dict:
+    """{DataSet name: objects linked to it}, one column summary per class with a dataSets collection whose parent
+    class has none (a subclass's objects are counted with its parent's). DataSource.dataSets is the reverse of
+    DataSet.dataSource, not data: left out."""
+    classes = _get_json(f"{MINE_BASE}/service/model?format=json")["model"]["classes"]
+    has = {c for c, d in classes.items() if "dataSets" in (d.get("collections") or {})} - {"DataSource"}
+    top = sorted(c for c in has if not any(p in has for p in classes[c].get("extends") or []))
+    counts: dict = {}
+    for c in top:
+        q = f'<query model="genomic" view="{c}.id {c}.dataSets.name"/>'
+        body = urllib.parse.urlencode({"query": q, "summaryPath": f"{c}.dataSets.name", "format": "json",
+                                       "size": "10000"}).encode()
+        with urllib.request.urlopen(urllib.request.Request(f"{MINE_BASE}/service/query/results", data=body),
+                                    timeout=TIMEOUT * 4) as r:
+            for name, n in json.loads(r.read().decode("utf-8"))["results"]:
+                counts[name] = counts.get(name, 0) + int(n)
+    return counts
+
+
+def test_every_data_set_has_loaded_objects_behind_it():
+    """No DataSet is a record with nothing loaded behind it [im-9n4.52, Gos 20 Nov 2026]: humanmine-static's 34
+    HumanMine names of 2021-22 that matched nothing this build loads are gone, and every other DataSet has objects
+    linked to it, except the three DATA_SETS_WITHOUT_LINKS. Needs a mine rebuilt after im-9n4.52 (the mine of
+    20 Nov 2026 still has humanmine-static's)."""
+    if not mine_up():
+        return _skip(f"live checks off or no mine at {MINE_BASE} (make test-live)")
+    names = [r[0] for r in query_rows("DataSet.name", "DataSet.name", "IS NOT NULL", "")]
+    back = sorted(set(names) & set(HUMANMINE_STATIC_ONLY))
+    assert not back, f"humanmine-static's DataSets are loaded: {back}"
+    counts = _objects_per_data_set()
+    empty = sorted(n for n in names if not counts.get(n) and n not in DATA_SETS_WITHOUT_LINKS)
+    assert not empty, f"DataSets with no object linked to them: {empty}"
+
+
+def test_every_data_set_has_a_version_from_this_build():
+    """Every DataSet carries the release its source states, the file's Last-Modified or the date the build fetched it
+    (data-set-links, from the cache groups' META.json) [im-9n4.52]: never one of datasets.xml's 2021-22 versions.
+    Needs a mine rebuilt after im-9n4.52."""
+    if not mine_up():
+        return _skip(f"live checks off or no mine at {MINE_BASE} (make test-live)")
+    rows = query_rows("DataSet.name DataSet.version", "DataSet.name", "IS NOT NULL", "")
+    missing = sorted(r[0] for r in rows if not r[1] and r[0] not in DATA_SETS_WITHOUT_VERSION)
+    assert not missing, f"DataSets without a version: {missing}"
+    old = sorted(f"{r[0]}: {r[1]}" for r in rows if r[1] in HUMANMINE_STATIC_VERSIONS)
+    assert not old, f"DataSets with a version of HumanMine's datasets.xml: {old}"
+    # most end with the date this build fetched the file (a cut of an earlier download states its release alone)
+    fetched = [r for r in rows if r[1] and "fetched 20" in r[1]]
+    assert len(fetched) >= 0.8 * len(rows), sorted(f"{r[0]}: {r[1]}" for r in rows if r not in fetched)
 
 
 def test_publications_cited_by_genes_have_titles_after_update_publications():

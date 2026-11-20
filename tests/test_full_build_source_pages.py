@@ -42,11 +42,17 @@ def test_the_phase_writes_the_manifest_then_the_pages(tmp_path):
     assert f"--out {tmp_path / 'pages'}" in cmds[pages]
 
 
-def test_without_data_set_links_prepare_mine_checkout_is_as_before(tmp_path):
+def test_without_data_set_links_the_source_still_carries_the_versions(tmp_path):
+    """DataSet.version is written on every build [im-9n4.52]: the same source, from the caches, without the page links."""
     plan = _plan(tmp_path, "--only", "prepare_mine_checkout")
     if plan is None:
         return
-    assert not any("source_pages.py" in c for c in _cmds(plan, "prepare_mine_checkout"))
+    cmds = _cmds(plan, "prepare_mine_checkout")
+    links = next(i for i, c in enumerate(cmds) if "source_pages.py data-set-links" in c)
+    add = next(i for i, c in enumerate(cmds) if "source_pages.py add-links-source" in c)
+    assert links < add and "--base-url" not in cmds[links], cmds[links]
+    for opt in ("--stock-dir ", "--cache-dir "):
+        assert opt in cmds[links], (opt, cmds[links])
 
 
 def test_data_set_links_add_the_source_after_the_priorities_are_written(tmp_path):
@@ -60,3 +66,5 @@ def test_data_set_links_add_the_source_after_the_priorities_are_written(tmp_path
     assert reduce_ < links < add, cmds
     assert f"--base-url {URL} " in cmds[links] and "/rdfc2im/_data-set-links/data_set_links.xml" in cmds[links]
     assert "humanmine/project.xml" in cmds[add] and "genomic_priorities.properties" in cmds[add]
+    write = next(i for i, c in enumerate(cmds) if c.startswith("write ") and "genomic_priorities.properties" in c)
+    assert write < add, cmds       # the priorities file is deployed first, then ranked for DataSet.url/description/version
