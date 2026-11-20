@@ -344,3 +344,24 @@ def test_the_data_source_fields_rank_the_generated_source_first_then_update_data
              for ln in open(path, encoding="utf-8") if ln.startswith("DataSource.")}
     for f in ("DataSource.url", "DataSource.description"):
         assert lines[f] == ["data-set-links", "update-data-sources", "*"], lines
+
+
+def test_an_older_cut_takes_its_release_from_the_cut_itself_not_from_the_newer_download(tmp_path):
+    """BioGRID's case on the ut stack: the cut was made from the download of 04:20 (release.<id> in its group), the raw
+    group holds a later one (11:42). The release is read from the cut's own file names, the raw file is not probed."""
+    t = _tree(tmp_path)
+    e = {"files": [{"id": "rows", "url": "https://example.org/date.tsv", "filter": {"format": "psi-xml", "ids": "entrez"}}]}
+    mp = {"files": [{"id": "rows", "format": "xml",
+                     "release": [{"from": "member_name", "pattern": r"-(\d+\.\d+\.\d+)\.psi25\.xml$", "label": "release"}]}]}
+    _group(t["filtered_cache"], "stock-datesrc", "2026-11-18T04:40:38Z", {"release.rows": "2026-11-18T04:20:41Z"},
+           {"rows/BIOGRID-ORGANISM-Homo_sapiens-5.0.263.psi25.xml": "<x/>"})
+    (f,) = sm.stock_file_facts("datesrc", e, mp, t["stock_dir"], t["filtered_cache"])
+    assert (f["release"], f["last_modified"], f["fetched_at"]) == ("release 5.0.263", "2026-11-18T04:20:41Z", None)
+    assert sp.version_label([f]) == "release 5.0.263"
+
+
+def test_stated_releases_come_before_the_dates_of_the_files_that_state_none():
+    facts = [{"release": None, "last_modified": "2026-11-04T19:25:31Z", "fetched_at": "2026-11-20T04:30:13Z"},
+             {"release": "InterPro 111.0", "last_modified": "2026-11-04T19:19:12Z", "fetched_at": "2026-11-20T03:28:47Z"}]
+    assert sp.version_label(facts) == "InterPro 111.0; Last-Modified 2026-11-04; fetched 2026-11-20"
+    assert sp.version_label([]) is None
