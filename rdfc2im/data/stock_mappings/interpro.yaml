@@ -12,8 +12,8 @@ data_source: InterPro
 data_sets: [InterPro data set]
 home: https://www.ebi.ac.uk/interpro/
 writes: [DataSource, DataSet, ProteinDomain, Publication, CrossReference]
-# The converter is built with storeOntology=false (InterProConverter.java:47), so no SO Ontology item. A CrossReference
-# also gets its own DataSource, named for the member database (PFAM, PROSITE, ...), from createCrossReference.
+# The converter is built with storeOntology=false (InterProConverter.java:62), so no SO Ontology item. A CrossReference
+# also gets its own DataSource, named for the member database (Pfam, PROSITE, ...), from createCrossReference.
 files:
   - id: entries
     format: xml
@@ -24,7 +24,7 @@ files:
     unlisted_reason: >-
       the handler reads the entry's id, short_name and type, its name and abstract, the dbkey of every db_xref in
       its publication, member_list, parent_list and child_list, and the ipr_ref of the relations it names
-      (InterProConverter.java:93-153); every other element and attribute is ignored.
+      (InterProConverter.java:108-168); every other element and attribute is ignored.
     fields:
       - key: "interprodb/interpro/@id"
         name: id
@@ -32,7 +32,7 @@ files:
         maps_to: [ProteinDomain.primaryIdentifier]
         status: loaded
         reason: ""
-        code: InterProConverter.java:97, 192-199
+        code: InterProConverter.java:112, 207-214
         note: "One ProteinDomain per entry, keyed by primaryIdentifier; merges with the stubs protein2ipr makes."
       - key: "interprodb/interpro/@short_name"
         name: short_name
@@ -40,7 +40,7 @@ files:
         maps_to: [ProteinDomain.shortName]
         status: loaded
         reason: ""
-        code: InterProConverter.java:99-100
+        code: InterProConverter.java:114-115
         note: ""
       - key: "interprodb/interpro/@type"
         name: type
@@ -48,7 +48,7 @@ files:
         maps_to: [ProteinDomain.type]
         status: loaded
         reason: ""
-        code: InterProConverter.java:101
+        code: InterProConverter.java:116
         note: ""
       - key: "interprodb/interpro/@protein_count"
         name: protein_count
@@ -56,7 +56,7 @@ files:
         maps_to: []
         status: not loaded
         reason: "not read by the converter"
-        code: InterProConverter.java:93-153
+        code: InterProConverter.java:108-168
         note: ""
       - key: "interprodb/interpro/@is-llm"
         name: is-llm
@@ -64,7 +64,7 @@ files:
         maps_to: []
         status: not loaded
         reason: "not read by the converter"
-        code: InterProConverter.java:93-153
+        code: InterProConverter.java:108-168
         note: "A flag added to the file in recent releases."
       - key: "interprodb/interpro/@is-llm-reviewed"
         name: is-llm-reviewed
@@ -72,7 +72,7 @@ files:
         maps_to: []
         status: not loaded
         reason: "not read by the converter"
-        code: InterProConverter.java:93-153
+        code: InterProConverter.java:108-168
         note: ""
       - key: "interprodb/interpro/name"
         name: name
@@ -80,7 +80,7 @@ files:
         maps_to: [ProteinDomain.name]
         status: loaded
         reason: ""
-        code: InterProConverter.java:110-112, 182-185
+        code: InterProConverter.java:125-127, 197-200
         note: ""
       - key: "interprodb/interpro/abstract"
         name: abstract
@@ -88,7 +88,7 @@ files:
         maps_to: [ProteinDomain.description]
         status: loaded
         reason: "text only"
-        code: InterProConverter.java:113-115, 186-188, 223-250
+        code: InterProConverter.java:128-130, 201-203, 238-265
         note: >-
           All the text inside the abstract element is joined (leading white space of each piece dropped); the
           markup and the citations and cross-references written inside it are not kept. 72,824 of the entries have
@@ -99,18 +99,20 @@ files:
         maps_to: [CrossReference.identifier, CrossReference.source, CrossReference.subject]
         status: loaded
         reason: "db and dbkey only"
-        code: InterProConverter.java:116-128
+        code: InterProConverter.java:131-143
         note: >-
           One CrossReference of the ProteinDomain per signature: identifier = dbkey (PF00051), source = a DataSource
-          named by the db attribute (PFAM, PROSITE, SMART, ...). The signature's name and protein_count attributes
-          are not read.
+          named by the db attribute (PROSITE, SMART, ...), except that the file's "PFAM" is written "Pfam", as
+          protein2ipr, UniProt and Pfam spell it (InterProConverter.memberDatabaseName; Gos Micklem, 20 Nov 2026:
+          "The correct capitalisation is Pfam" [im-9n4.54]). The signature's name and protein_count attributes are
+          not read.
       - key: "interprodb/interpro/pub_list/publication/db_xref"
         name: cited publication
         description: PubMed id of a paper cited by the entry (db PUBMED, dbkey 8606774)
         maps_to: [Publication.pubMedId, ProteinDomain.publications]
         status: loaded
         reason: "dbkey only"
-        code: InterProConverter.java:104-108, 203-218
+        code: InterProConverter.java:119-123, 218-233
         note: >-
           One Publication per distinct dbkey (every db_xref in a publication element is taken to be a PubMed id).
           The paper's title, authors, year, journal and pages in the same element are not read; they come from the
@@ -121,7 +123,7 @@ files:
         maps_to: []
         status: not loaded
         reason: "not read by the converter"
-        code: InterProConverter.java:93-153
+        code: InterProConverter.java:108-168
         note: ""
       - key: "interprodb/interpro/parent_list/rel_ref/@ipr_ref"
         name: parent entry
@@ -129,7 +131,7 @@ files:
         maps_to: [ProteinDomain.parentFeatures]
         status: loaded
         reason: ""
-        code: InterProConverter.java:130-149
+        code: InterProConverter.java:145-164
         note: "The related entry is a ProteinDomain stub keyed by primaryIdentifier."
       - key: "interprodb/interpro/child_list/rel_ref/@ipr_ref"
         name: child entry
@@ -137,7 +139,7 @@ files:
         maps_to: [ProteinDomain.childFeatures]
         status: loaded
         reason: ""
-        code: InterProConverter.java:130-149
+        code: InterProConverter.java:145-164
         note: ""
       - key: "interprodb/interpro/contains"
         name: contains
@@ -145,7 +147,7 @@ files:
         maps_to: [ProteinDomain.contains]
         status: loaded
         reason: "absent from the current file"
-        code: InterProConverter.java:130-149
+        code: InterProConverter.java:145-164
         note: "The handler reads rel_ref elements of found_in and contains; interpro.xml 111.0 has neither."
       - key: "interprodb/interpro/found_in"
         name: found_in
@@ -153,7 +155,7 @@ files:
         maps_to: [ProteinDomain.foundIn]
         status: loaded
         reason: "absent from the current file"
-        code: InterProConverter.java:130-149
+        code: InterProConverter.java:145-164
         note: ""
       - key: "interprodb/interpro/class_list/classification"
         name: classification
@@ -161,7 +163,7 @@ files:
         maps_to: []
         status: not loaded
         reason: "not read by the converter"
-        code: InterProConverter.java:93-153
+        code: InterProConverter.java:108-168
         note: "InterPro's GO mapping comes from the interpro-go source (interpro2go) instead."
       - key: "interprodb/interpro/external_doc_list/db_xref"
         name: external documentation
@@ -169,7 +171,7 @@ files:
         maps_to: []
         status: not loaded
         reason: "not read by the converter"
-        code: InterProConverter.java:93-153
+        code: InterProConverter.java:108-168
         note: ""
       - key: "interprodb/interpro/structure_db_links/db_xref"
         name: structure links
@@ -177,7 +179,7 @@ files:
         maps_to: []
         status: not loaded
         reason: "not read by the converter"
-        code: InterProConverter.java:93-153
+        code: InterProConverter.java:108-168
         note: "2,103,226 values in 31,655 entries: the biggest part of the file."
       - key: "interprodb/interpro/key_species/taxon_data"
         name: key species
@@ -185,7 +187,7 @@ files:
         maps_to: []
         status: not loaded
         reason: "not read by the converter"
-        code: InterProConverter.java:93-153
+        code: InterProConverter.java:108-168
         note: ""
       - key: "interprodb/interpro/taxonomy_distribution/taxon_data"
         name: taxonomy distribution
@@ -193,7 +195,7 @@ files:
         maps_to: []
         status: not loaded
         reason: "not read by the converter"
-        code: InterProConverter.java:93-153
+        code: InterProConverter.java:108-168
         note: ""
       - key: "interprodb/release/dbinfo"
         name: release information
@@ -201,7 +203,7 @@ files:
         maps_to: []
         status: not loaded
         reason: "not read by the converter"
-        code: InterProConverter.java:93-153
+        code: InterProConverter.java:108-168
         note: "DataSet.version is not set."
       - key: "interprodb/deleted_entries/del_ref/@id"
         name: deleted entry
@@ -209,5 +211,5 @@ files:
         maps_to: []
         status: not loaded
         reason: "not read by the converter"
-        code: InterProConverter.java:93-153
+        code: InterProConverter.java:108-168
         note: ""
