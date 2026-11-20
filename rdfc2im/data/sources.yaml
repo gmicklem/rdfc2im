@@ -399,6 +399,33 @@ ensembl:
   rdfportal_licence_note: "RDF Portal's page gives Ensembl's disclaimer page as the licence."
   consts: {Organism.taxonId: "9606"}
   gene_scope_field: secondaryIdentifier
+  # [im-9n4.55] Its genes have an Ensembl id and a label but no Entrez id, and with the type's
+  # Gene keys they merged into whatever gene had the same symbol or Ensembl id: at full scope 845
+  # labels are shared by several Ensembl genes (haplotype copies, PAR genes, Y_RNA, ...), and by
+  # symbol ENSG00000242366 (labelled UGT1A1, UGT1A8 by its own description) went onto UGT1A1 even
+  # in the panel.  Gos Micklem, 20 Nov 2026: "Match on a stable cross-reference instead".
+  # items.join_on_xref gives each the Entrez id that HGNC, then NCBI (their written items, so the
+  # Ensembl id each gene will show), then Ensembl's own rdfs:seeAlso ncbigene name, one-to-one at
+  # the level that decides; the rest are left out of the build (unmatched: drop) and listed in
+  # out/ensembl/items/ensembl_xref_join.tsv.  `unmatched: keep` would load them as Genes keyed on
+  # their Ensembl id instead (BUILD.md, "Ensembl genes by cross-reference").  Needs ncbigene and
+  # hgnc before ensembl in --sources (the default order).
+  xref_join:
+    class: Gene
+    id_field: secondaryIdentifier
+    key: primaryIdentifier
+    sources: [hgnc, ncbigene]
+    own: {table: main_ensg_xref, id: ensg_id, xref: ensg_xref, prefix: "http://identifiers.org/ncbigene/"}
+    unmatched: drop
+  # Then merge on the Entrez id alone, as ncbigene and hgnc (project.source_keys).
+  own_keys: {Gene: [primaryIdentifier]}
+  # A label several joined Ensembl genes share goes from all of them; a symbol or Ensembl id
+  # ncbigene or hgnc gives to another Entrez gene is dropped (they rank first for both fields).
+  key_ambiguity:
+    Gene: [{field: symbol}, {field: secondaryIdentifier}]
+  defer_to:
+    ncbigene: {class: Gene, key: primaryIdentifier, fields: [symbol, secondaryIdentifier]}
+    hgnc: {class: Gene, key: primaryIdentifier, fields: [symbol, secondaryIdentifier]}
   scope: good
   note: not a HumanMine source today; supplies Ensembl ids/biotypes/locations that ncbi-gene lacks
   # Confirmed live: adding FROM <.../dataset/ensembl> to a query combining a VALUES clause with

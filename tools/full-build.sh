@@ -615,9 +615,10 @@ phase_check_prereqs() {
   GRADLE_ENV=(env "JAVA_HOME=$JAVA8_HOME" "${GRADLE_HOME_ENV[@]}")
   log "JAVA8_HOME=$JAVA8_HOME, GRADLE_USER_HOME=$GRADLE_USER_HOME, user.home=$HOME"
   [ "$SCOPE" = full ] || [ -f "$GENE_PANEL" ] || die "gene panel file not found: $GENE_PANEL"
-  if [ "$SCOPE" = full ] && [[ " $SOURCES " == *" ensembl "* ]]; then
-    log "note: --scope full fetches ensembl for every gene, and it merges on symbol and Ensembl id with no key_ambiguity" \
-      "for the 845 labels several Ensembl genes share (BUILD.md, \"Full scope\"): leave it out of --sources for now"
+  if [[ " $SOURCES " == *" ensembl "* ]] && { [[ " $SOURCES " != *" ncbigene "* ]] || [[ " $SOURCES " != *" hgnc "* ]]; }; then
+    log "note: ensembl joins NCBI genes through the items of ncbigene and hgnc (sources.yaml xref_join, im-9n4.55);" \
+      "without them in --sources (before ensembl) only Ensembl's own ncbigene cross-references can join, and every other" \
+      "Ensembl gene is left out of the build"
   fi
   # A misspelled --sources entry falling through to SCOPE_MODE's ${...:-none} default would
   # silently fetch that source completely unscoped instead of erroring - exactly the kind of
@@ -886,6 +887,12 @@ phase_rdfc2im_pipeline() {
     fi
     run python3 -m rdfc2im tsv --source "$src"
     run python3 -m rdfc2im items --source "$src"
+    # ensembl's cross-reference join [im-9n4.55]: one row per Ensembl gene, joined (and through which
+    # source) or left out and why; the counts are the WARNING line of the items step above.
+    if [ "$DRY_RUN" -eq 0 ] && [ -f "out/$src/items/${src}_xref_join.tsv" ]; then
+      cat "out/$src/items/${src}_xref_join.tsv" > "$LOG_DIR/${src}_xref_join-$RUN_ID.tsv"
+      log "$src: cross-reference join report -> $LOG_DIR/${src}_xref_join-$RUN_ID.tsv"
+    fi
   done
   if [ "$USE_CACHED_DATA" -eq 0 ] && uses_lookup; then
     # shellcheck disable=SC2046

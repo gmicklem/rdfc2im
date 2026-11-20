@@ -427,6 +427,206 @@ def defer_to_source(store: ItemStore, other_items: str, cls: str, key: str, fiel
     return n
 
 
+def xref_pairs_from_items(path: str, cls: str, key: str, id_field: str) -> Tuple[List[Tuple[str, str]], set]:
+    """(id, key) pairs of the `cls` items another source wrote (e.g. hgnc's Gene: Ensembl id,
+    Entrez id), and the set of every `key` value there.  Read from the WRITTEN items, after that
+    source's key_ambiguity and defer_to, so the pairs are the Ensembl ids the mine will show.  A
+    missing file gives ([], set())."""
+    pairs, known = [], set()
+    if not os.path.exists(path):
+        return pairs, known
+    import xml.etree.ElementTree as ET
+    for _, el in ET.iterparse(path):
+        if el.tag == "item":
+            if el.get("class") == cls:
+                a = {x.get("name"): x.get("value") for x in el.findall("attribute")}
+                if a.get(key):
+                    known.add(a[key])
+                    if a.get(id_field):
+                        pairs.append((a[id_field], a[key]))
+            el.clear()
+    return pairs, known
+
+
+def xref_pairs_from_raw(path: str, id_var: str, xref_var: str, prefix: str) -> List[Tuple[str, str]]:
+    """(id, key) pairs from a source's own raw cross-reference table (the fetched SPARQL TSV:
+    ensembl's main_ensg_xref, rdfs:seeAlso <http://identifiers.org/ncbigene/N>).  The cleaned tsv/
+    copy keeps only the IRI's local name, which loses which database it names."""
+    out: List[Tuple[str, str]] = []
+    if not os.path.exists(path):
+        return out
+    with open(path, encoding="utf-8", newline="") as fh:
+        rd = csv.reader(fh, delimiter="\t", quoting=csv.QUOTE_NONE)
+        header = [h.strip().lstrip("?").strip('"') for h in next(rd, [])]
+        if id_var not in header or xref_var not in header:
+            return out
+        i, j = header.index(id_var), header.index(xref_var)
+        for row in rd:
+            if len(row) <= max(i, j):
+                continue
+            v, x = row[i].strip().strip('"'), row[j].strip().strip("<>").strip('"')
+            if v and x.startswith(prefix) and x[len(prefix):]:
+                out.append((v, x[len(prefix):]))
+    return sorted(set(out))
+
+
+def drop_items(store: ItemStore, keys) -> int:
+    """Remove the items `keys` and the items that hang only off them: an item with a reference to
+    a removed one (a Synonym's subject, a CrossReference's subject) goes too unless some kept item
+    still points at it (CrossReference items are keyed on the identifier and shared).  Returns the
+    number of dependent items removed."""
+    gone = set(k for k in keys if k in store.items)
+    for k in gone:
+        del store.items[k]
+    pointed = set()
+    for it in store.items.values():
+        pointed.update(it.refs.values())
+        for lst in it.colls.values():
+            pointed.update(lst)
+    deps = [k for k, it in store.items.items()
+            if k not in pointed and any(v in gone for v in it.refs.values())]
+    for k in deps:
+        del store.items[k]
+    for it in store.items.values():
+        for f in [f for f, v in it.refs.items() if v in gone]:
+            del it.refs[f]
+        for f, lst in it.colls.items():
+            if any(v in gone for v in lst):
+                it.colls[f] = [v for v in lst if v not in gone]
+    return len(deps)
+
+
+def join_on_xref(store: ItemStore, levels: List[Tuple[str, List[Tuple[str, str]]]], known: Optional[set] = None,
+                 cls: str = "Gene", id_field: str = "secondaryIdentifier", key: str = "primaryIdentifier",
+                 unmatched: str = "drop") -> List[dict]:
+    """Give this source's `cls` items (named by `id_field`, the Ensembl gene id) the `key` (the
+    Entrez id) a stable cross-reference names, instead of letting InterMine merge them on symbol
+    [im-9n4.55].  Gos Micklem, 20 Nov 2026: "Match on a stable cross-reference instead".
+
+    `levels` is [(name, [(id, key), ...])] in precedence order: hgnc, ncbigene (their written
+    items), then the source's own cross-reference.  The rule, deterministic (sorted, no first-seen):
+      * a level pairs an id with a key only when, at that level, the id names one key and the key
+        one id (one-to-many and many-to-one inside one source have no principled winner: neither
+        side is paired by it), and neither is paired already by a higher level;
+      * so where the sources disagree the higher one stands, the same order as
+        Gene.secondaryIdentifier in curation/priorities_override.properties: the Entrez gene that
+        will SHOW this Ensembl id is the one its Ensembl data joins, and no Gene ends up holding
+        the data of one Ensembl gene and the id of another;
+      * a key not among `known` (the Entrez ids of the genes in the build) is not a target;
+      * an item no level pairs is `unmatched`: "drop" (default) leaves it, and the items that hang
+        only off it, out of the build; "keep" loads it as a Gene of its own, `key` = its own id.
+    Returns one report row per item, sorted by id: ensembl_id, symbol, status (joined, ambiguous,
+    unmatched, kept), entrez, via, reason, disagree (what the lower levels said otherwise)."""
+    items = sorted(((it.attrs[id_field], k) for k, it in store.items.items()
+                    if it.cls == cls and it.attrs.get(id_field)), key=lambda t: t[0])
+    by_level = []
+    for name, pairs in levels:
+        g2e: Dict[str, set] = {}
+        e2g: Dict[str, set] = {}
+        for g, e in pairs:
+            if known is not None and e not in known:
+                continue
+            g2e.setdefault(g, set()).add(e)
+            e2g.setdefault(e, set()).add(g)
+        by_level.append((name, g2e, e2g, {g for g, e in pairs if known is not None and e not in known}))
+    got_g: Dict[str, Tuple[str, str]] = {}   # id -> (key, level)
+    got_e: Dict[str, str] = {}               # key -> id
+    for name, g2e, e2g, _ in by_level:
+        for g in sorted(g2e):
+            es = g2e[g]
+            if g in got_g or len(es) != 1:
+                continue
+            e = next(iter(es))
+            if e in got_e or len(e2g[e]) != 1:
+                continue
+            got_g[g], got_e[e] = (e, name), g
+    rows, drop = [], []
+    for g, k in items:
+        it = store.items[k]
+        row = {"ensembl_id": g, "symbol": it.attrs.get("symbol", ""), "status": "", "entrez": "",
+               "via": "", "reason": "", "disagree": ""}
+        said = [(name, sorted(g2e[g])) for name, g2e, _, _ in by_level if g in g2e]
+        if g in got_g:
+            e, via = got_g[g]
+            it.attrs[key] = e
+            row.update(status="joined", entrez=e, via=via)
+            row["disagree"] = "; ".join(f"{n}: {','.join(es)}" for n, es in said if es != [e])
+        else:
+            multi = next(((n, es) for n, es in said if len(es) > 1), None)
+            blocked = [(n, es[0]) for n, es in said if len(es) == 1]
+            if multi:
+                row.update(status="ambiguous", entrez=",".join(multi[1]), via=multi[0],
+                           reason=f"{multi[0]} names {len(multi[1])} NCBI genes")
+            elif blocked:
+                n, e = blocked[0]
+                others = sorted(by_level[[b[0] for b in by_level].index(n)][2][e])
+                if e in got_e:
+                    row.update(status="unmatched", entrez=e, via=n,
+                               reason=f"NCBI gene {e} has {got_e[e]} (from {got_g[got_e[e]][1]})")
+                else:
+                    row.update(status="ambiguous", entrez=e, via=n,
+                               reason=f"{n} names NCBI gene {e} for {len(others)} Ensembl genes: {','.join(others)}")
+            else:
+                missing = [n for n, _, _, out in by_level if g in out]
+                absent = ",".join(sorted({e for n, pairs in levels if n in missing for gg, e in pairs if gg == g}))
+                row.update(status="unmatched", entrez=absent,
+                           reason=(f"{','.join(missing)} names NCBI gene {absent}, not in the build" if missing
+                                   else "no cross-reference to an NCBI gene"))
+            if unmatched == "keep":
+                it.attrs[key] = g
+                row["status"] = "kept"
+            else:
+                drop.append(k)
+        rows.append(row)
+    drop_items(store, drop)
+    return rows
+
+
+XREF_REPORT_COLUMNS = ["ensembl_id", "symbol", "status", "entrez", "via", "reason", "disagree"]
+
+
+def _run_xref_join(store: ItemStore, out_dir: str, src: str, xcfg: dict, stats: dict) -> None:
+    """sources.yaml `xref_join` (ensembl): the other sources' written items and this source's own
+    raw cross-reference table, joined by join_on_xref; the report goes to items/<src>_xref_join.tsv."""
+    cls, id_field, key = xcfg.get("class", "Gene"), xcfg.get("id_field", "secondaryIdentifier"), \
+        xcfg.get("key", "primaryIdentifier")
+    root = os.path.dirname(os.path.abspath(out_dir))
+    levels, known = [], set()
+    for other in xcfg.get("sources") or []:
+        path = os.path.join(root, other, "items", f"{other}.xml")
+        if not os.path.exists(path):
+            stats["notes"].append(f"xref_join: no {other} items at {path} - write {other}'s items before {src}'s, "
+                                  f"or none of its genes can join through {other}")
+        pairs, k = xref_pairs_from_items(path, cls, key, id_field)
+        levels.append((other, pairs))
+        known |= k
+    own = xcfg.get("own")
+    if own:
+        levels.append((src, xref_pairs_from_raw(os.path.join(out_dir, "raw", f"{own['table']}.tsv"),
+                                                own["id"], own["xref"], own["prefix"])))
+    rows = join_on_xref(store, levels, known, cls, id_field, key, xcfg.get("unmatched", "drop"))
+    os.makedirs(os.path.join(out_dir, "items"), exist_ok=True)
+    with open(os.path.join(out_dir, "items", f"{src}_xref_join.tsv"), "w", encoding="utf-8") as fh:
+        fh.write("\t".join(XREF_REPORT_COLUMNS) + "\n")
+        for r in rows:
+            fh.write("\t".join(str(r[c]).replace("\t", " ") for c in XREF_REPORT_COLUMNS) + "\n")
+    counts: Dict[str, int] = {}
+    for r in rows:
+        counts[r["status"]] = counts.get(r["status"], 0) + 1
+    by_via: Dict[str, int] = {}
+    for r in rows:
+        if r["status"] == "joined":
+            by_via[r["via"]] = by_via.get(r["via"], 0) + 1
+    stats["xref_join"] = {"counts": counts, "via": by_via}
+    left = counts.get("unmatched", 0) + counts.get("ambiguous", 0)
+    what = "loaded as Genes of their own (unmatched: keep)" if xcfg.get("unmatched") == "keep" else "left out of the build"
+    stats["notes"].append(
+        f"{cls}: {left} of {len(rows)} Ensembl genes not joined to an NCBI gene by cross-reference "
+        f"({counts.get('unmatched', 0)} unmatched, {counts.get('ambiguous', 0)} ambiguous), {what}; joined "
+        + ", ".join(f"{n} by {v}" for v, n in sorted(by_via.items()))
+        + f" - items/{src}_xref_join.tsv")
+
+
 def emit_items(model: InterMineModel, out_dir: str, src: str, source_cfg: dict, log=print) -> dict:
     cols = read_tsv(os.path.join(out_dir, "columns.tsv"))
     tables: Dict[str, List[dict]] = {}
@@ -484,6 +684,10 @@ def emit_items(model: InterMineModel, out_dir: str, src: str, source_cfg: dict, 
                     if src_key is None or src_key == k:
                         continue
                     store.link(src_key, vf, k)
+    # The cross-reference join first: key_ambiguity and defer_to below then see the Entrez ids it
+    # gave, and not the genes it left out [im-9n4.55].
+    if source_cfg.get("xref_join"):
+        _run_xref_join(store, out_dir, src, source_cfg["xref_join"], stats)
     for cls, kcfgs in (source_cfg.get("key_ambiguity") or {}).items():
         for kcfg in (kcfgs if isinstance(kcfgs, list) else [kcfgs]):   # one field, or a list of them
             n = resolve_key_ambiguity(store, cls, kcfg["field"], kcfg.get("prefer_field"), kcfg.get("prefer_value"))
