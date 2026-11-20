@@ -2239,9 +2239,11 @@ other group of `cached_raw_data.trembl-seq-2026-11-18`; a build without `--use-c
 itself. The panel release asset (`cached_raw_data-*.tar.gz`) needs the same group: the panel build's list is the same
 3,930 PMIDs, since the hgnc cut gives the panel build's hgnc items (im-9n4.40).
 
-Not in the list, and a question of their own: 84 bare Publications (a `pubMedId` and nothing else) that no object
-cites, on the same demo. 80 are bibrefs of psi-intact experiments whose interactions the panel filter dropped, 4 are
-references of go-annotation rows that loaded no annotation. The live test holds them to a bound (150).
+Not in the list: 84 bare Publications (a `pubMedId` and nothing else) that no object cited, on the same demo (66
+after update-publications had titled them: 62 psi-intact, 4 humanmine-static). The psi-intact ones were bibrefs of
+experiments whose interactions the panel cut dropped: `PsiConverter` stored the paper when it read the bibref and
+the experiment only with a kept interaction. It now stores the paper with the experiment [im-9n4.56], and the
+rebuild of 20 Nov 2026 has no uncited Publication; the live test allows none.
 
 ## The milestone 3 sources: interpro, protein2ipr, pubmed-gene, mgi-alleles, humanmine-static, update-data-sources, update-publications, entrez-organism [im-9n4.27, T3.3]
 
@@ -2255,7 +2257,7 @@ The `drive-ut-NAME.sh` stock list adds them after `orphanet`. DepMap is not in t
 | `pubmed-gene` | `Gene.publications` (a `Publication` with a `pubMedId` per row) | rows of the panel's Entrez ids (column 2) | whole | 291 MB gzipped, every taxon |
 | `mgi-alleles` | mouse `Allele`, `Genotype`, `Gene.alleles`, `MammalianPhenotypeTerm` links | rows whose marker is a mouse gene on the panel's PANTHER rows (`idsets/mgi.txt`) | whole, but column 10 of the alleles file is still dropped | 32 + 1.3 + 54 MB |
 | `humanmine-static` | retired [im-9n4.52]: see "DataSet versions" below | | | |
-| `update-data-sources` | `DataSource.url`, `description` and a `Publication` for each DataSource named like a UniProt database | none (UniProt's `dbxref.txt`, 56 KB) | none | |
+| `update-data-sources` | `DataSource.url`, `description` and a `Publication` for each DataSource named like a UniProt database (one per PubMed id since [im-9n4.56]) | none (UniProt's `dbxref.txt`, 56 KB) | none | |
 | `update-publications` | `Publication` title, authors, year, journal, abstract, from E-utilities | none (it reads the mine) | none | needs `eutils.ncbi.nlm.nih.gov` (372 MB `publications.xml`, 16 min) |
 | `entrez-organism` | `Organism` name, genus, species, short name, from E-utilities | none (it reads the mine) | none | needs `eutils.ncbi.nlm.nih.gov` |
 
@@ -2320,7 +2322,11 @@ that file, which `:dbmodel:integrate -Psource=NAME` runs as one. They need the b
 `eutils.ncbi.nlm.nih.gov`, which the sandbox blocked until `sbx policy allow network eutils.ncbi.nlm.nih.gov` (HTTP 403,
 "Approval required", 20 Nov 2026; allowed the same day). `drive-ut-9n427e.sh` has both in `DRIVE_STOCK`, last.
 
-**They have now run, on the built ut demo, without a rebuild** [im-9n4.27, 20 Nov 2026]: the two `<source>` entries added
+**A normal build runs them** since [im-9n4.56]: `rdfc2im project` puts them, with update-data-sources, after every
+other source (`reads_mine` in `stock_sources.yaml`), and the rebuild of 20 Nov 2026 below loaded them in
+`integrate_sources` with nothing done by hand. The hand-run that came first is kept here for its findings.
+
+**They first ran on the built ut demo, without a rebuild** [im-9n4.27, 20 Nov 2026]: the two `<source>` entries added
 to the mine's `project.xml` (what `rdfc2im project` writes for the new stock list, `src.data.file` `publications.xml` and
 `organisms.xml`, `loadFullRecord=true`), then in the mine's directory `:dbmodel:integrate -Psource=update-publications`,
 `:dbmodel:integrate -Psource=entrez-organism`, and from `postprocess` only what the new data needs:
@@ -2345,8 +2351,9 @@ NCBI; `publications.xml` is 372 MB) and the load took 3 more minutes; `entrez-or
 Title words are not searched (`keyword_search.properties` does not index `Publication.title`); first authors, journals
 and PubMed ids are: `q=Ashburner` finds the Gene Ontology paper (PMID 10802651) and its authors.
 
-Three things stopped the first loads, in this order; the first is in `curation/priorities_override.properties` now, the
-other two are not fixed in the build:
+Three things stopped the first loads, in this order; all three are dealt with in a normal build since [im-9n4.56]
+(the first in `curation/priorities_override.properties`, the second by the build's own order, the third in the
+converters; "The rebuild of 20 Nov 2026" below):
 
 * **Publication fields with no priority.** `Conflicting values for field Publication.abstractText between humanmine-pubmed
   and update-publications`: the RDF pubmed source and E-utilities write the same abstract with different whitespace and
@@ -2360,13 +2367,18 @@ other two are not fixed in the build:
   before the load (their definitions are in the scratch directory) and `create-attribute-indexes` could not make them
   again for the same reason; InterMine logs it and goes on. In a full build the indexes do not exist yet when
   `integrate_sources` runs, so only the missing abstract indexes remain. Queries that constrain on `abstractText` are
-  a table scan.
+  a table scan. This is how InterMine means it: `CreateIndexesTask.createIndex` catches the SQLException ("ignore -
+  we just don't create this index"), logs `failed to create index` and prints `Failed to create index NAME`, and the
+  task goes on; there is no exclusion list or length property, and a mine with millions of abstracts has the same
+  two missing indexes. Nothing to configure, nothing to drop by hand in a full build.
 * **Three pairs of duplicate Publications.** PMIDs 10802651, 27899635 and 28138153 are each held twice in the mine (bare
   ids, the three duplicates the live test allows), and an item whose key matches two stored objects stops the load
   (`Duplicate objects from the same data source`). The second of each pair had its `pubMedId` set to NULL for the load
-  and put back after; the pair stays a titled object and a bare one, as the test already tolerates. A full rebuild
-  stops at `update-publications` on the same three PMIDs until the duplicates' cause (two objects with one key from the
-  same source, whichever writes them) is found.
+  and put back after; the pair stays a titled object and a bare one, as the test already tolerates. The cause: a
+  loader does not merge two items of one load that share a key. `humanmine-static`'s datasets.xml named 27899635 and
+  10802651 twice each (retired, [im-9n4.52]); `DataSourceUpdater` (update-data-sources) wrote one Publication item per
+  DataSource, and dbxref.txt gives PubMed=28138153 for both NDEx and CIViC. It now writes one per PubMed id
+  (InterMine `maint/im-9n4.56-rebuild-fixes`, test `testOnePublicationPerPubMedIdWhenTwoDatabasesCiteIt`).
 
 Every failed load leaves the **tracker** table (field to source, written outside the load's transaction) with rows for
 objects the rolled-back load did not store; with them in place the next try says "already an equivalent ... from a
@@ -2426,6 +2438,17 @@ the mine to it; three DataSets have data no object links to, named in the test w
 Portal)`: Publication has no `dataSets`; `modMine gene flanking regions`: InterMine's postprocess links none of its
 regions; the empty GTEx eQTL set).
 
+**Reference publications** [im-9n4.56] (Gos Micklem, 20 Nov 2026: data sets link to their reference publication). Each
+stock mapping file and sources.yaml entry may carry `citation_pmid` with `citation_evidence` (the source's own
+citation page, the date it was read and its words), or `citation_note` saying why none is recorded. data-set-links
+writes the paper as `DataSet.publication` (a Publication with the pubMedId; update-publications, loaded after it, gives
+the title and authors) and the status pages show it. Every PMID was read on the source's page and resolved through
+E-utilities esummary on 20 Nov 2026; where the page prints only a DOI, esearch on the DOI gave the PMID. RDF sources
+cite the original provider, as RDF Portal's FAQ asks. 23 of the 32 data sets are cited (16 papers); none for PANTHER
+(pantherdb.org refuses the sandbox), PSI-MI (psidev.info blocked), GTEx and Orphanet (they ask for a data statement, not a
+paper), and NCBI Gene, ClinVar, PubMed and gene2pubmed (NCBI's help pages answered with a reCAPTCHA page,
+pubmed.ncbi.nlm.nih.gov blocked). Live test `test_every_data_set_whose_source_asks_to_be_cited_links_to_that_paper_with_a_title`.
+
 **DepMap** (`depmap-sample-info`, `depmap-expression`) is not wired; its licence is being read elsewhere. What it
 needs: `sample_info.csv` and `CCLE_expression.csv` from the DepMap portal (no stable URL: a release is picked by
 name, and a person has to fetch the files, or `--stock-local DIR` supplies them as for OMIM, with `local_copy:
@@ -2437,6 +2460,72 @@ matrix of about 1,400 cell lines by 19,000 genes ("SYMBOL (EntrezID)" as the hea
 `DepmapExpressionConverter.GENE_LIST_FILE` is empty, so the ID-resolver gate (the all-human `entrez` file) is what
 drops the rest. Table entries, the two project.xml data directories (`/micklem/data/human/depmap`) and a live test
 (`DepMapExpression` of a panel gene in a named cell line) are the rest.
+
+## The rebuild of 20 Nov 2026 [im-9n4.56]
+
+The merged head (rdfc2im d919cb8 plus the im-9n4.56 commits; InterMine `local/ut-build-src` with the im-9n4.56 and
+im-9n4.54 converter commits; humanmine-bio-sources maint-2026 1d36e19, `$TRIAL_HOME/humanmine-bio-sources` removed first
+so `build_humanmine_items` copied it again) built with `drive-ut-9n456.sh`: every phase, `--offline`, the stock list of
+`drive-ut-9n427e.sh` without `humanmine-static`. `--offline` does not reach the two E-utilities sources (it guards the
+rdfc2im fetches and the upstream clones; the Java retrievers in `integrate_sources` reach eutils.ncbi.nlm.nih.gov as any
+JVM of the build does), so `DRIVE_OFFLINE=0` was not needed. Nothing was done by hand.
+
+What had to change first (each test-first):
+
+* **Duplicate Publications** (PMIDs 10802651, 27899635, 28138153). A loader does not merge two items of one load that
+  share a key. humanmine-static wrote two of the pairs (retired); `DataSourceUpdater` wrote one Publication item per
+  DataSource and dbxref.txt cites 28138153 for NDEx and for CIViC. It now writes one per PubMed id (InterMine
+  `DataSourceUpdaterTest.testOnePublicationPerPubMedIdWhenTwoDatabasesCiteIt`). On the rebuild no PubMed id is held
+  twice; the live test's bound is 0.
+* **The abstract indexes.** Nothing to change: InterMine skips an index it cannot build (`CreateIndexesTask`: "ignore -
+  we just don't create this index"), and in a full build no attribute index exists while the sources load.
+  `postprocess` ended rc=0 and logged `Failed to create index` for `publication__abstracttext_equals`/`_like` and
+  `pathway__description_equals`/`_like` (long Reactome descriptions), the same as before. A query that constrains
+  `Publication.abstractText` or `Pathway.description` reads the table.
+* **Order.** HumanMine's project.xml has update-publications before update-data-sources, which writes Publications,
+  and data-set-links was appended after all three. `stock_sources.yaml` marks the three sources that read the mine
+  (`reads_mine`); `rdfc2im project` puts them last in the order their `after` gives (update-data-sources,
+  update-publications, entrez-organism), whatever the input order, and `add-links-source` puts data-set-links in front
+  of them. Tests: `test_the_sources_that_read_the_mine_are_marked_and_ordered_by_what_they_read`,
+  `test_rdfc2im_project_writes_the_readers_last_whatever_humanmines_order`,
+  `test_add_links_source_goes_before_the_sources_that_read_the_mine`.
+* **Pfam** [im-9n4.54] (Gos Micklem, 20 Nov 2026: "The correct capitalisation is Pfam"). interpro wrote the member
+  database as interpro.xml spells it, "PFAM", and go-annotation followed it; protein2ipr, UniProt and the RDF uniprot
+  source write "Pfam". Both converters now write "Pfam"; no template or report layout constrains on the name. The mine
+  has one Pfam DataSource (339 CrossReferences: 209 of interpro's, 130 of uniprot's) and `ProteinDomainRegion.database`
+  "Pfam"; live test `test_pfam_is_one_data_source_spelt_pfam`.
+* **Uncited bare Publications**: see "The cited-PMID set" above (psi-intact, now 0).
+
+**Phases** (`phases.tsv`, 10:12:00 to 10:49:52, 2,266 s, every rc 0):
+
+| Phase | s | Phase | s |
+|---|---|---|---|
+| check_prereqs | 0 | start_databases | 1 |
+| fetch_inputs | 3 | build_dbmodel | 31 |
+| publish_intermine | 210 | **integrate_sources** | **1,164** |
+| rdfc2im_pipeline | 112 | **postprocess** | **402** |
+| rdfc2im_project | 8 | build_webapp | 16 |
+| build_humanmine_items | 11 | resolve_bluegenes_deps / stage_artifacts | 3 / 5 |
+| build_stock_sources | 28 | start_mine_stack | 14 |
+| fetch_stock_data | 8 | apply_templates | 15 |
+| subset_stock_data | 21 | apply_public_lists | 196 |
+| prepare_mine_checkout / stage_src_data | 2 / 2 | verify / write_source_manifest | 6 / 8 |
+
+update-publications took 2 min 47 s: its BerkeleyDB cache of fetched records (the `*.jdb` files in the temp directory,
+570 MB, from the hand-run) held all but a few ids, so the 16-minute fetch was not repeated; without that cache count on
+16 minutes more. entrez-organism 14 s. **Memory** (`memlog.tsv`): peak 14.6 GB used, 1.56 GB available (10:45:34, the
+end of `postprocess`), with the default stack's containers running. **Disk**: root at 1.9 to 2.1 GB free throughout.
+
+**The prepare line**: `32 data sets, 31 with a version, 8 data sources; no version: Single-Tissue cis-eQTL Data`, as
+expected. The mine has 33 DataSets: the 32 and `modMine gene flanking regions`, which InterMine's flanking-region
+postprocess makes and dates itself.
+
+**Objects** against the build before it (the 20 Nov ut demo after the hand-run): 1,727,817 to 1,727,148. Only two
+classes moved by more than 1%: DataSet 67 to 33 and DataSource 165 to 152 (humanmine-static's records). Publication
+120,042 to 119,957 (the 3 duplicates, 62 uncited psi-intact bibrefs, humanmine-static's papers), 119,911 with a title;
+Author 517,226 to 516,704; MeshTerm 21,941 to 21,926; every other class equal (ProteinDomainRegion 15,128, Allele 61,167,
+Organism 7, all named). Tests: `make test` 589 passed, 74 skipped; `make test-live` 74 passed, 0 skipped, 1 failed
+(the citation test below, written after this build started).
 
 ## Persistence, and what does not survive
 
