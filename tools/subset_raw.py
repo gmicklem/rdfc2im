@@ -9,12 +9,15 @@ written transparently by file suffix.
   subset_raw.py idsets --genes FILE --out DIR [--items-root DIR] [--lookup-dir DIR] [--taxon ID]
       Derive the panel id sets (entrez.txt, ensembl.txt, uniprot.txt, symbol.txt, idsets.json).
 
-  subset_raw.py filter --format gaf|gff3|uniprot-xml|fasta|tab|gene_info|psi-xml --in PATH --out PATH
+  subset_raw.py filter --format gaf|gff3|uniprot-xml|fasta|tab|gene_info|psi-xml|interpro-xml --in PATH|URL --out PATH
                        [--ids FILE] [--column N[,N...]] [--taxon ID] [--keep-comments]
       Filter one raw file; prints one JSON line with the record counts. gff3 also takes
       --keep-types gene (rows of that type kept for every id, without descendants). psi-xml
       (PSI-MI 2.5 XML) takes --xref-db DB[,DB...] (which xrefs carry the panel ids) and, for a zip
       input, --member GLOB; --out is then a directory, one filtered file per member.
+
+  subset_raw.py ipr-ids --in FILTERED_PROTEIN2IPR --out DIR
+      ipr.txt: the InterPro entries of the panel's domain matches (interpro.xml is then cut to them).
 
   subset_raw.py partner-ids --in PANTHER_FILE --ids UNIPROT_IDS --out DIR
       mgi.txt and rgd.txt: the MGI and RGD ids of every gene on a PANTHER row with a panel gene.
@@ -34,6 +37,7 @@ import argparse
 import glob
 import gzip
 import hashlib
+import http.client
 import io
 import json
 import os
@@ -41,8 +45,8 @@ import re
 import sys
 import xml.etree.ElementTree as ET
 
-FORMATS = ("gaf", "gff3", "uniprot-xml", "fasta", "tab", "gene_info", "psi-xml")
-NEEDS_IDS = ("gaf", "gff3", "uniprot-xml", "fasta", "tab", "psi-xml")
+FORMATS = ("gaf", "gff3", "uniprot-xml", "fasta", "tab", "gene_info", "psi-xml", "interpro-xml")
+NEEDS_IDS = ("gaf", "gff3", "uniprot-xml", "fasta", "tab", "psi-xml", "interpro-xml")
 
 
 class SubsetError(Exception):
@@ -51,10 +55,79 @@ class SubsetError(Exception):
 
 # ---------------------------------------------------------------- file helpers
 
+def is_url(path):
+    return str(path).startswith(("http://", "https://"))
+
+
+class HttpStream(io.RawIOBase):
+    """A read-only byte stream over an http(s) URL that reconnects with a Range request when the connection
+    drops, so a one-hour download of a multi-gigabyte file (protein2ipr.dat.gz, 13.8 GB) survives a broken
+    connection without starting again [im-9n4.27]. Nothing is written to disk."""
+
+    def __init__(self, url, retries=30, timeout=120, opener=None):
+        import urllib.request
+        self.url, self.retries, self.timeout = url, retries, timeout
+        self._urlopen = opener or urllib.request.urlopen
+        self._Request = urllib.request.Request
+        self.pos = 0
+        self.size = None
+        self._resp = None
+
+    def readable(self):
+        return True
+
+    def _connect(self):
+        headers = {"User-Agent": "rdfc2im-subset-raw"}
+        if self.pos:
+            headers["Range"] = f"bytes={self.pos}-"
+        resp = self._urlopen(self._Request(self.url, headers=headers), timeout=self.timeout)
+        if self.pos and getattr(resp, "status", 200) != 206:
+            resp.close()
+            raise SubsetError(f"{self.url}: the server ignored a Range request at byte {self.pos}; "
+                              f"the download cannot be resumed (a repeat of the start would corrupt the cut)")
+        if self.size is None:
+            n = resp.headers.get("Content-Length")
+            self.size = int(n) if n and not self.pos else None
+        self._resp = resp
+
+    def readinto(self, b):
+        import time
+        failures = 0
+        while True:
+            try:
+                if self._resp is None:
+                    self._connect()
+                data = self._resp.read(len(b))
+                if not data and self.size is not None and self.pos < self.size:
+                    raise OSError("connection closed early")
+                b[:len(data)] = data
+                self.pos += len(data)
+                return len(data)
+            except (OSError, ValueError, http.client.HTTPException) as e:   # URLError and timeouts are OSError
+                failures += 1
+                if failures > self.retries:
+                    raise OSError(f"{self.url}: gave up at byte {self.pos} after {failures} tries: {e}")
+                print(f"subset_raw: {self.url}: {e}; reconnecting at byte {self.pos} (try {failures})", file=sys.stderr)
+                self._resp = None
+                time.sleep(min(30, 2 * failures))
+
+    def close(self):
+        if self._resp is not None:
+            self._resp.close()
+        super().close()
+
+
 def open_text(path, mode="r"):
-    """Open a text file for reading ('r') or writing ('w'); `.gz` suffix means gzip.
-    Newlines are not translated, so output is byte-faithful to the input lines. gzip output has
-    a zero mtime and no stored file name, so the same input always gives the same bytes."""
+    """Open a text file for reading ('r') or writing ('w'); `.gz` suffix means gzip. A URL is streamed (read only;
+    gzip when it ends in .gz), nothing stored. Newlines are not translated, so output is byte-faithful to the
+    input lines. gzip output has a zero mtime and no stored file name, so the same input always gives the same bytes."""
+    if is_url(path):
+        if mode != "r":
+            raise SubsetError(f"{path}: a URL can only be read")
+        raw = io.BufferedReader(HttpStream(path), buffer_size=1 << 20)
+        if path.split("?", 1)[0].endswith(".gz"):
+            raw = gzip.GzipFile(fileobj=raw, mode="rb")
+        return io.TextIOWrapper(raw, encoding="utf-8", newline="")
     if path.endswith(".gz"):
         if mode == "r":
             return io.TextIOWrapper(gzip.open(path, "rb"), encoding="utf-8", newline="")
@@ -405,6 +478,17 @@ def parse_types(spec):
     return {t.strip() for t in (spec or "").split(",") if t.strip()}
 
 
+def parse_require(specs):
+    """['4=^(PF|SM)'] -> [(3, regex)]: --require COLUMN=REGEX, 1-based column."""
+    out = []
+    for spec in specs or ():
+        col, sep, rx = spec.partition("=")
+        if not sep or not col.isdigit() or int(col) < 1 or not rx:
+            raise SubsetError(f"--require wants COLUMN=REGEX with a 1-based column, got {spec!r}")
+        out.append((int(col) - 1, re.compile(rx)))
+    return out
+
+
 def parse_columns(spec):
     cols = []
     for part in spec.split(","):
@@ -415,15 +499,24 @@ def parse_columns(spec):
     return cols
 
 
-def filter_tab(src, dst, ids, columns, keep_comments=False):
-    """Keep a row when ANY listed column holds an id from ids ('at least one panel gene').
-    Lines starting with '#' are always kept; with keep_comments the first line is kept too (a
-    header row that has no '#'), and an integer keeps that many leading lines (GTEx's GCT: `#1.2`, a
-    dimensions line, then the header). None of them counts as a record."""
+def filter_tab(src, dst, ids, columns, keep_comments=False, drop=(), require=()):
+    """Keep a row when ANY listed column holds an id from ids ('at least one panel gene'); with ids None every
+    row is kept (only `drop` applies). Lines starting with '#' are always kept; with keep_comments the first
+    line is kept too (a header row that has no '#'), and an integer keeps that many leading lines (GTEx's GCT:
+    `#1.2`, a dimensions line, then the header). None of them counts as a record.
+
+    drop: 0-based columns taken out of every kept record (not of the kept header lines), for a file whose
+    column layout moved since the loader was written: MGI_PhenotypicAllele.rpt gained 'Marker Ensembl ID' as
+    column 10, which MgiAllelesConverter reads as the Mammalian Phenotype ids [im-9n4.27].
+
+    require: (0-based column, compiled regex) pairs; a row must match every one to be kept. For a file with
+    values the loader throws on: Protein2iprConverter stops on a member-database id it has no name for (NCBIFAM
+    'NF00...' is new since its 2022 table) [im-9n4.27]."""
     n_in = n_out = 0
     matched = set()
     keep_lines = int(keep_comments) if keep_comments else 0   # True is 1
     lineno = 0
+    drop = sorted(set(drop))
     with open_text(src) as fin, open_text(dst, "w") as fout:
         for line in fin:
             lineno += 1
@@ -434,17 +527,24 @@ def filter_tab(src, dst, ids, columns, keep_comments=False):
                 continue
             n_in += 1
             cells = line.rstrip("\r\n").split("\t")
-            hit = False
-            for c in columns:
-                if c < len(cells):
-                    h = _cell_hit(cells[c], ids)
-                    if h is not None:
-                        matched.add(h)
-                        hit = True
+            if any(c >= len(cells) or not rx.search(cells[c]) for c, rx in require):
+                continue
+            hit = ids is None
+            if ids is not None:
+                for c in columns:
+                    if c < len(cells):
+                        h = _cell_hit(cells[c], ids)
+                        if h is not None:
+                            matched.add(h)
+                            hit = True
             if hit:
                 n_out += 1
+                if drop:
+                    eol = line[len(line.rstrip("\r\n")):]
+                    cells = [x for i, x in enumerate(cells) if i not in drop]
+                    line = "\t".join(cells) + eol
                 fout.write(line)
-    return _summary("tab", n_in, n_out, ids, matched)
+    return _summary("tab", n_in, n_out, ids or (), matched)
 
 
 # ---------------------------------------------------------------- PSI-MI 2.5 XML (IntAct, BioGRID)
@@ -840,6 +940,87 @@ def run_partner_ids(a):
     print(json.dumps({db.lower(): len(v) for db, v in found.items()}))
 
 
+# ---------------------------------------------------------------- InterPro
+
+_IPR_START_RE = re.compile(r'^<interpro\s[^>]*?\bid="(IPR\d+)"')
+_IPR_REF_RE = re.compile(r'\bipr_ref="(IPR\d+)"')
+# the relation lists InterProConverter reads: parent_list, child_list, found_in, contains
+_IPR_REL_RE = re.compile(r"<(parent_list|child_list|found_in|contains)>(.*?)</\1>", re.S)
+
+
+def _interpro_entries(src):
+    """(id, text) of each <interpro id="IPR..."> entry of interpro.xml, as it is written: one entry starts on a
+    line that begins `<interpro ` and ends on the line `</interpro>`; everything before the first entry is the
+    header (kept whole: DOCTYPE, the release dbinfo lines) and what follows the last is the trailer
+    (<deleted_entries>). Yields ('', text) for header and trailer lines."""
+    entry, ident = [], None
+    with open_text(src) as fin:
+        for line in fin:
+            if ident is None:
+                m = _IPR_START_RE.match(line)
+                if m:
+                    ident, entry = m.group(1), [line]
+                else:
+                    yield "", line
+                continue
+            entry.append(line)
+            if line.startswith("</interpro>"):
+                yield ident, "".join(entry)
+                ident, entry = None, []
+
+
+def filter_interpro_xml(src, dst, ids):
+    """interpro.xml cut to the InterPro entries of the panel's protein domain matches (ids: IPR numbers, from the
+    filtered protein2ipr) and, one step out, the entries those name in their parent, child, found-in and
+    contains lists, so the converter has real names for the relatives instead of bare stubs. The file is read
+    twice (the second time with the relatives known). Its <pub_list> publications go with each entry, so the
+    mine gets only the PubMed ids the kept entries cite."""
+    related = set()
+    n_in = 0
+    for ident, text in _interpro_entries(src):
+        if ident:
+            n_in += 1
+            if ident in ids:
+                for _tag, body in _IPR_REL_RE.findall(text):
+                    related.update(_IPR_REF_RE.findall(body))
+    keep = set(ids) | related
+    n_out = 0
+    matched = set()
+    with open_text(dst, "w") as fout:
+        for ident, text in _interpro_entries(src):
+            if not ident:
+                fout.write(text)
+            elif ident in keep:
+                n_out += 1
+                if ident in ids:
+                    matched.add(ident)
+                fout.write(text)
+    return _summary("interpro-xml", n_in, n_out, ids, matched)
+
+
+def ipr_ids(src):
+    """Sorted InterPro entry ids (column 2) of a filtered protein2ipr.dat: the entries interpro.xml is cut to."""
+    out = set()
+    with open_text(src) as fin:
+        for line in fin:
+            if line.startswith("#") or not line.strip():
+                continue
+            cells = line.split("\t", 2)
+            if len(cells) >= 2 and cells[1].startswith("IPR"):
+                out.add(cells[1])
+    return sorted(out)
+
+
+def run_ipr_ids(a):
+    if not os.path.isfile(a.infile):
+        raise SubsetError(f"input not found: {a.infile}")
+    found = ipr_ids(a.infile)
+    os.makedirs(a.out, exist_ok=True)
+    with open(os.path.join(a.out, "ipr.txt"), "w", encoding="utf-8", newline="\n") as fh:
+        fh.write("".join(i + "\n" for i in found))
+    print(json.dumps({"ipr": len(found)}))
+
+
 # ---------------------------------------------------------------- HPO diseases
 
 def disease_ids(src):
@@ -1218,15 +1399,17 @@ def run_filter(a):
     fmt = a.format
     if fmt not in FORMATS:
         raise SubsetError(f"unknown format {fmt!r}; use one of {', '.join(FORMATS)}")
-    if not os.path.isfile(a.infile):
+    if not is_url(a.infile) and not os.path.isfile(a.infile):
         raise SubsetError(f"input not found: {a.infile}")
     ids = None
     if a.ids:
         if not os.path.isfile(a.ids):
             raise SubsetError(f"--ids file not found: {a.ids}")
         ids = read_id_file(a.ids)
-    elif fmt in NEEDS_IDS:
+    elif fmt in NEEDS_IDS and not (fmt == "tab" and (a.drop_columns or a.require)):
         raise SubsetError(f"format {fmt} needs --ids FILE")
+    if (a.drop_columns or a.require) and fmt != "tab":
+        raise SubsetError("--drop-columns and --require are for format tab only")
     if fmt == "tab" and not a.column:
         raise SubsetError("format tab needs --column N[,N...]")
     if a.keep_types and fmt != "gff3":
@@ -1252,7 +1435,10 @@ def run_filter(a):
         elif fmt == "fasta":
             res = filter_fasta(a.infile, tmp, ids)
         elif fmt == "tab":
-            res = filter_tab(a.infile, tmp, ids, parse_columns(a.column), max(a.keep_lines, 1 if a.keep_comments else 0))
+            res = filter_tab(a.infile, tmp, ids, parse_columns(a.column), max(a.keep_lines, 1 if a.keep_comments else 0),
+                             parse_columns(a.drop_columns) if a.drop_columns else (), parse_require(a.require))
+        elif fmt == "interpro-xml":
+            res = filter_interpro_xml(a.infile, tmp, ids)
         elif fmt == "psi-xml":
             res = filter_psi_xml(a.infile, tmp, ids, parse_types(a.xref_db))
         else:
@@ -1297,13 +1483,17 @@ def build_parser():
     s.add_argument("--taxon", default="9606", help="taxon of the lookup cache files (default 9606)")
     f = sub.add_parser("filter", help="filter one raw file")
     f.add_argument("--format", required=True, help="|".join(FORMATS))
-    f.add_argument("--in", dest="infile", required=True)
+    f.add_argument("--in", dest="infile", required=True, help="a file, or an http(s) URL streamed (gzip when it ends .gz)")
     f.add_argument("--out", dest="outfile", required=True)
     f.add_argument("--ids", help="file of ids, one per line")
     f.add_argument("--column", help="tab: 1-based column number(s), comma separated")
     f.add_argument("--taxon", help="gene_info: keep this tax_id")
     f.add_argument("--keep-comments", action="store_true", help="tab: also keep the first line (a header without '#')")
     f.add_argument("--keep-lines", type=int, default=0, help="tab: keep the first N lines whatever they hold (a GCT file has 3)")
+    f.add_argument("--drop-columns", help="tab: 1-based column number(s) taken out of every kept record "
+                                          "(with no --ids every row is kept)")
+    f.add_argument("--require", action="append", metavar="COLUMN=REGEX",
+                   help="tab: keep only rows whose 1-based COLUMN matches REGEX (repeatable, all must match)")
     f.add_argument("--keep-types", help="gff3: feature types kept for every id, without descendants (e.g. gene)")
     f.add_argument("--xref-db", help="psi-xml: xref db names (comma separated, any case) whose ids are matched")
     f.add_argument("--member", help="psi-xml from a zip: glob of the members to filter (default every file)")
@@ -1314,6 +1504,9 @@ def build_parser():
     d = sub.add_parser("disease-ids", help="hpo-diseases.txt: the diseases of a filtered genes_to_phenotype.txt")
     d.add_argument("--in", dest="infile", required=True, help="the filtered genes_to_phenotype.txt")
     d.add_argument("--out", required=True, help="directory the id set goes to (next to the panel's)")
+    r = sub.add_parser("ipr-ids", help="ipr.txt: the InterPro entries of a filtered protein2ipr.dat")
+    r.add_argument("--in", dest="infile", required=True, help="the filtered protein2ipr.dat")
+    r.add_argument("--out", required=True, help="directory the id set goes to (next to the panel's)")
     c = sub.add_parser("chromosome-lengths",
                        help="Items XML of Chromosome lengths from a GFF3 file's ##sequence-region lines")
     c.add_argument("--in", dest="infile", required=True)
@@ -1364,6 +1557,8 @@ def main(argv=None):
             run_partner_ids(a)
         elif a.cmd == "disease-ids":
             run_disease_ids(a)
+        elif a.cmd == "ipr-ids":
+            run_ipr_ids(a)
         elif a.cmd == "panel-items":
             run_panel_items(a)
         elif a.cmd == "cited-pmids":

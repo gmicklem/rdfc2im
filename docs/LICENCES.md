@@ -44,6 +44,14 @@ verified licence from an unverified one; this file and `licence_status` do.
 | stock `atlas-express` | CC-BY-4.0 | verified | <https://www.ebi.ac.uk/gxa/licence.html> | 2026-11-18 | yes | attribution: cite Expression Atlas 2026 (NAR) |
 | stock `hpo-annotation` | HPO licence | verified | <https://hpo.jax.org/license> | 2026-11-18 | yes | acknowledge and cite; show file dates or versions; content and relationships not to be altered (a row-subset is a reading the owner must accept) |
 | stock `orphanet` | CC-BY-4.0 | verified | <https://www.orphadata.com/legal-notice/> | 2026-11-18 | yes | attribution: Orphadata Science citation; say if changed; no endorsement; AI-use statement if used in an AI service |
+| stock `protein2ipr` | CC0-1.0 | verified | <https://interpro-documentation.readthedocs.io/en/latest/license.html> | 2026-11-20 | yes | none (citation of InterPro and its member databases requested) |
+| stock `interpro` | CC0-1.0 | verified | <https://interpro-documentation.readthedocs.io/en/latest/license.html> | 2026-11-20 | yes | none (citation requested) |
+| stock `mgi-alleles` | CC-BY-4.0 | verified | <https://www.informatics.jax.org/mgihome/other/copyright.shtml> | 2026-11-20 | yes | attribution (CC BY); images excluded (none used) |
+| stock `pubmed-gene` | No restrictions by NCBI (no licence named) | verified | <https://www.ncbi.nlm.nih.gov/home/about/policies/> | 2026-11-20 | yes | as ncbi-gff; the file holds identifiers only |
+| stock `humanmine-static` | not verified | not stated | <https://github.com/intermine/humanmine-datasets> | 2026-11-20 | yes (flag only) | unknown: the repository has no LICENSE (README and datasets.xml only; GitHub's licence field is null) |
+| stock `update-data-sources` | CC-BY-4.0 | verified | <https://ftp.ebi.ac.uk/pub/databases/uniprot/current_release/knowledgebase/complete/README> | 2026-11-20 | yes | attribution to the UniProt Consortium |
+| stock `update-publications` | NLM terms and conditions (acknowledge NLM; no endorsement; currency statement) | partial | <https://www.nlm.nih.gov/databases/download/terms_and_conditions.html> | 2026-11-20 | yes | acknowledge "Courtesy of the U.S. National Library of Medicine"; no endorsement; keep data current or say it may not be; E-utilities policy unread (eutils host blocked) |
+| stock `entrez-organism` | No restrictions by NCBI (no licence named) | partial | <https://www.ncbi.nlm.nih.gov/home/about/policies/> | 2026-11-20 | yes | as ncbi-gff; E-utilities policy unread (eutils host blocked) |
 | stock `ncbi-fasta` | No restrictions by NCBI (no licence named) | verified | <https://www.ncbi.nlm.nih.gov/home/about/policies/> | 2026-11-18 | yes | as ncbi-gff |
 | stock `omim` | OMIM licensed download (personal or institutional use only) | not checked | none found | 2026-11-18 | no | licensed copy only (not read today) |
 | stock `reactome` | CC0-1.0 | verified | <https://reactome.org/license> | 2026-11-18 | yes | attribution encouraged, not required |
@@ -77,6 +85,11 @@ load through `humanmine-items`, and rdfc2im's items carried no `DataSet.licence`
 | stock `interpro-go` | CC0 (InterPro) | none, passes null (InterproGoConverter.java:48) | InterPro domain GO annotations: empty |
 | stock `panther` | PANTHER terms of use, free with citation (unverified) | http://www.gnu.org/licenses/gpl.txt (PantherConverter.java:69-70) | Panther orthologue and paralogue predictions: the GPL URL |
 | stock `mgi-identifiers` | MGI data are free to use with citation | none (MgiIdentifiersConverter.java:43) | Mouse gene identifiers: empty |
+| stock `protein2ipr` | (new 20 Nov) | none (Protein2iprConverter, `super(writer, model, source, dataset)` with no licence) | InterPro data set: empty |
+| stock `interpro` | (new 20 Nov) | none, passes null (InterProConverter `super(..., null, false)`) | InterPro data set: empty (shared with protein2ipr) |
+| stock `mgi-alleles` | (new 20 Nov) | none (MgiAllelesConverter) | mgi-alleles: empty |
+| stock `pubmed-gene` | (new 20 Nov) | none (PubMedGeneConverter) | PubMed to gene mapping: empty |
+| stock `humanmine-static`, `update-data-sources`, `update-publications`, `entrez-organism` | (new 20 Nov) | no converter sets one: they write items XML and the DataSets of other sources are untouched | no data set of their own |
 | stock `rgd-identifiers` | RGD data are free to use with citation (unverified) | none, passes null (RgdIdentifiersConverter.java:50) | Rat gene identifiers: empty |
 | stock `psi-mi-ontology` | CC BY 4.0 (HUPO-PSI; unverified) | https://creativecommons.org/licenses/by/4.0/ (psi-mi-ontology.properties:10) | PSI Molecular Interactions: same URL |
 | stock `psi-intact` | CC BY 4.0 (IntAct, EMBL-EBI) | https://creativecommons.org/licenses/by/4.0/ in intermine `maint-2026` (PsiConverter.java:80-83, fixed in 6e1209b48c); the old code stamped the Apache-2.0 URL | IntAct molecular interactions: the Apache URL (the demo mine still runs the old code until its next rebuild) |
@@ -193,6 +206,8 @@ Third pass (20 Nov, after the project owner allowed the Ensembl archive host):
 | Source | Why not | What would settle it |
 |---|---|---|
 | stock `panther` | www.pantherdb.org answers curl with Cloudflare's "Just a moment" page and a headless browser times out; pantherdb.org (no www) fails the certificate check through the proxy; no LICENSE or README with terms in the data.pantherdb.org/ftp tree (about 14 directories listed) | a person reads https://www.pantherdb.org/tou.jsp in an ordinary browser and pastes the wording (no sbx rule helps) |
+| stock `humanmine-static` | nothing states a licence: the repository intermine/humanmine-datasets has only README.md ("# humanmine-datasets to store datasets.xml") and datasets.xml; GitHub's licence field is null | the InterMine maintainers say how the descriptive text may be reused |
+| stock `update-publications`, `entrez-organism` (E-utilities terms) | eutils.ncbi.nlm.nih.gov answers HTTP 403 "Approval required" from the sandbox, and the E-utilities usage policy (NBK25497) is behind a reCAPTCHA page | `sbx policy allow network eutils.ncbi.nlm.nih.gov` for the loader itself; a person reads https://www.ncbi.nlm.nih.gov/books/NBK25497/ in a browser for the policy |
 | RDF `gwascatalog` (TogoVar's terms) | togovar.org answers with a Cloudflare bot check, plain client and headless browser alike | a person reads https://togovar.org/doc/terms in a browser; the GWAS Catalog's own EMBL-EBI terms are read |
 | RDF `clinvar` (ClinVar's own page) | www.ncbi.nlm.nih.gov/clinvar/docs/maintenance_use/ answers with a reCAPTCHA page ("Checking your browser before accessing www.ncbi.nlm.nih.gov") | a person reads the page in a browser; NCBI's general policy (read) already says no restrictions |
 
@@ -313,4 +328,4 @@ Read the source's own statement, then change the YAML (not this file): set `lice
 `licence_quote`, `licence_status`. `tests/test_stock.py::test_every_source_has_a_complete_licence_record` checks that
 every source has a complete record, and the tests of `tools/source_pages.py` show it on the pages. The pages for a
 build come from `tools/source_manifest.py` and `tools/source_pages.py` (USAGE.md, "Data-source status pages"). The
-tables above are a snapshot of the YAML at 2026-11-18 (second pass).
+tables above are a snapshot of the YAML at 2026-11-18 (second pass); the milestone 3 sources (protein2ipr to entrez-organism) were read on 2026-11-20 [im-9n4.27].

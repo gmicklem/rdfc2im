@@ -62,6 +62,9 @@ def test_every_entry_matches_humanmines_own_project_xml():
         assert s.get("type") == e["type"], n
         assert (s.get("version") == "4.3.0") == (e["jar"] == "humanmine-bio-sources"), n
         prop = e.get("data_property", "src.data.dir")
+        if prop == "none":      # update-publications and the like: project.xml's own file name stays
+            assert not any(p.get("name") == "src.data.dir" for p in s.iter("property")), n
+            continue
         loc = next(p.get("location") for p in s.iter("property") if p.get("name") == prop)
         want = f"/micklem/data/{e['data_dir']}" + (f"/{e['data_file']}" if prop == "src.data.file" else "")
         assert loc.rstrip("/") == want, (n, loc, want)
@@ -223,7 +226,7 @@ def test_file_rows_say_how_each_file_is_made_and_staged(tmp_path):
     t = stock.load_table()
     rows = [r.split("\t") for r in stock.file_rows(t, ["uniprot", "panther", "psi-mi-ontology", "biogrid"],
                                                     "/S", "/S/cache")]
-    assert all(len(r) == 18 for r in rows)
+    assert all(len(r) == 20 for r in rows)
     assert all(r[16] == "-" for r in rows)                    # keep_types: gff3 only
     by = {(r[0], r[1]): r for r in rows}
     u = by[("uniprot", "sprot")]
@@ -519,3 +522,89 @@ def test_disease_name_priority_ranks_orphanet_above_hpo_annotation():
     line = next(l for l in open(path, encoding="utf-8") if l.startswith("Disease.name"))
     order = [w.strip() for w in line.split("=", 1)[1].split(",")]
     assert order.index("orphanet") < order.index("hpo-annotation"), order
+
+
+# ------------------------------------------------------------------ milestone 3 sources [im-9n4.27]
+
+M3 = ["protein2ipr", "interpro", "mgi-alleles", "pubmed-gene", "humanmine-static", "update-data-sources",
+      "update-publications", "entrez-organism"]
+
+
+def test_milestone_3_sources_are_in_the_table_with_a_licence_read_on_20_nov():
+    t = stock.load_table()
+    for n in M3:
+        assert n in t, n
+        assert t[n]["licence_checked"] == "2026-11-20", n
+    assert t["humanmine-static"]["licence_status"] == "not-stated"
+    assert t["update-publications"]["licence_status"] == "partial"      # eutils.ncbi.nlm.nih.gov is blocked
+    assert t["protein2ipr"]["licence_status"] == "verified"
+
+
+def test_protein2ipr_is_cut_while_it_downloads_and_interpro_is_cut_to_its_entries():
+    t = stock.load_table()
+    p = [r.split("\t") for r in stock.file_rows(t, ["protein2ipr"], "/S", "/S/cache")][0]
+    assert p[2] == "stream" and p[3] == p[4] == t["protein2ipr"]["files"][0]["url"]      # the raw field is the URL
+    assert p[7:10] == ["tab", "uniprot", "1"] and p[13] == "filtered" and p[15] == "protein2ipr.dat"
+    assert p[19].startswith("4=^(PF|SM|SSF|SFLD|PS|PR|PTHR|G3DSA|TIGR|PD|PIRSF|MF_|cd)")
+    i = [r.split("\t") for r in stock.file_rows(t, ["interpro"], "/S", "/S/cache")][0]
+    assert i[2] == "download" and i[7:9] == ["interpro-xml", "ipr"] and i[15] == "interpro.xml"
+    order, probs = stock.select(t, ["interpro"])
+    assert any("interpro needs protein2ipr" in x for x in probs)
+    # nothing is stored for a streamed file, so it is not in the disk estimate
+    assert stock.download_bytes(t, ["protein2ipr"]) == 0
+    assert stock.download_bytes(t, ["interpro"]) == 45100722
+
+
+def test_a_full_scope_build_downloads_protein2ipr_whole_but_still_drops_what_the_converter_throws_on():
+    t = stock.load_table()
+    p = [r.split("\t") for r in stock.file_rows(t, ["protein2ipr", "interpro", "mgi-alleles", "pubmed-gene"],
+                                                 "/S", "/S/cache", full=True)]
+    by = {(r[0], r[1]): r for r in p}
+    r = by[("protein2ipr", "matches")]
+    assert r[2] == "download" and r[8] == "none" and r[19].startswith("4=")      # kept on every row, none cut by gene
+    assert by[("interpro", "entries")][13] == "whole"
+    r = by[("mgi-alleles", "phenotypic-alleles")]
+    assert r[13] == "filtered" and r[8] == "none" and r[18] == "10"             # the column drop applies at full scope too
+    assert by[("mgi-alleles", "qtl-alleles")][13] == "asis" and by[("pubmed-gene", "gene2pubmed")][13] == "whole"
+
+
+def test_the_filter_spec_and_cache_key_carry_the_column_drop_and_the_required_values():
+    t = stock.load_table()
+    assert "drop_columns=10" in stock.filter_spec(t["mgi-alleles"]["files"][0])
+    assert "require=4=^(PF|SM" in stock.filter_spec(t["protein2ipr"]["files"][0])
+    a = stock.cache_meta(t, "mgi-alleles")
+    t2 = copy.deepcopy(t)
+    t2["mgi-alleles"]["files"][0]["filter"]["drop_columns"] = "9"
+    assert stock.cache_meta(t2, "mgi-alleles")[0] != a[0]
+
+
+def test_sources_without_upstream_files_leave_project_xmls_data_property_alone():
+    t = stock.load_table()
+    for n in ("update-publications", "entrez-organism"):
+        assert t[n]["files"] == [] and stock.file_rows(t, [n], "/S", "/S/cache") == []
+    root = etree.fromstring('<sources><source name="update-publications" type="update-publications">'
+                            '<property name="src.data.file" location="publications.xml"/></source></sources>')
+    assert stock.apply_to_project(root, t, ["update-publications"]) == []
+    assert root[0].find("property").get("location") == "publications.xml"
+    # update-data-sources stages dbxref.txt where its `dataSourceFile` property already says
+    d = [r.split("\t") for r in stock.file_rows(t, ["update-data-sources"], "/S", "/S/cache")][0]
+    assert d[14] == "uniprot/xrefs/current" and d[15] == "dbxref.txt" and d[13] == "asis"
+
+
+def test_validation_of_stream_drop_columns_and_require():
+    bad = {
+        "a": _entry(files=[{"id": "x", "url": "https://e/x.gz", "stage_as": "x", "stream": True}]),
+        "b": _entry(files=[{"id": "x", "url": "https://e/x.zip", "unpack": "zip", "member": "m", "stage_as": "x",
+                            "stream": True, "filter": {"format": "gaf", "ids": "uniprot"}}]),
+        "c": _entry(files=[{"id": "x", "url": "https://e/x", "stage_as": "x",
+                            "filter": {"format": "gaf", "ids": "uniprot", "drop_columns": "2"}}]),
+        "d": _entry(files=[{"id": "x", "url": "https://e/x", "stage_as": "x",
+                            "filter": {"format": "tab", "ids": "mgi", "column": "1", "require": ["nope"]}}]),
+    }
+    probs = " | ".join(stock.validate_table(bad))
+    for needle in ("a/x: `stream` is for", "b/x: `stream` is for", "c/x: `drop_columns` and `require` are for format tab",
+                   "d/x: `require` must be a list"):
+        assert needle in probs, (needle, probs)
+    ok = _entry(files=[{"id": "x", "url": "https://e/x.gz", "stage_as": "x", "stream": True,
+                        "filter": {"format": "tab", "ids": "none", "column": "1", "drop_columns": "10"}}])
+    assert stock.validate_table({"ok": ok}) == []

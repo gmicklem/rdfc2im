@@ -184,7 +184,11 @@ def test_stock_file_rows_in_full_scope_use_every_panel_cut_file_whole(tmp_path):
     assert len(panel) == len(full)
     for p, f in zip(panel, full):
         assert p[:2] == f[:2]
-        if p[13] == "filtered" and p[8] in stock.PANEL_ID_SETS:
+        if p[13] == "filtered" and p[8] in stock.PANEL_ID_SETS and p[18:20] != ["-", "-"]:
+            # a cut that also repairs the file's layout (drop_columns, require) stays, on every row [im-9n4.27]
+            assert f[13] == "filtered" and f[8] == "none" and f[18:20] == p[18:20], f
+            assert f[2] == "download", f      # a streamed file (protein2ipr) is downloaded whole
+        elif p[13] == "filtered" and p[8] in stock.PANEL_ID_SETS:
             assert f[13] in ("whole", "asis") and f[8] == "-", f
             assert f[13] == "asis" or f[12].startswith("/S/whole/"), f
         elif p[13] == "derived":     # ncbi-gff's chromosome lengths, read from the whole GFF

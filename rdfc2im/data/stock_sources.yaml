@@ -737,3 +737,279 @@ sources:
         last_modified: "2026-11-04"
         stage_as: interpro2go
         filter: none
+
+  # ---- milestone 3 sources [im-9n4.27, T3.3]; licences read 20 Nov 2026 ------------------------------------------
+  # stream: true     the file is cut while it downloads (subset_raw.py filter --in URL, a Range-resuming reader):
+  #                  protein2ipr.dat.gz is 13.8 GB and only the panel's rows are kept. Nothing is stored in the raw
+  #                  cache; the filtered group stock-protein2ipr is reused while its key matches. A --scope full
+  #                  build downloads and unpacks it whole.
+  # data_property: none, files: []   the source reads no staged directory (update-publications, entrez-organism)
+  # filter drop_columns / require    tab filters that repair a layout the loader was not written for (below)
+
+  protein2ipr:
+    type: protein2ipr
+    jar: intermine
+    licence: "CC0-1.0"
+    licence_status: verified
+    licence_url: "https://interpro-documentation.readthedocs.io/en/latest/license.html"
+    licence_checked: "2026-11-20"
+    licence_quote: "All of the InterPro, Pfam, PRINTS and SFLD downloadable data provided on the InterPro website is freely available under CC0 1.0 Universal (CC0 1.0) Public Domain Dedication."
+    licence_conditions:
+      - "\"You do not need a special license for commercial use but please cite the resource and relevant individual member databases and keep the Copyright statement with your installation.\" (a request; CC0 imposes none)."
+      - "protein2ipr.dat.gz (ftp.ebi.ac.uk/pub/databases/interpro/current_release/) has no licence line of its own; the statement is the InterPro documentation page, as for interpro-go."
+      - "The same page: \"The included scanning tools and signature collections may be under different license terms\" (InterProScan software, not these downloads)."
+    redistributable: true
+    redistributable_reason: "CC0 allows redistribution without conditions."
+    data_dir: interpro/match_complete/current
+    properties:
+      protein2ipr.organisms: "9606"
+    after: [uniprot]
+    notes: >-
+      Protein2iprConverter loads a ProteinDomainRegion for each row whose protein (column 1) is already in
+      os.production with a human organism, so it must integrate after the UniProt sources (the table's `after`);
+      the 13,754,882,460-byte protein2ipr.dat.gz (4 Nov 2026) is read as it downloads and cut to the panel's
+      UniProt accessions (`stream: true`, about 70 minutes at the sandbox's 3 MB/s, nothing stored), which keeps a
+      few thousand rows. Columns: protein accession, InterPro entry, entry name, member-database signature,
+      start, end. Today's file has member signatures the converter's getSource() throws on ("Unknown DB found"):
+      NCBIFAM `NF00...` (new since 2022; 1,070 of the 323,843 rows in the first 5 MB of the file), so the cut keeps only rows whose
+      signature starts with a prefix the converter names (PF SM SSF SFLD PS PR PTHR G3DSA TIGR PD PIRSF MF_ cd) and
+      the NCBIFAM matches are not loaded: T3.4 would add `NF` -> NCBIFAM (and AntiFam) to getSource().
+      Full scope: the converter reads the whole file (13.8 GB gzipped, about 100 GB decompressed) and keeps the
+      rows of the proteins in the mine; the `require` filter still removes the unknown signatures.
+    files:
+      - id: matches
+        url: https://ftp.ebi.ac.uk/pub/databases/interpro/current_release/protein2ipr.dat.gz
+        verified: true
+        size: 13754882460
+        last_modified: "2026-11-04"
+        stream: true
+        stage_as: protein2ipr.dat
+        filter:
+          format: tab
+          ids: uniprot
+          column: "1"
+          require: ["4=^(PF|SM|SSF|SFLD|PS|PR|PTHR|G3DSA|TIGR|PD|PIRSF|MF_|cd)"]
+
+  interpro:
+    type: interpro
+    jar: intermine
+    licence: "CC0-1.0"
+    licence_status: verified
+    licence_url: "https://interpro-documentation.readthedocs.io/en/latest/license.html"
+    licence_checked: "2026-11-20"
+    licence_quote: "All of the InterPro, Pfam, PRINTS and SFLD downloadable data provided on the InterPro website is freely available under CC0 1.0 Universal (CC0 1.0) Public Domain Dedication."
+    licence_conditions:
+      - "\"You do not need a special license for commercial use but please cite the resource and relevant individual member databases and keep the Copyright statement with your installation.\" (a request; CC0 imposes none)."
+      - "interpro.xml.gz has no licence line of its own; the statement is the InterPro documentation page, as for interpro-go."
+    redistributable: true
+    redistributable_reason: "CC0 allows redistribution without conditions."
+    data_dir: interpro/current
+    needs: [protein2ipr]
+    notes: >-
+      interpro.xml (45 MB gzipped, 72,944 entries, release 111.0 of 5 Nov 2026) gives ProteinDomain its name,
+      short name, type, description, the related-entry collections and the cited publications; protein2ipr makes
+      the ProteinDomains it points at as stubs, which this fills. The panel cut keeps the entries protein2ipr's
+      rows name (`subset_raw.py ipr-ids` writes idsets/ipr.txt) and the entries those list as parents, children,
+      found-in or contains; the Publications of the kept entries only. A full-scope build keeps the whole file.
+    files:
+      - id: entries
+        url: https://ftp.ebi.ac.uk/pub/databases/interpro/current_release/interpro.xml.gz
+        verified: true
+        size: 45100722
+        last_modified: "2026-11-04"
+        stage_as: interpro.xml
+        filter: {format: interpro-xml, ids: ipr}
+
+  mgi-alleles:
+    type: mgi-alleles
+    jar: humanmine-bio-sources
+    licence: "CC-BY-4.0"
+    licence_status: verified
+    licence_url: "https://www.informatics.jax.org/mgihome/other/copyright.shtml"
+    licence_checked: "2026-11-20"
+    licence_quote: "MGI data and annotations are licensed under a Creative Commons Attribution 4.0 International License (CC-BY)."
+    licence_conditions:
+      - "Attribution to MGI (Mouse Genome Informatics)."
+      - "Images on the site are excluded (the authors' copyright); the MGI report files used here hold no images."
+      - "The Mammalian Phenotype Ontology is also CC BY 4.0 (same page)."
+    redistributable: true
+    redistributable_reason: "CC BY 4.0 allows redistribution of changed copies with attribution."
+    data_dir: metabolic/mouse-pheno/current
+    needs: [panther]      # its cut is the mouse genes on panther's rows
+    notes: >-
+      Mouse alleles and genotypes with Mammalian Phenotype terms (MGI_PhenotypicAllele.rpt, 32 MB, 141,986 alleles;
+      MGI_QTLAllele.rpt; MGI_PhenoGenoMP.rpt, 54 MB). Every file is cut to the rows of the mouse genes on the
+      panel's PANTHER rows (`subset_raw.py partner-ids`, idsets/mgi.txt: the marker is column 7, 6 and 6). The
+      loader makes a Gene `MGI:<n>` for each allele's marker, the key panther gives its mouse genes, so the two
+      merge. Two drifts since the 2020 converter: MGI_PhenotypicAllele.rpt gained a Marker Ensembl ID as column 10
+      where the converter reads the high-level phenotype ids (line[9]); the cut drops column 10 (`drop_columns`),
+      which restores the converter's layout. MGI_PhenoGenoMP.rpt now has the PubMed ids in column 5 where the
+      converter reads the marker ids (line[4]) to decide `complex: > 1 genome feature`: a genotype of two alleles of
+      different genes is called heterozygote instead (T3.4). MGI_QTLAllele.rpt's phenotype ids moved from column 9
+      to column 14, and column 9 now holds the marker's Ensembl id, which the converter reads as a phenotype term
+      (T3.4; no QTL marker is a panel gene's mouse orthologue, so the cut keeps none of its rows). The Mammalian Phenotype terms get names only from
+      the mammalian-phenotype-ontology source (MPheno_OBO.obo), which is not in this build.
+    files:
+      - id: phenotypic-alleles
+        url: https://www.informatics.jax.org/downloads/reports/MGI_PhenotypicAllele.rpt
+        verified: true
+        size: 32391594
+        last_modified: "2026-11-16"
+        stage_as: MGI_PhenotypicAllele.rpt
+        filter: {format: tab, ids: mgi, column: "7", drop_columns: "10"}
+      - id: qtl-alleles
+        url: https://www.informatics.jax.org/downloads/reports/MGI_QTLAllele.rpt
+        verified: true
+        size: 1333310
+        last_modified: "2026-11-16"
+        stage_as: MGI_QTLAllele.rpt
+        filter: {format: tab, ids: mgi, column: "6"}
+      - id: genotypes
+        url: https://www.informatics.jax.org/downloads/reports/MGI_PhenoGenoMP.rpt
+        verified: true
+        size: 54186437
+        last_modified: "2026-11-16"
+        stage_as: MGI_PhenoGenoMP.rpt
+        filter: {format: tab, ids: mgi, column: "6"}
+
+  pubmed-gene:
+    type: pubmed-gene
+    jar: intermine
+    licence: "No restrictions by NCBI (NCBI data-use policy; no licence named)"
+    licence_status: verified
+    licence_url: "https://www.ncbi.nlm.nih.gov/home/about/policies/"
+    licence_checked: "2026-11-20"
+    licence_quote: "NCBI itself places no restrictions on the use or distribution of the data contained therein."
+    licence_conditions:
+      - "No licence is named and NCBI asks for no attribution for the data. The policy adds: \"some submitters of the original data (or the country of origin of such data) may claim patent, copyright, or other intellectual property rights in all or a portion of the data\"."
+      - "gene2pubmed is NCBI's own derived table (\"the logical equivalent of what is reported as Gene/PubMed Links\", README of ftp.ncbi.nlm.nih.gov/gene/DATA/, read 2026-11-20); it holds identifiers only, no abstract or title."
+      - "For NCBI's own web pages (public domain): \"it is requested that in any subsequent use of this work, NLM be given appropriate acknowledgment\"."
+    redistributable: true
+    redistributable_reason: "NCBI places no restrictions on use or distribution of its data; the file is identifiers only."
+    data_dir: pubmed/current
+    properties:
+      pubmed.organisms: "9606"
+    notes: >-
+      gene2pubmed (291 MB gzipped, every NCBI taxon, updated daily: Last-Modified 19 Nov 2026) is cut to the rows of
+      the panel's Entrez gene ids (column 2); the taxon column is not needed, an Entrez id belongs to one taxon.
+      The loader resolves each gene through the ID resolver (the all-human gene_info), creates a Publication per
+      PubMed id (pubMedId only) and adds it to Gene.publications. The titles, authors and abstracts of those
+      Publications come from update-publications (E-utilities) or, where the rdfc2im pubmed source loaded the
+      same id, from RDF Portal. HumanMine's own value is "9606 10090"; mouse genes are not resolved here, so 9606.
+    files:
+      - id: gene2pubmed
+        url: https://ftp.ncbi.nlm.nih.gov/gene/DATA/gene2pubmed.gz
+        verified: true
+        size: 290749084
+        last_modified: "2026-11-19"
+        stage_as: gene2pubmed
+        filter: {format: tab, ids: entrez, column: "2"}
+
+  humanmine-static:
+    type: humanmine-static
+    jar: humanmine-bio-sources
+    licence: "not verified"
+    licence_status: not-stated
+    licence_url: "https://github.com/intermine/humanmine-datasets"
+    licence_checked: "2026-11-20"
+    licence_conditions:
+      - "Looked at: the repository's file list (README.md and datasets.xml only, no LICENSE file), the README (\"# humanmine-datasets to store datasets.xml\") and GitHub's repository record (\"license\": null), all on 2026-11-20. The repository belongs to the InterMine organisation and holds InterMine's own description of HumanMine's data sets."
+    redistributable: true
+    redistributable_reason: "No stated term forbids it and none permits it: unverified. The file is InterMine's own, descriptive text about data sets; the flag stays true so the build does not break."
+    data_dir: humanmine/datasets/git/humanmine-datasets
+    data_property: src.data.file
+    data_file: datasets.xml
+    notes: >-
+      datasets.xml is an Items XML file of 41 DataSet, 26 DataSource and 27 Publication items (last commit 11 Feb
+      2022, e7a86ea; the URL is pinned to it), which HumanMine loads as it is (the source has no converter) to
+      give DataSet.description, version and url and DataSource.description and url. The names are HumanMine's own
+      (`ncbi-gff`, `panther`, `interpro`, ...): a DataSet or DataSource of this build with another name is
+      untouched, and the versions it records are those of 2021 ("109.20210514; September 2021"): the file is not
+      a statement about the data of this build.
+    files:
+      - id: datasets
+        url: https://raw.githubusercontent.com/intermine/humanmine-datasets/e7a86ea3bd133f419f72d094b44fbb4cb563ac87/datasets.xml
+        verified: true
+        size: 28346
+        last_modified: "2022-02-11"
+        stage_as: datasets.xml
+        filter: none
+
+  update-data-sources:
+    type: update-data-sources
+    jar: intermine
+    licence: "CC-BY-4.0"
+    licence_status: verified
+    licence_url: "https://ftp.ebi.ac.uk/pub/databases/uniprot/current_release/knowledgebase/complete/README"
+    licence_checked: "2026-11-20"
+    licence_quote: "We have chosen to apply the Creative Commons Attribution 4.0 International (CC BY 4.0) License (https://creativecommons.org/licenses/by/4.0/) to all copyrightable parts of our databases."
+    licence_conditions:
+      - "Attribution: credit the UniProt Consortium. dbxref.txt (the list of cross-referenced databases, with their URLs) is in the docs directory of the same release tree and has no licence line of its own."
+    redistributable: true
+    redistributable_reason: "CC BY 4.0 allows redistribution with attribution (the file is used whole)."
+    data_dir: uniprot/xrefs/current
+    data_property: none        # project.xml keeps src.data.file=datasources.xml (written by the source's own pre-retrieve step)
+    after: [uniprot]
+    notes: >-
+      A two-step source: DataSourceUpdater (the pre-retrieve step of `integrate -Psource=update-data-sources`)
+      reads UniProt's dbxref.txt (project.xml `dataSourceFile`), takes every DataSource name in the mine
+      (os.production) that equals an `Abbrev:` of dbxref.txt (release 2026_04 lists a few hundred databases) and
+      writes datasources.xml with that database's `Name:` as DataSource.description, its `Server:` as url and the
+      PubMed id of its `Ref:` as a Publication, which is then loaded. A DataSource whose name is no UniProt
+      abbreviation (this mine's "NCBI", "The Mouse genome database ...") is not touched. It must run after the
+      sources that make the DataSources (HumanMine lists it last). The 56,258-byte dbxref.txt is used whole.
+    files:
+      - id: dbxref
+        url: https://ftp.ebi.ac.uk/pub/databases/uniprot/current_release/knowledgebase/complete/docs/dbxref.txt
+        verified: true
+        size: 56258
+        last_modified: "2026-11-04"
+        stage_as: dbxref.txt
+        filter: none
+
+  update-publications:
+    type: update-publications
+    jar: intermine
+    licence: "NLM terms and conditions (acknowledge NLM; no endorsement; currency statement for redistributed data)"
+    licence_status: partial
+    licence_url: "https://www.nlm.nih.gov/databases/download/terms_and_conditions.html"
+    licence_checked: "2026-11-20"
+    licence_quote: "Users of the data agree to: acknowledge NLM as the source of the data by including the phrase \"Courtesy of the U.S. National Library of Medicine\" in a clear and conspicuous manner, not indicate or imply that NLM has endorsed its products/services/application."
+    licence_conditions:
+      - "The same page: \"No charges, usage fees or royalties are paid to NLM for this data.\" and \"Users who republish or redistribute the data (services, products or raw data) agree to: maintain the most current version of all distributed data, or make known in a clear and conspicuous manner that the products/services/applications do not reflect the most current/accurate data available from NLM.\""
+      - "\"NLM does not provide legal advice regarding copyright, fair use, or other aspects of intellectual property rights\": abstracts and titles remain the publishers' text (not read: the NLM copyright page now redirects to web_policies.html, which was not found to say more)."
+      - "Partial: the page above governs downloads from NLM's FTP servers; the E-utilities usage policy (https://www.ncbi.nlm.nih.gov/books/NBK25497/, 3 requests a second without an API key, an e-mail and tool name sent) answered with a reCAPTCHA page and eutils.ncbi.nlm.nih.gov itself is blocked from the sandbox (HTTP 403, approval required), so the terms of the service the loader calls were not read."
+    redistributable: true
+    redistributable_reason: "No stated term forbids a filtered copy; nothing is cached (the source reads the mine and E-utilities at build time and stores no raw file)."
+    data_property: none
+    after: [pubmed-gene]
+    notes: >-
+      A two-step source (the pre-retrieve step of `integrate -Psource=update-publications`): EntrezPublicationsRetriever
+      reads the pubMedId of every Publication in the mine (os.production), asks NCBI's E-utilities (esummary, or
+      efetch with loadFullRecord=true for abstracts) in batches of 500 and writes publications.xml, which is loaded
+      to give Publication its title, authors, year, journal, pages and abstract. It needs network at build time:
+      `sbx policy allow network eutils.ncbi.nlm.nih.gov` (HTTP 403 "Approval required" on 20 Nov 2026). It must
+      run after every source that makes Publications (HumanMine lists it last). No upstream file.
+    files: []
+
+  entrez-organism:
+    type: entrez-organism
+    jar: intermine
+    licence: "No restrictions by NCBI (NCBI data-use policy; no licence named)"
+    licence_status: partial
+    licence_url: "https://www.ncbi.nlm.nih.gov/home/about/policies/"
+    licence_checked: "2026-11-20"
+    licence_quote: "NCBI itself places no restrictions on the use or distribution of the data contained therein."
+    licence_conditions:
+      - "The policy page covers NCBI's databases (the Taxonomy records the loader reads are one); no licence is named and no attribution is asked for the data."
+      - "Partial: the E-utilities usage policy (rate limit, identification) answered with a reCAPTCHA page and eutils.ncbi.nlm.nih.gov is blocked from the sandbox (HTTP 403, approval required), so the terms of the service itself were not read."
+    redistributable: true
+    redistributable_reason: "NCBI places no restrictions on use or distribution of its data; nothing is cached."
+    data_property: none
+    after: [update-publications]
+    notes: >-
+      A two-step source (the pre-retrieve step of `integrate -Psource=entrez-organism`): EntrezOrganismRetriever reads
+      the taxon id of every Organism in the mine, asks E-utilities (esummary, db=taxonomy) for its names and writes
+      organisms.xml, loaded to give Organism name, genus, species and shortName. Needs network at build time (host
+      eutils.ncbi.nlm.nih.gov, blocked on 20 Nov 2026); must run after every source that makes Organisms. No upstream file.
+    files: []

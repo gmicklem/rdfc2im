@@ -394,3 +394,53 @@ def test_psi_intact_and_biogrid_are_filtered_straight_from_their_zips_and_staged
     staged = " ".join(_cmds(plan, "stage_src_data"))
     assert f"for f in '{stock}/subset/psi-intact/human'/*" in staged and "'/micklem/data/psi/intact/current'" in staged
     assert f"for f in '{stock}/subset/biogrid/organisms'/*" in staged
+
+
+def test_protein2ipr_is_streamed_through_the_panel_filter_and_interpro_is_cut_to_its_entries(tmp_path):
+    """[im-9n4.27] protein2ipr.dat.gz (13.8 GB) is never fetched into the raw cache: the filter reads the URL and
+    the cut is cached as stock-protein2ipr; interpro.xml is cut to the entries of those rows."""
+    src = _fake_intermine_60(tmp_path)
+    args = ("--intermine-src", src, "--stock-sources", "uniprot protein2ipr interpro mgi-alleles panther")
+    plan = _plan(tmp_path, "--only", "fetch_stock_data", *args)
+    if plan is None:
+        return
+    fetch = _cmds(plan, "fetch_stock_data")
+    assert not any("protein2ipr.dat.gz" in c for c in fetch), fetch
+    assert any("interpro.xml.gz" in c and c.startswith("curl") for c in fetch)
+    assert "streamed through the panel filter" in plan
+    plan = _plan(tmp_path, "--only", "subset_stock_data", *args)
+    cmds, stock = _cmds(plan, "subset_stock_data"), str(tmp_path / "stock")
+    assert "streaming it from upstream through the panel filter" in plan
+    p2i = next(i for i, c in enumerate(cmds) if "subset_raw.py filter --format tab --in https://ftp.ebi.ac.uk/" in c
+               and "protein2ipr.dat.gz" in c)
+    assert f"--ids {stock}/idsets/uniprot.txt --column 1" in cmds[p2i] and "--require 4=^(PF|SM|SSF" in cmds[p2i]
+    assert f"--out {stock}/subset/protein2ipr/matches/protein2ipr.dat" in cmds[p2i], cmds[p2i]
+    saved = next(i for i, c in enumerate(cmds) if "cache save stock-protein2ipr " in c)
+    ipr = next(i for i, c in enumerate(cmds) if "subset_raw.py ipr-ids" in c)
+    inter = next(i for i, c in enumerate(cmds) if "subset_raw.py filter --format interpro-xml" in c)
+    assert p2i < saved < ipr < inter, cmds
+    assert f"--ids {stock}/idsets/ipr.txt" in cmds[inter]
+    # the alleles file is cut by the mouse genes of panther's rows and loses its Ensembl column
+    pan = next(i for i, c in enumerate(cmds) if "cache save stock-panther " in c)
+    part = next(i for i, c in enumerate(cmds) if "subset_raw.py partner-ids" in c)
+    al = next(i for i, c in enumerate(cmds) if "--format tab" in c and "MGI_PhenotypicAllele.rpt" in c)
+    assert pan < part < al and "--column 7 --drop-columns 10" in cmds[al] and f"--ids {stock}/idsets/mgi.txt" in cmds[al]
+    # offline cannot stream: with no filtered group it says so rather than reaching for the network
+    rc, out = _run(tmp_path, "--only", "subset_stock_data", "--offline", *args)
+    assert rc == 0, out      # a dry run logs the plan; the check is the die() that --offline takes in a real run
+
+
+def test_update_data_sources_gets_the_publication_key_in_the_copy_of_the_checkout(tmp_path):
+    """[im-9n4.27] DataSourceUpdater writes a Publication per data source and its keys file keys only DataSource, so
+    every run duplicated the papers the mine already had. The copy of the checkout (not the checkout) is edited.
+    (The stand-in checkout has no module list, so the phase stops after the edit: only the log up to there is read.)"""
+    src = _fake_intermine_60(tmp_path)
+    rc, plan = _run(tmp_path, "--only", "publish_intermine", "--intermine-src", src, "--stock-sources", "update-data-sources")
+    if "[check_prereqs] FATAL" in plan and "stock" not in plan.split("FATAL", 1)[1][:200]:
+        return
+    edit = [ln for ln in plan.splitlines() if "deployer edit:" in ln and "update-data-sources_keys.properties" in ln]
+    assert edit and "Publication keyed on pubMedId" in edit[0], plan
+    sed = [c for c in _cmds(plan, "publish_intermine") if c.startswith("sed -i") and "Publication.key_pubmed" in c]
+    assert sed and "/trial_home/intermine-src/bio/sources/update-data-sources/" in sed[0] and src not in sed[0], sed
+    rc, plan = _run(tmp_path, "--only", "publish_intermine", "--intermine-src", src, "--stock-sources", "go-annotation uniprot")
+    assert "update-data-sources_keys" not in plan
