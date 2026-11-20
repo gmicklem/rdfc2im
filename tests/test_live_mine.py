@@ -837,13 +837,25 @@ def test_go_terms_are_not_duplicated_beside_the_rdf_go_source():
     assert len(ids) > 40000 and len(ids) == len(set(ids)), (len(ids), len(set(ids)))
 
 
+GO_STUB_BOUND = 700   # 123 isoform accessions + 313 non-human ones measured 19 Nov 2026, with room for a new release
+
+
 def test_go_annotation_makes_no_stub_proteins():
-    """The loader also creates a Protein for every UniProt 'with' value; none may lack an organism."""
+    """GoConverter makes an accession-only Protein for every UniProt 'with' value, and it has no organism. The
+    invariant [im-9n4.49]: no Protein that another source loaded lacks an organism (humanmine-hgnc ranks ahead
+    of go-annotation for Protein.organism; 968 human proteins lost theirs before), and the stubs left, which
+    only GO evidence 'with' lists point at, stay under GO_STUB_BOUND."""
     if (s := _go_skip()) is not None:
         return s
-    rows = query_rows_q('<query model="genomic" view="Protein.primaryAccession"><join path="Protein.organism" style="OUTER"/>'
+    rows = query_rows_q('<query model="genomic" view="Protein.primaryAccession Protein.dataSets.name">'
+                        '<join path="Protein.organism" style="OUTER"/>'
                         '<constraint path="Protein.organism" op="IS NULL"/></query>')
-    assert rows == [], rows[:5]
+    by_acc: dict = {}
+    for acc, ds in rows:
+        by_acc.setdefault(acc, set()).add(ds)
+    known = {a: d for a, d in by_acc.items() if d - {GO_DATA_SET}}
+    assert known == {}, list(known.items())[:5]
+    assert len(by_acc) <= GO_STUB_BOUND, len(by_acc)
 
 
 def test_the_go_enrichment_widget_is_served_and_enriches_a_list_of_panel_genes():
